@@ -114,6 +114,7 @@ export interface ParsedMeta {
   gitBranch?: string;
   claudeVersion?: string;
   messageCount: number;
+  agent: string;
 }
 
 export interface ParsedSession {
@@ -126,6 +127,7 @@ export interface SessionSummary {
   id: string;
   name?: string;
   filePath: string;
+  agent: string;
   startTime: number;
   endTime?: number;
   cwd?: string;

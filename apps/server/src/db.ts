@@ -13,6 +13,7 @@ db.exec(`
     id                    TEXT PRIMARY KEY,
     name                  TEXT,
     file_path             TEXT NOT NULL,
+    agent                 TEXT NOT NULL DEFAULT 'unknown',
     file_mtime            INTEGER,
     file_size             INTEGER,
     file_lines            INTEGER,

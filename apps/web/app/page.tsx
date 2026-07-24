@@ -4,7 +4,7 @@ import type { SessionSummary } from '@agent-profile/core';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { API, DEFAULT_SCAN_DIR } from './config';
-import { C, fmtDuration, fmtTokens } from './theme';
+import { AGENT_COLORS, AGENT_LABELS, C, fmtDuration, fmtTokens } from './theme';
 
 // 从 filePath 提取 project（~/.claude/projects/<project>/<file>.jsonl）
 function projectOf(filePath: string): string {
@@ -241,6 +241,20 @@ function SessionCard({ s }: { s: SessionSummary }) {
       }}
     >
       <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          <span
+            style={{
+              fontSize: 10,
+              padding: '1px 6px',
+              borderRadius: 3,
+              background: (AGENT_COLORS[s.agent] || AGENT_COLORS.unknown) + '18',
+              color: AGENT_COLORS[s.agent] || AGENT_COLORS.unknown,
+              fontWeight: 600,
+            }}
+          >
+            {AGENT_LABELS[s.agent] || s.agent}
+          </span>
+        </div>
         <div
           style={{
             fontSize: 15,

@@ -52,6 +52,7 @@ export function analyzeSession(
     id: parsed.sessionId,
     name: parsed.meta.name,
     filePath: parsed.meta.filePath,
+    agent: parsed.meta.agent,
     startTime: parsed.meta.startTime,
     endTime: parsed.meta.endTime,
     cwd: parsed.meta.cwd,

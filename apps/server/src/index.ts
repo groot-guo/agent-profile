@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { config } from './config';
 import { closeDb } from './db';
 import { registerRoutes } from './routes/index';
-import { autoScan } from './routes/scan';
+import { autoScan, scanZedThreads } from './routes/scan';
 
 const app = Fastify({ logger: true });
 
@@ -26,6 +26,15 @@ try {
         console.warn(`Auto-scan failed: ${err instanceof Error ? err.message : err}`);
       });
   }
+
+  // 扫描 Zed threads
+  scanZedThreads()
+    .then((r) => {
+      if (r.scanned > 0) console.log(`Zed scan done: ${r.scanned} threads, ${r.imported} imported`);
+    })
+    .catch((err) => {
+      console.warn(`Zed scan failed: ${err instanceof Error ? err.message : err}`);
+    });
 } catch (err) {
   app.log.error(err);
   process.exit(1);

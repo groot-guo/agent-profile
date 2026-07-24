@@ -91,6 +91,7 @@ function makeSpan(p: MakeSpanInput): Span {
 
 export interface ParseOptions {
   filePath: string;
+  agent?: string;
 }
 
 // 解析一个 transcript 的所有行 → sessionId + 元信息 + spans
@@ -239,6 +240,7 @@ export function parseTranscript(
       gitBranch: sorted[0].gitBranch,
       claudeVersion: sorted[0].version,
       messageCount,
+      agent: opts.agent || 'unknown',
     },
     spans,
   };

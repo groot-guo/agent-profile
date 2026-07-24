@@ -1,12 +1,17 @@
 import { statSync } from 'node:fs';
 import {
+  AGENT_LABELS,
   analyzeSession,
+  detectAgent,
   findTranscriptFiles,
+  hasZedThreadsDb,
   parseTranscript,
   readTranscript,
   type ScanResult,
   type Span,
+  zedThreadsDbPath,
 } from '@agent-profile/core';
+import type { ZedThreadMeta } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config';
 import { db, getPricing } from '../db';
@@ -14,6 +19,7 @@ import { SESSION_COLS } from './shared';
 
 interface ScanBody {
   dir: string;
+  agent?: string;
 }
 
 export function registerScanRoutes(app: FastifyInstance) {
@@ -28,11 +34,11 @@ export function registerScanRoutes(app: FastifyInstance) {
     const sessionIds: string[] = [];
 
     const insertSession = db.prepare(`
-      INSERT INTO sessions (id, name, file_path, file_mtime, file_size, file_lines, start_time, end_time,
+      INSERT INTO sessions (id, name, file_path, agent, file_mtime, file_size, file_lines, start_time, end_time,
         cwd, git_branch, claude_version, input_tokens, cache_creation_tokens, cache_read_tokens,
         output_tokens, total_cost, cost_unknown_count, peak_context_tokens, avg_context_tokens,
         cache_hit_rate, message_count, imported_at)
-      VALUES (@id, @name, @filePath, @fileMtime, @fileSize, @fileLines, @startTime, @endTime,
+      VALUES (@id, @name, @filePath, @agent, @fileMtime, @fileSize, @fileLines, @startTime, @endTime,
         @cwd, @gitBranch, @claudeVersion, @inputTokens, @cacheCreationTokens, @cacheReadTokens,
         @outputTokens, @totalCost, @costUnknownCount, @peakContextTokens, @avgContextTokens,
         @cacheHitRate, @messageCount, @importedAt)
@@ -80,7 +86,8 @@ export function registerScanRoutes(app: FastifyInstance) {
         size = st.size;
       const entries = await readTranscript(file);
       const lines = entries.length;
-      const parsed = parseTranscript(entries, { filePath: file });
+      const agent = detectAgent(file);
+      const parsed = parseTranscript(entries, { filePath: file, agent });
       if (!parsed) {
         skipped++;
         continue;
@@ -106,6 +113,7 @@ export function registerScanRoutes(app: FastifyInstance) {
         id: summary.id,
         name: summary.name ?? null,
         filePath: summary.filePath,
+        agent: summary.agent,
         fileMtime: mtime,
         fileSize: size,
         fileLines: lines,
@@ -141,11 +149,11 @@ export async function autoScan(dir: string) {
   if (files.length === 0) return { scanned: 0, imported: 0 };
 
   const insertSession = db.prepare(`
-    INSERT INTO sessions (id, name, file_path, file_mtime, file_size, file_lines, start_time, end_time,
+    INSERT INTO sessions (id, name, file_path, agent, file_mtime, file_size, file_lines, start_time, end_time,
       cwd, git_branch, claude_version, input_tokens, cache_creation_tokens, cache_read_tokens,
       output_tokens, total_cost, cost_unknown_count, peak_context_tokens, avg_context_tokens,
       cache_hit_rate, message_count, imported_at)
-    VALUES (@id, @name, @filePath, @fileMtime, @fileSize, @fileLines, @startTime, @endTime,
+    VALUES (@id, @name, @filePath, @agent, @fileMtime, @fileSize, @fileLines, @startTime, @endTime,
       @cwd, @gitBranch, @claudeVersion, @inputTokens, @cacheCreationTokens, @cacheReadTokens,
       @outputTokens, @totalCost, @costUnknownCount, @peakContextTokens, @avgContextTokens,
       @cacheHitRate, @messageCount, @importedAt)
@@ -169,7 +177,8 @@ export async function autoScan(dir: string) {
       const mtime = st.mtimeMs,
         size = st.size;
       const entries = await readTranscript(file);
-      const parsed = parseTranscript(entries, { filePath: file });
+      const agent = detectAgent(file);
+      const parsed = parseTranscript(entries, { filePath: file, agent });
       if (!parsed) continue;
 
       const existing = getExisting.get(parsed.sessionId) as
@@ -187,6 +196,7 @@ export async function autoScan(dir: string) {
           id: summary.id,
           name: summary.name ?? null,
           filePath: summary.filePath,
+          agent: summary.agent,
           fileMtime: mtime,
           fileSize: size,
           fileLines: entries.length,
@@ -240,4 +250,47 @@ export async function autoScan(dir: string) {
   }
 
   return { scanned: files.length, imported };
+}
+
+// 扫描 Zed threads.db，注册线程元数据为 session（暂不解析 zstd BLOB）
+export async function scanZedThreads(): Promise<{ scanned: number; imported: number }> {
+  if (!hasZedThreadsDb()) return { scanned: 0, imported: 0 };
+
+  const zedDb = new (await import('better-sqlite3')).default(zedThreadsDbPath(), { readonly: true });
+  const threads = zedDb
+    .prepare('SELECT id, summary, folder_paths, updated_at, created_at FROM threads')
+    .all() as ZedThreadMeta[];
+  zedDb.close();
+
+  if (threads.length === 0) return { scanned: 0, imported: 0 };
+
+  const getExisting = db.prepare('SELECT id FROM sessions WHERE id = ?');
+  const insertSession = db.prepare(`
+    INSERT INTO sessions (id, name, file_path, agent, start_time, end_time, cwd, imported_at)
+    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @importedAt)
+  `);
+  const now = Date.now();
+
+  let imported = 0;
+  for (const t of threads) {
+    const existing = getExisting.get(t.id);
+    if (existing) continue;
+
+    const startTime = t.createdAt ? new Date(t.createdAt).getTime() : new Date(t.updatedAt).getTime();
+    const endTime = new Date(t.updatedAt).getTime();
+
+    insertSession.run({
+      id: t.id,
+      name: t.summary,
+      filePath: `zed://threads/${t.id}`,
+      agent: 'zed',
+      startTime,
+      endTime,
+      cwd: t.folderPaths ? JSON.parse(t.folderPaths)[0] : null,
+      importedAt: now,
+    });
+    imported++;
+  }
+
+  return { scanned: threads.length, imported };
 }

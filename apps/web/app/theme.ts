@@ -66,6 +66,21 @@ export function catOf(name: string) {
   return name.startsWith('mcp__') ? 'MCP' : TOOL_CAT[name] || '其他';
 }
 
+// Agent 类型
+export const AGENT_LABELS: Record<string, string> = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  zed: 'Zed',
+  unknown: 'Unknown',
+};
+
+export const AGENT_COLORS: Record<string, string> = {
+  'claude-code': '#0969da',
+  codex: '#8250df',
+  zed: '#1a7f37',
+  unknown: '#656d76',
+};
+
 // 格式化工具函数
 export function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;

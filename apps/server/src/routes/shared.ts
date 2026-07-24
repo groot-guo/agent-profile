@@ -1,6 +1,6 @@
 import type { Span } from '@agent-profile/core';
 
-export const SESSION_COLS = `id, name, file_path as filePath, file_mtime as fileMtime, file_size as fileSize,
+export const SESSION_COLS = `id, name, file_path as filePath, agent, file_mtime as fileMtime, file_size as fileSize,
   file_lines as fileLines, start_time as startTime, end_time as endTime, cwd, git_branch as gitBranch,
   claude_version as claudeVersion, input_tokens as inputTokens, cache_creation_tokens as cacheCreationTokens,
   cache_read_tokens as cacheReadTokens, output_tokens as outputTokens, total_cost as totalCost,
