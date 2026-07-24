@@ -15,16 +15,21 @@ try {
   await app.listen({ port: config.port });
   console.log(`Trace Server running at http://localhost:${config.port}`);
 
-  // 启动自动扫描
+  // 启动自动扫描（多源）
   if (config.autoScanDir) {
-    console.log(`Auto-scanning ${config.autoScanDir}...`);
-    autoScan(config.autoScanDir)
-      .then((r) => {
-        console.log(`Auto-scan done: ${r.scanned} files, ${r.imported} imported`);
-      })
-      .catch((err) => {
-        console.warn(`Auto-scan failed: ${err instanceof Error ? err.message : err}`);
-      });
+    const dirs = config.autoScanDir === '~/.claude/projects'
+      ? config.autoScanDirs
+      : [config.autoScanDir];
+    for (const dir of dirs) {
+      console.log(`Auto-scanning ${dir}...`);
+      autoScan(dir)
+        .then((r) => {
+          if (r.scanned > 0) console.log(`Auto-scan ${dir}: ${r.scanned} files, ${r.imported} imported`);
+        })
+        .catch((err) => {
+          console.warn(`Auto-scan ${dir} failed: ${err instanceof Error ? err.message : err}`);
+        });
+    }
   }
 
   // 扫描 Zed threads

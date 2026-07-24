@@ -14,6 +14,8 @@ export { DEFAULT_THRESHOLDS, diagnoseSession, diagnoseSessionSync } from './diag
 export type { ParseOptions } from './parser';
 export { parseTranscript } from './parser';
 export { AGENT_LABELS, detectAgent } from './agent';
+export { parseCodexTranscript } from './codex-parser';
+export type { CodexParseOptions } from './codex-parser';
 export { calcCost } from './pricing';
 export { findTranscriptFiles, findTranscriptFilesSync, readTranscript, readTranscriptSync } from './scanner';
 export { hasZedThreadsDb, zedThreadsDbPath } from './zed-scanner';

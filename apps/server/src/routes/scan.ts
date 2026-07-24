@@ -5,6 +5,7 @@ import {
   detectAgent,
   findTranscriptFiles,
   hasZedThreadsDb,
+  parseCodexTranscript,
   parseTranscript,
   readTranscript,
   type ScanResult,
@@ -87,7 +88,9 @@ export function registerScanRoutes(app: FastifyInstance) {
       const entries = await readTranscript(file);
       const lines = entries.length;
       const agent = detectAgent(file);
-      const parsed = parseTranscript(entries, { filePath: file, agent });
+      const parsed = agent === 'codex'
+        ? parseCodexTranscript(entries as any, { filePath: file })
+        : parseTranscript(entries, { filePath: file, agent });
       if (!parsed) {
         skipped++;
         continue;
@@ -178,7 +181,9 @@ export async function autoScan(dir: string) {
         size = st.size;
       const entries = await readTranscript(file);
       const agent = detectAgent(file);
-      const parsed = parseTranscript(entries, { filePath: file, agent });
+      const parsed = agent === 'codex'
+        ? parseCodexTranscript(entries as any, { filePath: file })
+        : parseTranscript(entries, { filePath: file, agent });
       if (!parsed) continue;
 
       const existing = getExisting.get(parsed.sessionId) as
