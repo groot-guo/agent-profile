@@ -6,9 +6,10 @@
   },
   "dependencies": {
     "@agent-profile/core": "workspace:*",
+    "@fastify/cors": "^10.0.0",
     "better-sqlite3": "^11.0.0",
     "fastify": "^5.0.0",
-    "@fastify/cors": "^10.0.0"
+    "simple-zstd": "^2.1.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

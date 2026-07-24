@@ -20,4 +20,6 @@ export { calcCost } from './pricing';
 export { findTranscriptFiles, findTranscriptFilesSync, readTranscript, readTranscriptSync } from './scanner';
 export { hasZedThreadsDb, zedThreadsDbPath } from './zed-scanner';
 export type { ZedThreadMeta } from './zed-scanner';
+export { parseZedThread } from './zed-parser';
+export type { ZedThreadInput } from './zed-parser';
 export type * from './types';

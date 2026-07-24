@@ -7,6 +7,7 @@ import {
   hasZedThreadsDb,
   parseCodexTranscript,
   parseTranscript,
+  parseZedThread,
   readTranscript,
   type ScanResult,
   type Span,
@@ -269,32 +270,87 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
 
   if (threads.length === 0) return { scanned: 0, imported: 0 };
 
+  // 需要解压 zstd BLOB
+  const { decompress } = await import('simple-zstd');
+
   const getExisting = db.prepare('SELECT id FROM sessions WHERE id = ?');
   const insertSession = db.prepare(`
     INSERT INTO sessions (id, name, file_path, agent, start_time, end_time, cwd, imported_at)
     VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @importedAt)
   `);
+  const insertSpan = db.prepare(`
+    INSERT OR IGNORE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
+      input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
+      output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
+    VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
+      @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @contextTokens,
+      @outputBytes, @model, @cost, @costUnknown, @stopReason, @isError, @isSidechain, @metadata)
+  `);
+  const delSpans = db.prepare('DELETE FROM spans WHERE session_id = ?');
+  const delSession = db.prepare('DELETE FROM sessions WHERE id = ?');
   const now = Date.now();
 
   let imported = 0;
   for (const t of threads) {
-    const existing = getExisting.get(t.id);
-    if (existing) continue;
+    try {
+      const existing = getExisting.get(t.id);
+      if (existing) {
+        // 已存在则跳过（后续可加 updated_at 检测实现增量）
+        continue;
+      }
 
-    const startTime = t.createdAt ? new Date(t.createdAt).getTime() : new Date(t.updatedAt).getTime();
-    const endTime = new Date(t.updatedAt).getTime();
+      // 读取并解压 data BLOB
+      const zedDb2 = new (await import('better-sqlite3')).default(zedThreadsDbPath(), { readonly: true });
+      const row = zedDb2.prepare('SELECT data_type, data FROM threads WHERE id = ?').get(t.id) as
+        | { data_type: string; data: Buffer }
+        | undefined;
+      zedDb2.close();
 
-    insertSession.run({
-      id: t.id,
-      name: t.summary,
-      filePath: `zed://threads/${t.id}`,
-      agent: 'zed',
-      startTime,
-      endTime,
-      cwd: t.folderPaths ? JSON.parse(t.folderPaths)[0] : null,
-      importedAt: now,
-    });
-    imported++;
+      if (!row || !row.data || row.data.length === 0) continue;
+
+      const dataBuffer = decompress(row.data);
+      const parsed = await parseZedThread({
+        id: t.id,
+        summary: t.summary,
+        folderPaths: t.folder_paths,
+        updatedAt: t.updated_at,
+        createdAt: t.created_at,
+        dataType: row.data_type,
+        dataBuffer,
+      });
+      if (!parsed) continue;
+
+      const { summary, spans } = analyzeSession(parsed, getPricing, undefined, now);
+
+      delSpans.run(t.id);
+      delSession.run(t.id);
+      insertSession.run({
+        id: summary.id,
+        name: summary.name ?? null,
+        filePath: summary.filePath,
+        agent: 'zed',
+        startTime: summary.startTime,
+        endTime: summary.endTime ?? null,
+        cwd: summary.cwd ?? null,
+        importedAt: now,
+      });
+      for (const s of spans) {
+        insertSpan.run({
+          id: s.id, sessionId: s.sessionId, parentId: s.parentId ?? null,
+          type: s.type, name: s.name, startTime: s.startTime, endTime: s.endTime ?? null,
+          inputTokens: s.inputTokens, cacheCreationTokens: s.cacheCreationTokens,
+          cacheReadTokens: s.cacheReadTokens, outputTokens: s.outputTokens,
+          contextTokens: s.contextTokens, outputBytes: s.outputBytes,
+          model: s.model ?? null, cost: s.cost, costUnknown: s.costUnknown ? 1 : 0,
+          stopReason: s.stopReason ?? null, isError: s.isError ? 1 : 0,
+          isSidechain: s.isSidechain ? 1 : 0,
+          metadata: s.metadata ? JSON.stringify(s.metadata) : null,
+        });
+      }
+      imported++;
+    } catch (err) {
+      console.warn(`Zed thread ${t.id} parse failed: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   return { scanned: threads.length, imported };
