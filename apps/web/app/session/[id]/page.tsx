@@ -55,10 +55,18 @@ export default function SessionPage() {
 
   const dur = data.endTime ? data.endTime - data.startTime : 0;
   const turns = data.spans.filter((s) => s.type === 'llm_turn');
-  const tools = data.spans.filter((s) => s.type === 'tool_call');
+  const allTools = data.spans.filter((s) => s.type === 'tool_call');
+  const mainTools = allTools.filter((s) => !s.isSidechain);
+  const sidechainSpans = data.spans.filter((s) => s.isSidechain);
+  const sidechainTurns = sidechainSpans.filter((s) => s.type === 'llm_turn');
+  const sidechainTools = sidechainSpans.filter((s) => s.type === 'tool_call');
+  const sidechainTokens = sidechainTurns.reduce(
+    (acc, t) => acc + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens + t.outputTokens, 0,
+  );
+  const sidechainCost = sidechainTurns.reduce((acc, t) => acc + t.cost, 0);
 
   const toolCounts = new Map<string, number>();
-  for (const t of tools) toolCounts.set(t.name, (toolCounts.get(t.name) || 0) + 1);
+  for (const t of mainTools) toolCounts.set(t.name, (toolCounts.get(t.name) || 0) + 1);
   const toolBars = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]);
   const maxToolCount = toolBars[0]?.[1] || 1;
 
@@ -84,7 +92,7 @@ export default function SessionPage() {
       >
         <Metric label="时长" value={fmtDuration(dur)} />
         <Metric label="消息轮" value={`${data.messageCount}`} />
-        <Metric label="工具调用" value={`${tools.length}`} />
+        <Metric label="工具调用" value={`${mainTools.length}${sidechainTools.length > 0 ? ` +${sidechainTools.length}` : ''}`} />
         <Metric label="峰值上下文" value={fmtTokens(data.peakContextTokens)} />
         <Metric label="cache 命中" value={`${(data.cacheHitRate * 100).toFixed(1)}%`} />
         <Metric
@@ -94,7 +102,16 @@ export default function SessionPage() {
         />
       </div>
 
-      <Card title="工具调用次数（按名聚合，不按参数）">
+      {sidechainTurns.length > 0 && (
+        <SidechainSummary
+          turns={sidechainTurns.length}
+          tools={sidechainTools.length}
+          tokens={sidechainTokens}
+          cost={sidechainCost}
+          spans={sidechainSpans}
+        />
+      )}
+      <Card title={`工具调用次数${mainTools.length < allTools.length ? '（主链路，不含子 agent）' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {toolBars.map(([name, count]) => (
             <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
@@ -128,7 +145,7 @@ export default function SessionPage() {
                 />
               </div>
               <span style={{ width: 70, textAlign: 'right', color: C.sub }}>
-                {count} 次 · {((count / tools.length) * 100).toFixed(0)}%
+                {count} 次 · {((count / mainTools.length) * 100).toFixed(0)}%
               </span>
             </div>
           ))}
@@ -156,8 +173,8 @@ export default function SessionPage() {
         <TurnsTable turns={turns} />
       </Card>
 
-      <Card title={`每次工具调用（${tools.length}）`}>
-        <ToolsTable tools={tools} />
+      <Card title={`每次工具调用（${mainTools.length}）`}>
+        <ToolsTable tools={mainTools} />
       </Card>
     </div>
   );
@@ -524,6 +541,79 @@ function ToolsTable({ tools }: { tools: Span[] }) {
         </table>
       </div>
       <Pager page={Math.min(page, totalPages)} totalPages={totalPages} onPage={setPage} />
+    </div>
+  );
+}
+
+function SidechainSummary({
+  turns,
+  tools,
+  tokens,
+  cost,
+  spans,
+}: {
+  turns: number;
+  tools: number;
+  tokens: number;
+  cost: number;
+  spans: Span[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  // 按任务名称分组子 agent spans
+  const tasks = spans.filter((s) => s.type === 'llm_turn');
+  const taskNames = new Set(tasks.map((t) => t.name).filter(Boolean));
+
+  return (
+    <div
+      style={{
+        background: C.card,
+        border: `1px solid ${C.cc}`,
+        borderLeft: `3px solid ${C.cc}`,
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 20,
+      }}
+    >
+      <div
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+        onClick={() => setOpen(!open)}
+      >
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+            🤖 Sub-agent 调用链 · {turns} 轮推理 · {tools} 次工具调用
+          </div>
+          <div style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>
+            子 agent token: {fmtTokens(tokens)} · cost:{' '}
+            {cost > 0 ? `¥${cost.toFixed(4)}` : '—'}
+            {taskNames.size > 0 && ` · 任务: ${[...taskNames].slice(0, 3).join(', ')}`}
+          </div>
+        </div>
+        <span style={{ color: C.sub, fontSize: 10 }}>{open ? '▲' : '▼'} 展开</span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 12, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 12 }}>
+          <div style={{ fontSize: 12, color: C.sub, marginBottom: 8 }}>
+            {turns} 轮子 agent 推理 · {tools} 次工具调用 · 约 {fmtTokens(tokens)} token
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {tasks.slice(0, 20).map((t) => (
+              <div key={t.id} style={{ fontSize: 11, color: C.mute, display: 'flex', gap: 8 }}>
+                <span style={{ minWidth: 70 }}>{fmtTime(t.startTime)}</span>
+                <span>{t.name || t.id.slice(0, 12)}</span>
+                <span style={{ color: C.sub }}>
+                  in={fmtTokens(t.inputTokens)} out={fmtTokens(t.outputTokens)}
+                </span>
+              </div>
+            ))}
+            {tasks.length > 20 && (
+              <div style={{ fontSize: 11, color: C.mute }}>
+                … 还有 {tasks.length - 20} 轮
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
