@@ -23,7 +23,7 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 
 ### T5 db schema: add agent column
 
-- status: pending
+- status: done
 - depends: none
 - steps:
   1. `db.ts` sessions table add `agent TEXT NOT NULL DEFAULT 'claude-code'`
@@ -37,7 +37,7 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 
 ### T6 Codex parser
 
-- status: pending
+- status: done
 - depends: T5
 - steps:
   1. new `core/codex-parser.ts`: parse rollout jsonl
@@ -54,7 +54,7 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 
 ### T7 Zed parser
 
-- status: pending
+- status: done
 - depends: T5
 - steps:
   1. verify data format: decompress one threads.db `data` BLOB (zstd), inspect (JSON or MessagePack?)
@@ -67,7 +67,7 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 
 ### T8 scanner multi-source + scan API
 
-- status: pending
+- status: done
 - depends: T6, T7
 - steps:
   1. scanner: scan three locations (claude/codex/zed), dispatch parser by agent
@@ -106,7 +106,7 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 
 ### T10 agent filter
 
-- status: pending
+- status: done
 - depends: T5
 - steps:
   1. home: add agent type filter (tab or dropdown: all / claude-code / codex / zed)
@@ -117,7 +117,7 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 
 ### T11 sub-agent call chain merge
 
-- status: pending
+- status: done
 - depends: none
 - steps:
   1. session detail: identify spans with `isSidechain` or parentId chain under Workflow/Task
@@ -133,7 +133,7 @@ See `stats.md`.
 
 ### T12 stats API + overview page
 
-- status: pending
+- status: done
 - depends: T5 (agent column for by-agent grouping)
 - steps:
   1. server: GET /api/stats — aggregate over sessions (overview + byAgent + byProject + byModel)
@@ -144,7 +144,7 @@ See `stats.md`.
 
 ### T13 distribution charts
 
-- status: pending
+- status: done
 - depends: T12
 - steps:
   1. /api/stats add costDistribution (log bins) + tokenDistribution + modelDistribution
@@ -159,7 +159,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T14 LlmDiagnoser implementation (P2.19a)
 
-- status: pending (blocked: model/key/sync decision)
+- status: pending (blocked: model/key/sync decision) (blocked: model/key/sync decision)
 - depends: none (interface ready)
 - steps:
   1. implement LlmDiagnoser in server (call LLM API, OpenAI-compatible)
@@ -174,7 +174,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T15 glm-5.2 pricing + totalCost recompute
 
-- status: pending (blocked: user-provided glm-5.2 unit price)
+- status: pending (blocked: user-provided glm-5.2 unit price) (blocked: user-provided glm-5.2 unit price)
 - depends: none
 - steps:
   1. add glm-5.2 to pricing seed (db.ts) once price provided
