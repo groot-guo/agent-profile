@@ -1,0 +1,18 @@
+{
+  "name": "trace-server",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@agent-profile/core": "workspace:*",
+    "better-sqlite3": "^11.0.0",
+    "fastify": "^5.0.0",
+    "@fastify/cors": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}

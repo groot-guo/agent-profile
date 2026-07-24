@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.next/
+trace.db
+trace.db-wal
+trace.db-shm
+*.tsbuildinfo
+.tmp-ui-*
+.codegraph/
+next-env.d.ts
