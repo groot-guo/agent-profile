@@ -1,7 +1,9 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
+import { config } from './config';
 import { closeDb } from './db';
-import { registerRoutes } from './routes';
+import { registerRoutes } from './routes/index';
+import { autoScan } from './routes/scan';
 
 const app = Fastify({ logger: true });
 
@@ -9,11 +11,21 @@ await app.register(cors, { origin: true });
 
 registerRoutes(app);
 
-const PORT = Number(process.env.PORT) || 3000;
-
 try {
-  await app.listen({ port: PORT });
-  console.log(`Trace Server running at http://localhost:${PORT}`);
+  await app.listen({ port: config.port });
+  console.log(`Trace Server running at http://localhost:${config.port}`);
+
+  // 启动自动扫描
+  if (config.autoScanDir) {
+    console.log(`Auto-scanning ${config.autoScanDir}...`);
+    autoScan(config.autoScanDir)
+      .then((r) => {
+        console.log(`Auto-scan done: ${r.scanned} files, ${r.imported} imported`);
+      })
+      .catch((err) => {
+        console.warn(`Auto-scan failed: ${err instanceof Error ? err.message : err}`);
+      });
+  }
 } catch (err) {
   app.log.error(err);
   process.exit(1);

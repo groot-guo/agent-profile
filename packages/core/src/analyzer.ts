@@ -12,6 +12,7 @@ export function analyzeSession(
   parsed: ParsedSession,
   pricingLookup: (model?: string) => Pricing | undefined,
   fileMeta?: FileMeta,
+  importedAt?: number,
 ): { summary: SessionSummary; spans: Span[] } {
   let inputTokens = 0;
   let cacheCreationTokens = 0;
@@ -69,7 +70,7 @@ export function analyzeSession(
     fileSize: fileMeta?.size,
     fileLines: fileMeta?.lines,
     messageCount: parsed.meta.messageCount,
-    importedAt: Date.now(),
+    importedAt: importedAt ?? Date.now(),
   };
 
   return { summary, spans: parsed.spans };

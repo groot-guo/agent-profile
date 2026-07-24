@@ -15,6 +15,7 @@ Task IDs (T5–T15) map to task system (#5–#15).
 | UI light theme + paginated tables + project grouping (by cwd) | done                          |
 | pricing seed (DeepSeek) + typecheck fix                       | done                          |
 | data source                                                   | Claude Code only              |
+| Architecture refactor (async scanner, DB abs path, routes split, config/theme extraction, auto-scan) | done |
 
 ## Batch 1 · Multi-Agent Data Ingestion
 
@@ -78,15 +79,28 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 
 ## Batch 2 · UI Optimization & Filtering
 
+### T9.5 startup auto-scan
+
+- status: done
+- depends: none
+- steps:
+  1. server 启动后自动扫描默认目录 `~/.claude/projects`（`AUTO_SCAN_DIR` env 覆盖，空字符串跳过）
+  2. 扫描失败不阻塞 server 启动
+  3. scanner 异步化（`fs/promises`），保留同步版本供兼容
+- affected: packages/core/src/scanner.ts, apps/server/src/index.ts, apps/server/src/routes/scan.ts, apps/server/src/config.ts
+- acceptance: server 启动后 `GET /api/sessions` 直接返回已扫描列表，无需手动 Scan
+- risk: 首次扫描大目录可能慢（后台异步，不阻塞请求）
+
 ### T9 UI style adjustment + remove redundant requests
 
-- status: pending (direction TBD per user)
+- status: done
 - depends: none
 - steps:
   1. UI style: await user direction (current = GitHub light)
   2. home: remove 5s `setInterval` polling → manual refresh button + post-scan refresh
   3. audit other redundant fetches
-- affected: apps/web/app/page.tsx, apps/web/app/session/[id]/page.tsx
+  4. extract shared theme (C, TOOL_CAT, DIAG_LABEL, fmt*) + config (API, DEFAULT_SCAN_DIR) to shared modules
+- affected: apps/web/app/page.tsx, apps/web/app/session/[id]/page.tsx, apps/web/app/layout.tsx, apps/web/app/theme.ts (new), apps/web/app/config.ts (new)
 - acceptance: no 5s polling; session list refreshes on scan complete + manual button
 - risk: none
 

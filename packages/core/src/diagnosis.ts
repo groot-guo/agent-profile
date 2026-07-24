@@ -95,6 +95,44 @@ export async function diagnoseSession(
   detail: SessionDetail,
   options: DiagnoseOptions = {},
 ): Promise<DiagnosisResult> {
+  const result = diagnoseSessionSync(detail, options);
+
+  // P2.19 LLM 语义诊断（注入 llmDiagnoser 才跑；定性结果 wastedTokens=0，靠 severity 排序）
+  if (options.llmDiagnoser) {
+    const thinkings = detail.spans.filter((s) => s.type === 'thinking');
+    const tools = detail.spans.filter((s) => s.type === 'tool_call');
+    const ctx: LlmDiagnoseContext = {
+      sessionId: detail.id,
+      taskTitle: detail.name,
+      thinkingTexts: thinkings
+        .filter((th) => typeof th.metadata?.thinking === 'string')
+        .map((th) => ({ spanId: th.id, text: th.metadata?.thinking as string })),
+      toolCallSequence: tools.map((tool) => ({
+        spanId: tool.id,
+        name: tool.name,
+        input: typeof tool.metadata?.input === 'string' ? tool.metadata.input : '',
+        isError: tool.isError,
+      })),
+    };
+    const llmFindings = await options.llmDiagnoser.diagnose(ctx);
+    for (const lf of llmFindings) {
+      result.findings.push({ ...lf, wastedTokens: 0, wastedCost: 0, costUnknown: false });
+    }
+    // 重新排序
+    const sevRank: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
+    result.findings.sort(
+      (a, b) => sevRank[a.severity] - sevRank[b.severity] || b.wastedTokens - a.wastedTokens,
+    );
+  }
+
+  return result;
+}
+
+// 同步版本：仅跑 7 条启发式规则，不含 LLM 诊断
+export function diagnoseSessionSync(
+  detail: SessionDetail,
+  options: DiagnoseOptions = {},
+): DiagnosisResult {
   const t: DiagnosisThresholds = { ...DEFAULT_THRESHOLDS, ...options.thresholds };
   const pricingLookup = options.pricingLookup ?? (() => undefined);
   const ctxWindowLookup = options.contextWindowLookup ?? (() => undefined);
@@ -126,27 +164,6 @@ export async function diagnoseSession(
     ...detectRepeatedFailure(tools, turns, t, costOfTokens),
     ...detectReadScope(tools, t, costOfTokens),
   ];
-
-  // P2.19 LLM 语义诊断（注入 llmDiagnoser 才跑；定性结果 wastedTokens=0，靠 severity 排序）
-  if (options.llmDiagnoser) {
-    const ctx: LlmDiagnoseContext = {
-      sessionId: detail.id,
-      taskTitle: detail.name,
-      thinkingTexts: thinkings
-        .filter((th) => typeof th.metadata?.thinking === 'string')
-        .map((th) => ({ spanId: th.id, text: th.metadata?.thinking as string })),
-      toolCallSequence: tools.map((tool) => ({
-        spanId: tool.id,
-        name: tool.name,
-        input: typeof tool.metadata?.input === 'string' ? tool.metadata.input : '',
-        isError: tool.isError,
-      })),
-    };
-    const llmFindings = await options.llmDiagnoser.diagnose(ctx);
-    for (const lf of llmFindings) {
-      findings.push({ ...lf, wastedTokens: 0, wastedCost: 0, costUnknown: false });
-    }
-  }
 
   // 排序：severity 优先（high>medium>low），同 severity 内 wastedTokens 降序
   const sevRank: Record<Severity, number> = { high: 0, medium: 1, low: 2 };

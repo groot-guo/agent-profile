@@ -4,89 +4,11 @@ import type { DiagnosisResult, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { API } from '../../config';
+import { C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, SEV_COLOR, TOOL_CAT } from '../../theme';
 
-const API = process.env.NEXT_PUBLIC_API || 'http://localhost:3000/api';
-
-// 明亮主题配色
-const C = {
-  bg: '#f6f8fa',
-  card: '#ffffff',
-  border: '#d0d7de',
-  borderSoft: '#eaeef2',
-  text: '#1f2328',
-  sub: '#656d76',
-  mute: '#8c959f',
-  link: '#0969da',
-  input: '#0969da',
-  cc: '#8250df',
-  cr: '#1a7f37',
-  out: '#bc4c00',
-  high: '#cf222e',
-  medium: '#9a6700',
-  low: '#8c959f',
-  axis: '#d0d7de',
-  grid: '#eaeef2',
-};
-
-const TOOL_CAT: Record<string, string> = {
-  Read: '文件操作',
-  Write: '文件操作',
-  Edit: '文件操作',
-  Grep: '文件操作',
-  Glob: '文件操作',
-  Bash: '命令执行',
-  WebFetch: '网络',
-  WebSearch: '网络',
-  AskUserQuestion: '用户交互',
-  Workflow: '编排',
-  Task: '编排',
-  ToolSearch: '元工具',
-  TodoWrite: '元工具',
-};
-const DIAG_LABEL: Record<string, string> = {
-  repeated_read: '重复读取',
-  large_output: '大输出携带',
-  low_cache: 'cache 命中低',
-  context_bloat: '上下文堆积',
-  long_thinking: 'thinking 过长',
-  repeated_failure: '重复试错',
-  read_scope_too_large: '读取范围过大',
-  thinking_detour: 'thinking 偏离',
-  ineffective_exploration: '无效探索',
-  tool_off_target: '工具偏离',
-};
-const SEV_COLOR: Record<string, string> = { high: C.high, medium: C.medium, low: C.low };
-const CAT_COLOR: Record<string, string> = {
-  文件操作: '#fb8f1e',
-  命令执行: '#d4a72c',
-  网络: '#bf8700',
-  用户交互: '#218bff',
-  MCP: '#bc4c00',
-  编排: '#d1572a',
-  元工具: '#8c959f',
-  其他: '#6e7681',
-};
-const catOf = (name: string) => (name.startsWith('mcp__') ? 'MCP' : TOOL_CAT[name] || '其他');
-
-function fmtT(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return `${n}`;
-}
-function fmtMs(ms?: number): string {
-  if (!ms) return '-';
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60_000).toFixed(1)}m`;
-}
-function fmtBytes(b: number): string {
-  if (b >= 1_000_000) return `${(b / 1_000_000).toFixed(2)}MB`;
-  if (b >= 1_000) return `${(b / 1_000).toFixed(1)}KB`;
-  return `${b}B`;
-}
-function fmtTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString('zh-CN', { hour12: false });
-}
+// 明细表分页每页行数
+const TABLE_LIMIT = 30;
 
 interface ContextPoint {
   startTime: number;
@@ -97,9 +19,6 @@ interface ContextPoint {
   model?: string;
   contextWindow: number | null;
 }
-
-// 明细表分页每页行数
-const TABLE_LIMIT = 30;
 
 export default function SessionPage() {
   const params = useParams();
@@ -163,10 +82,10 @@ export default function SessionPage() {
           marginBottom: 20,
         }}
       >
-        <Metric label="时长" value={fmtMs(dur)} />
+        <Metric label="时长" value={fmtDuration(dur)} />
         <Metric label="消息轮" value={`${data.messageCount}`} />
         <Metric label="工具调用" value={`${tools.length}`} />
-        <Metric label="峰值上下文" value={fmtT(data.peakContextTokens)} />
+        <Metric label="峰值上下文" value={fmtTokens(data.peakContextTokens)} />
         <Metric label="cache 命中" value={`${(data.cacheHitRate * 100).toFixed(1)}%`} />
         <Metric
           label="Cost"
@@ -229,7 +148,7 @@ export default function SessionPage() {
         />
       </Card>
 
-      <Card title={`诊断建议${diag ? ` · 可优化 ~${fmtT(diag.totalWastedTokens)} token` : ''}`}>
+      <Card title={`诊断建议${diag ? ` · 可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : ''}`}>
         <DiagnosisList result={diag} />
       </Card>
 
@@ -315,7 +234,7 @@ function TokenBar({ input, cc, cr, out }: { input: number; cc: number; cr: numbe
                 borderRadius: 2,
               }}
             />
-            <span style={{ color: C.text, fontWeight: 600 }}>{fmtT(i.v)}</span>
+            <span style={{ color: C.text, fontWeight: 600 }}>{fmtTokens(i.v)}</span>
             <span style={{ color: C.sub }}>
               {i.l} · {((i.v / total) * 100).toFixed(1)}%
             </span>
@@ -388,7 +307,7 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
               strokeDasharray="5 3"
             />
             <text x={W - PAD} y={y(window) - 5} fill={C.high} fontSize={10} textAnchor="end">
-              窗口上限 {fmtT(window)}
+              窗口上限 {fmtTokens(window)}
             </text>
           </>
         )}
@@ -402,7 +321,7 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
         <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={C.axis} />
         <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke={C.axis} />
         <text x={PAD} y={PAD - 6} fill={C.sub} fontSize={10}>
-          {fmtT(maxCtx)}
+          {fmtTokens(maxCtx)}
         </text>
         <text x={PAD} y={H - PAD + 14} fill={C.sub} fontSize={10}>
           {fmtTime(points[0].startTime)}
@@ -426,7 +345,7 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
         <Legend color={C.cc} label="cache_creation" />
         <Legend color={C.cr} label="cache_read" />
         <span>
-          峰值 {fmtT(peak)}
+          峰值 {fmtTokens(peak)}
           {window ? `，利用率 ${((peak / window) * 100).toFixed(1)}%` : '（窗口未配）'}
         </span>
       </div>
@@ -542,13 +461,13 @@ function TurnsTable({ turns }: { turns: Span[] }) {
                 <td style={{ padding: '6px 8px' }}>{fmtTime(t.startTime)}</td>
                 <td style={{ padding: '6px 8px' }}>{t.model || '-'}</td>
                 <td style={{ padding: '6px 8px' }}>
-                  {fmtMs(t.endTime ? t.endTime - t.startTime : 0)}
+                  {fmtDuration(t.endTime ? t.endTime - t.startTime : 0)}
                 </td>
-                <td style={{ padding: '6px 8px', color: C.input }}>{fmtT(t.inputTokens)}</td>
-                <td style={{ padding: '6px 8px', color: C.cc }}>{fmtT(t.cacheCreationTokens)}</td>
-                <td style={{ padding: '6px 8px', color: C.cr }}>{fmtT(t.cacheReadTokens)}</td>
-                <td style={{ padding: '6px 8px', color: C.out }}>{fmtT(t.outputTokens)}</td>
-                <td style={{ padding: '6px 8px', fontWeight: 600 }}>{fmtT(t.contextTokens)}</td>
+                <td style={{ padding: '6px 8px', color: C.input }}>{fmtTokens(t.inputTokens)}</td>
+                <td style={{ padding: '6px 8px', color: C.cc }}>{fmtTokens(t.cacheCreationTokens)}</td>
+                <td style={{ padding: '6px 8px', color: C.cr }}>{fmtTokens(t.cacheReadTokens)}</td>
+                <td style={{ padding: '6px 8px', color: C.out }}>{fmtTokens(t.outputTokens)}</td>
+                <td style={{ padding: '6px 8px', fontWeight: 600 }}>{fmtTokens(t.contextTokens)}</td>
                 <td style={{ padding: '6px 8px', color: C.sub }}>{t.stopReason || '-'}</td>
               </tr>
             ))}
@@ -589,7 +508,7 @@ function ToolsTable({ tools }: { tools: Span[] }) {
                 </td>
                 <td style={{ padding: '6px 8px' }}>{fmtTime(t.startTime)}</td>
                 <td style={{ padding: '6px 8px' }}>
-                  {fmtMs(t.endTime ? t.endTime - t.startTime : 0)}
+                  {fmtDuration(t.endTime ? t.endTime - t.startTime : 0)}
                 </td>
                 <td style={{ padding: '6px 8px' }}>{fmtBytes(t.outputBytes)}</td>
                 <td style={{ padding: '6px 8px' }}>
@@ -650,7 +569,7 @@ function DiagnosisList({ result }: { result: DiagnosisResult | null }) {
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: C.cc }}>
-                ~{fmtT(f.wastedTokens)}
+                ~{fmtTokens(f.wastedTokens)}
               </div>
               <div style={{ fontSize: 10, color: f.costUnknown ? C.medium : C.sub }}>
                 {f.costUnknown ? '未定价' : `¥${f.wastedCost.toFixed(5)}`}

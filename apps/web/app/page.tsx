@@ -2,38 +2,9 @@
 
 import type { SessionSummary } from '@agent-profile/core';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-
-const API = process.env.NEXT_PUBLIC_API || 'http://localhost:3000/api';
-
-const C = {
-  bg: '#f6f8fa',
-  card: '#ffffff',
-  border: '#d0d7de',
-  borderSoft: '#eaeef2',
-  text: '#1f2328',
-  sub: '#656d76',
-  mute: '#8c959f',
-  link: '#0969da',
-  input: '#0969da',
-  cc: '#8250df',
-  cr: '#1a7f37',
-  out: '#bc4c00',
-  high: '#cf222e',
-  medium: '#9a6700',
-};
-
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return `${n}`;
-}
-function fmtDuration(ms?: number): string {
-  if (!ms) return '-';
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60_000).toFixed(1)}m`;
-}
+import { useCallback, useEffect, useState } from 'react';
+import { API, DEFAULT_SCAN_DIR } from './config';
+import { C, fmtDuration, fmtTokens } from './theme';
 
 // 从 filePath 提取 project（~/.claude/projects/<project>/<file>.jsonl）
 function projectOf(filePath: string): string {
@@ -42,6 +13,7 @@ function projectOf(filePath: string): string {
   if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
   return parts[parts.length - 2] || 'unknown';
 }
+
 // Claude Code project 目录名是 cwd 路径的 / → -，还原可读路径
 function decodeProject(p: string): string {
   if (p.startsWith('-')) return `/${p.slice(1).replace(/-/g, '/')}`;
@@ -56,22 +28,22 @@ export default function HomePage() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState('');
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       const res = await fetch(`${API}/sessions`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSessions(await res.json());
+      setError('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'fetch failed');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // 首次加载 + 手动刷新（不再轮询）
   useEffect(() => {
     fetchSessions();
-    const t = setInterval(fetchSessions, 5000);
-    return () => clearInterval(t);
   }, [fetchSessions]);
 
   const onScan = async () => {
@@ -82,7 +54,7 @@ export default function HomePage() {
       const res = await fetch(`${API}/scan`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ dir: dir || '~/.claude/projects' }),
+        body: JSON.stringify({ dir: dir || DEFAULT_SCAN_DIR }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = (await res.json()) as { scanned: number; imported: number; skipped: number };
@@ -110,7 +82,7 @@ export default function HomePage() {
         <input
           value={dir}
           onChange={(e) => setDir(e.target.value)}
-          placeholder="transcript 目录，如 /Users/you/.claude/projects（留空默认 ~/.claude/projects）"
+          placeholder={`transcript 目录，如 /Users/you/.claude/projects（留空默认 ${DEFAULT_SCAN_DIR}）`}
           style={{
             flex: 1,
             padding: '8px 12px',
@@ -138,6 +110,20 @@ export default function HomePage() {
           }}
         >
           {scanning ? 'Scanning…' : 'Scan'}
+        </button>
+        <button
+          onClick={() => { setLoading(true); fetchSessions(); }}
+          style={{
+            padding: '8px 16px',
+            background: C.card,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            cursor: 'pointer',
+            fontSize: 13,
+          }}
+        >
+          🔄
         </button>
       </div>
 

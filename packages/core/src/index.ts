@@ -10,9 +10,9 @@ export type {
   LlmFinding,
   Severity,
 } from './diagnosis';
-export { DEFAULT_THRESHOLDS, diagnoseSession } from './diagnosis';
+export { DEFAULT_THRESHOLDS, diagnoseSession, diagnoseSessionSync } from './diagnosis';
 export type { ParseOptions } from './parser';
 export { parseTranscript } from './parser';
 export { calcCost } from './pricing';
-export { findTranscriptFiles, readTranscript } from './scanner';
+export { findTranscriptFiles, findTranscriptFilesSync, readTranscript, readTranscriptSync } from './scanner';
 export type * from './types';

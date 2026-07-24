@@ -1,7 +1,10 @@
 import type { Pricing } from '@agent-profile/core';
 import Database from 'better-sqlite3';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-export const db = new Database('trace.db');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+export const db = new Database(resolve(__dirname, '..', 'trace.db'));
 
 db.pragma('journal_mode = WAL');
 

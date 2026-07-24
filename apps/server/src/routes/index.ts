@@ -1,0 +1,14 @@
+import type { FastifyInstance } from 'fastify';
+import { registerDiagnosisRoutes } from './diagnosis';
+import { registerHealthRoutes } from './health';
+import { registerPricingRoutes } from './pricing';
+import { registerScanRoutes } from './scan';
+import { registerSessionRoutes } from './sessions';
+
+export function registerRoutes(app: FastifyInstance) {
+  registerScanRoutes(app);
+  registerSessionRoutes(app);
+  registerDiagnosisRoutes(app);
+  registerPricingRoutes(app);
+  registerHealthRoutes(app);
+}

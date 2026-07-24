@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@agent-profile/sdk'],
+  transpilePackages: ['@agent-profile/core'],
 };
 
 export default nextConfig;
