@@ -1,4 +1,4 @@
-import type { SessionDetail, Span, Pricing } from './types';
+import type { Pricing, SessionDetail, Span } from './types';
 
 // ===== 诊断结果结构 =====
 
@@ -10,7 +10,9 @@ export type DiagnosisType =
   | 'long_thinking'
   | 'repeated_failure'
   | 'read_scope_too_large'
-  | 'thinking_detour' | 'ineffective_exploration' | 'tool_off_target';
+  | 'thinking_detour'
+  | 'ineffective_exploration'
+  | 'tool_off_target';
 
 export type Severity = 'high' | 'medium' | 'low';
 
@@ -19,11 +21,11 @@ export interface DiagnosisFinding {
   severity: Severity;
   title: string;
   detail: string;
-  wastedTokens: number;          // 估算可省 token 规模（findings 间可能有重叠，total 非去重）
-  wastedCost: number;            // 按 input_price 估算的 cost 上限，0 且 costUnknown=true 表示无定价
+  wastedTokens: number; // 估算可省 token 规模（findings 间可能有重叠，total 非去重）
+  wastedCost: number; // 按 input_price 估算的 cost 上限，0 且 costUnknown=true 表示无定价
   costUnknown: boolean;
   suggestion: string;
-  spanIds: string[];             // 关联 span，前端可跳转定位
+  spanIds: string[]; // 关联 span，前端可跳转定位
 }
 
 export interface DiagnosisResult {
@@ -34,17 +36,17 @@ export interface DiagnosisResult {
 }
 
 export interface DiagnosisThresholds {
-  repeatedReadMin: number;           // 同文件 Read 多少次算重复
-  largeOutputBytes: number;          // tool 输出多少字节算大
-  largeOutputMinAfterTurns: number;  // 大输出至少被后续几轮携带才报
-  lowCacheRate: number;              // cache 命中率低于此算低
-  lowCacheMinInput: number;          // 总输入低于此不报（小会话命中率意义不大）
-  contextBloatUtilization: number;   // 窗口利用率超过此算堆积
-  contextBloatMinPeak: number;       // 峰值上下文超过此也算堆积（无窗口配置时）
-  longThinkingChars: number;         // thinking 字符数超过此算过长
-  repeatedFailureMin: number;        // 同工具连续失败几次算重复试错
-  bytesPerToken: number;             // 字节→token 估算系数
-  readScopeBytes: number;            // P2: Read 无 limit 且输出超此字节报"范围过大"
+  repeatedReadMin: number; // 同文件 Read 多少次算重复
+  largeOutputBytes: number; // tool 输出多少字节算大
+  largeOutputMinAfterTurns: number; // 大输出至少被后续几轮携带才报
+  lowCacheRate: number; // cache 命中率低于此算低
+  lowCacheMinInput: number; // 总输入低于此不报（小会话命中率意义不大）
+  contextBloatUtilization: number; // 窗口利用率超过此算堆积
+  contextBloatMinPeak: number; // 峰值上下文超过此也算堆积（无窗口配置时）
+  longThinkingChars: number; // thinking 字符数超过此算过长
+  repeatedFailureMin: number; // 同工具连续失败几次算重复试错
+  bytesPerToken: number; // 字节→token 估算系数
+  readScopeBytes: number; // P2: Read 无 limit 且输出超此字节报"范围过大"
 }
 
 export const DEFAULT_THRESHOLDS: DiagnosisThresholds = {
@@ -65,7 +67,7 @@ export interface DiagnoseOptions {
   pricingLookup?: (model?: string) => Pricing | undefined;
   contextWindowLookup?: (model?: string) => number | undefined;
   thresholds?: Partial<DiagnosisThresholds>;
-  llmDiagnoser?: LlmDiagnoser;   // P2.19 语义诊断，注入则跑 LLM 分析
+  llmDiagnoser?: LlmDiagnoser; // P2.19 语义诊断，注入则跑 LLM 分析
 }
 
 // P2.19 LLM 语义诊断接口（实现由调用方注入；第一版不提供实现，预留接入点）
@@ -132,9 +134,10 @@ export async function diagnoseSession(
       taskTitle: detail.name,
       thinkingTexts: thinkings
         .filter((th) => typeof th.metadata?.thinking === 'string')
-        .map((th) => ({ spanId: th.id, text: th.metadata!.thinking as string })),
+        .map((th) => ({ spanId: th.id, text: th.metadata?.thinking as string })),
       toolCallSequence: tools.map((tool) => ({
-        spanId: tool.id, name: tool.name,
+        spanId: tool.id,
+        name: tool.name,
         input: typeof tool.metadata?.input === 'string' ? tool.metadata.input : '',
         isError: tool.isError,
       })),
@@ -147,7 +150,9 @@ export async function diagnoseSession(
 
   // 排序：severity 优先（high>medium>low），同 severity 内 wastedTokens 降序
   const sevRank: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
-  findings.sort((a, b) => sevRank[a.severity] - sevRank[b.severity] || b.wastedTokens - a.wastedTokens);
+  findings.sort(
+    (a, b) => sevRank[a.severity] - sevRank[b.severity] || b.wastedTokens - a.wastedTokens,
+  );
 
   return {
     findings,
@@ -297,17 +302,20 @@ function detectLowCache(
 
   const nonCached = detail.inputTokens + detail.cacheCreationTokens;
   const { cost, unknown } = costOfTokens(nonCached);
-  return [{
-    type: 'low_cache',
-    severity: detail.cacheHitRate < 0.3 ? 'high' : 'medium',
-    title: `cache 命中率低（${(detail.cacheHitRate * 100).toFixed(0)}%）`,
-    detail: `总输入 ${fmtTok(totalInput)} 中仅 ${(detail.cacheHitRate * 100).toFixed(0)}% 命中 cache，未命中部分 ${fmtTok(nonCached)}（input+cache_creation）按 input 价计费，本可走更便宜的 cache_read`,
-    wastedTokens: nonCached,
-    wastedCost: cost,
-    costUnknown: unknown,
-    suggestion: '检查是否有频繁切换对话或长间隔导致 cache 失效；保持请求模式稳定以提升 cache 命中',
-    spanIds: turns.map((turn) => turn.id),
-  }];
+  return [
+    {
+      type: 'low_cache',
+      severity: detail.cacheHitRate < 0.3 ? 'high' : 'medium',
+      title: `cache 命中率低（${(detail.cacheHitRate * 100).toFixed(0)}%）`,
+      detail: `总输入 ${fmtTok(totalInput)} 中仅 ${(detail.cacheHitRate * 100).toFixed(0)}% 命中 cache，未命中部分 ${fmtTok(nonCached)}（input+cache_creation）按 input 价计费，本可走更便宜的 cache_read`,
+      wastedTokens: nonCached,
+      wastedCost: cost,
+      costUnknown: unknown,
+      suggestion:
+        '检查是否有频繁切换对话或长间隔导致 cache 失效；保持请求模式稳定以提升 cache 命中',
+      spanIds: turns.map((turn) => turn.id),
+    },
+  ];
 }
 
 // ===== 4. 上下文堆积 =====
@@ -333,17 +341,26 @@ function detectContextBloat(
   const wastedTokens = Math.round(peak * 0.4);
   const { cost, unknown } = costOfTokens(wastedTokens, windowModel);
   const utilTxt = utilization != null ? `，窗口利用率 ${(utilization * 100).toFixed(0)}%` : '';
-  return [{
-    type: 'context_bloat',
-    severity: utilization != null ? (utilization > 0.85 ? 'high' : 'medium') : (peak > 200_000 ? 'high' : 'medium'),
-    title: `上下文堆积（峰值 ${fmtTok(peak)}${utilTxt}）`,
-    detail: `峰值上下文达 ${fmtTok(peak)}${window ? ` / 窗口 ${fmtTok(window)}` : ''}${utilTxt}，其中约 ${fmtTok(wastedTokens)} token 为可压缩的历史累积`,
-    wastedTokens,
-    wastedCost: cost,
-    costUnknown: unknown,
-    suggestion: '对早期工具输出与已解决的中问步骤做摘要/清理；长会话考虑分段或主动压缩历史',
-    spanIds: turns.slice(-3).map((turn) => turn.id),
-  }];
+  return [
+    {
+      type: 'context_bloat',
+      severity:
+        utilization != null
+          ? utilization > 0.85
+            ? 'high'
+            : 'medium'
+          : peak > 200_000
+            ? 'high'
+            : 'medium',
+      title: `上下文堆积（峰值 ${fmtTok(peak)}${utilTxt}）`,
+      detail: `峰值上下文达 ${fmtTok(peak)}${window ? ` / 窗口 ${fmtTok(window)}` : ''}${utilTxt}，其中约 ${fmtTok(wastedTokens)} token 为可压缩的历史累积`,
+      wastedTokens,
+      wastedCost: cost,
+      costUnknown: unknown,
+      suggestion: '对早期工具输出与已解决的中问步骤做摘要/清理；长会话考虑分段或主动压缩历史',
+      spanIds: turns.slice(-3).map((turn) => turn.id),
+    },
+  ];
 }
 
 // ===== 5. 过长 thinking =====
@@ -355,7 +372,14 @@ function detectLongThinking(
   t: DiagnosisThresholds,
   costOfTokens: CostFn,
 ): DiagnosisFinding[] {
-  const longs: { span: Span; text: string; estTok: number; wastedTokens: number; cost: number; unknown: boolean }[] = [];
+  const longs: {
+    span: Span;
+    text: string;
+    estTok: number;
+    wastedTokens: number;
+    cost: number;
+    unknown: boolean;
+  }[] = [];
   for (const th of thinkings) {
     const text = th.metadata?.thinking;
     if (typeof text !== 'string') continue;
@@ -416,12 +440,18 @@ function detectRepeatedFailure(
 
   const findings: DiagnosisFinding[] = [];
   for (const [name, ts] of byName) {
-    let runStart = 0, runLen = 0, bestStart = 0, bestLen = 0;
+    let runStart = 0,
+      runLen = 0,
+      bestStart = 0,
+      bestLen = 0;
     for (let i = 0; i < ts.length; i++) {
       if (ts[i].isError) {
         if (runLen === 0) runStart = i;
         runLen++;
-        if (runLen > bestLen) { bestLen = runLen; bestStart = runStart; }
+        if (runLen > bestLen) {
+          bestLen = runLen;
+          bestStart = runStart;
+        }
       } else {
         runLen = 0;
       }

@@ -6,15 +6,15 @@ Two layers: heuristic rules (quantified, free) + LLM semantic analysis (qualitat
 
 Each rule outputs `DiagnosisFinding { type, severity, title, detail, wastedTokens, wastedCost, costUnknown, suggestion, spanIds }`. Findings sorted by severity (high > medium > low), then wastedTokens desc.
 
-| type | detection | wastedTokens estimate |
-|---|---|---|
-| repeated_read | same file_path Read ≥ 2 | sum of later reads' outputBytes / 4 |
-| large_output | tool outputBytes > 10KB × subsequent turns | outputBytes/4 × afterTurns (theoretical upper bound) |
-| low_cache | cacheHitRate < 0.5 (totalInput > 10k) | input + cache_creation (uncached portion) |
-| context_bloat | window utilization > 70% or peak > 100k | peak × 0.4 (compressible history estimate) |
-| long_thinking | thinking chars > 4000 (top 5 + aggregate rest) | chars/4 × 0.5 |
-| repeated_failure | same tool consecutive isError ≥ 2 | sum of parent turn outputTokens |
-| read_scope_too_large | Read no limit + output > 20KB | outputBytes/4 × 0.5 |
+| type                 | detection                                      | wastedTokens estimate                                |
+| -------------------- | ---------------------------------------------- | ---------------------------------------------------- |
+| repeated_read        | same file_path Read ≥ 2                        | sum of later reads' outputBytes / 4                  |
+| large_output         | tool outputBytes > 10KB × subsequent turns     | outputBytes/4 × afterTurns (theoretical upper bound) |
+| low_cache            | cacheHitRate < 0.5 (totalInput > 10k)          | input + cache_creation (uncached portion)            |
+| context_bloat        | window utilization > 70% or peak > 100k        | peak × 0.4 (compressible history estimate)           |
+| long_thinking        | thinking chars > 4000 (top 5 + aggregate rest) | chars/4 × 0.5                                        |
+| repeated_failure     | same tool consecutive isError ≥ 2              | sum of parent turn outputTokens                      |
+| read_scope_too_large | Read no limit + output > 20KB                  | outputBytes/4 × 0.5                                  |
 
 - token estimate: bytes / 4
 - wastedCost: wastedTokens × model input_price (upper bound; cache is cheaper). Unknown model → costUnknown, cost=0.
@@ -25,6 +25,7 @@ Each rule outputs `DiagnosisFinding { type, severity, title, detail, wastedToken
 ### Scope
 
 LLM does qualitative judgment only:
+
 - thinking_detour: reasoning off-task, loops, irrelevant
 - ineffective_exploration: repeated trial-and-error patterns
 - tool_off_target: tool calls not serving task goal
@@ -55,10 +56,10 @@ Analyzed session uses GLM-5.2 / DeepSeek-v4; analysis model can differ (analyzed
 
 ### Sync / Async
 
-| option | approach | tradeoff |
-|---|---|---|
-| A sync + timeout | LLM with 30s timeout, degrade to heuristic on timeout | simple; request may be slow |
-| B async | diagnosis returns heuristic immediately, LLM background, frontend poll/SSE | better UX; complex |
+| option           | approach                                                                   | tradeoff                    |
+| ---------------- | -------------------------------------------------------------------------- | --------------------------- |
+| A sync + timeout | LLM with 30s timeout, degrade to heuristic on timeout                      | simple; request may be slow |
+| B async          | diagnosis returns heuristic immediately, LLM background, frontend poll/SSE | better UX; complex          |
 
 Recommend A first (timeout degrade preserves availability).
 

@@ -1,5 +1,5 @@
-import type { ParsedSession, Span, SessionSummary, Pricing } from './types';
 import { calcCost } from './pricing';
+import type { ParsedSession, Pricing, SessionSummary, Span } from './types';
 
 export interface FileMeta {
   mtime: number;

@@ -3,10 +3,13 @@
   "private": true,
   "scripts": {
     "dev": "pnpm -r dev",
-    "demo": "pnpm --filter demo dev",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "lint:fix": "biome check --write ."
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
     "typescript": "^5.5.0"
   }
 }

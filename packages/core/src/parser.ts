@@ -1,13 +1,18 @@
 import type {
-  TranscriptEntry, TranscriptMessage, ContentBlock, ToolUseBlock, ToolResultBlock,
-  Span, SpanType, ParsedSession,
+  ContentBlock,
+  ParsedSession,
+  Span,
+  SpanType,
+  ToolResultBlock,
+  TranscriptEntry,
+  TranscriptMessage,
 } from './types';
 
 const METADATA_LIMIT = 10_000; // 10KB 截断，防 metadata 膨胀
 
 function truncate(s: string): string {
   if (s.length <= METADATA_LIMIT) return s;
-  return s.slice(0, METADATA_LIMIT) + `…[truncated ${s.length - METADATA_LIMIT} chars]`;
+  return `${s.slice(0, METADATA_LIMIT)}…[truncated ${s.length - METADATA_LIMIT} chars]`;
 }
 
 function safeStringify(v: unknown): string {
@@ -27,8 +32,7 @@ function toMs(iso: string): number {
 function asBlocks(msg?: TranscriptMessage): ContentBlock[] {
   if (!msg || !Array.isArray(msg.content)) return [];
   return (msg.content as unknown[]).filter(
-    (b): b is ContentBlock =>
-      typeof b === 'object' && b !== null && 'type' in b,
+    (b): b is ContentBlock => typeof b === 'object' && b !== null && 'type' in b,
   );
 }
 
@@ -91,12 +95,13 @@ export interface ParseOptions {
 
 // 解析一个 transcript 的所有行 → sessionId + 元信息 + spans
 // token 四类全部归到 llm_turn；thinking/tool_call/answer 的 token=0（含于父轮，不重复算）
-export function parseTranscript(entries: TranscriptEntry[], opts: ParseOptions): ParsedSession | null {
+export function parseTranscript(
+  entries: TranscriptEntry[],
+  opts: ParseOptions,
+): ParsedSession | null {
   if (entries.length === 0) return null;
 
-  const sorted = [...entries].sort((a, b) =>
-    (a.timestamp || '').localeCompare(b.timestamp || ''),
-  );
+  const sorted = [...entries].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
 
   // sessionId：取第一个非空（sessionId / session_id / uuid）；全空则跳过该文件
   let sid = '';
@@ -111,7 +116,10 @@ export function parseTranscript(entries: TranscriptEntry[], opts: ParseOptions):
   const startTime = tsRows.length ? toMs(tsRows[0].timestamp) : 0;
   const endTime = tsRows.length ? toMs(tsRows[tsRows.length - 1].timestamp) : undefined;
   // tool_result 配对索引：tool_use_id → { 结果行, result block }
-  const toolResultMeta = new Map<string, { resultEntry: TranscriptEntry; block: ToolResultBlock }>();
+  const toolResultMeta = new Map<
+    string,
+    { resultEntry: TranscriptEntry; block: ToolResultBlock }
+  >();
   for (const e of sorted) {
     if (e.type === 'user' && e.message) {
       for (const r of asToolResults(e.message)) {
@@ -180,7 +188,8 @@ export function parseTranscript(entries: TranscriptEntry[], opts: ParseOptions):
         const result = toolResultMeta.get(b.id);
         const resultTs = result ? toMs(result.resultEntry.timestamp) : undefined;
         const outputRaw = result ? result.block.content : undefined;
-        const outputBytes = outputRaw != null ? Buffer.byteLength(safeStringify(outputRaw), 'utf8') : 0;
+        const outputBytes =
+          outputRaw != null ? Buffer.byteLength(safeStringify(outputRaw), 'utf8') : 0;
         spans.push(
           makeSpan({
             id: b.id,

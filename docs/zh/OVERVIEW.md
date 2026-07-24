@@ -13,7 +13,7 @@ Agent Profile — AI 编码 agent 会话 transcript 的离线 profile 分析工�
   → Scanner（扫描/去重/增量）
   → Parser（NDJSON / zstd 解码，tool_use↔tool_result 配对，parentUuid 调用链）
   → Analyzer（四类 token、上下文、cache 命中率、cost）
-  → SQLite (server/trace.db)
+  → SQLite (apps/server/trace.db)
   → Web UI (Next.js)
 ```
 
@@ -26,13 +26,13 @@ pnpm workspace + TypeScript。
 
 ## 数据模型
 
-四张表（`server/src/db.ts`）：
+四张表（`apps/server/src/db.ts`）：
 - **sessions**：id + 文件 mtime/size/lines + 四类 token 聚合 + peak/avg context + cache_hit_rate + cwd + `agent`（规划：claude-code | codex | zed）。
 - **spans**：llm_turn | tool_call。四类 token + context_tokens + output_bytes + metadata（>10KB 截断）。parentId 调用链，isSidechain。
 - **pricing**：model → 四类 token 单价（人民币/百万 token）。
 - **model_context**：model → context window。
 
-改 schema 需删 `server/trace.db` 重建（`CREATE TABLE IF NOT EXISTS` 不改已存在表）。
+改 schema 需删 `apps/server/trace.db` 重建（`CREATE TABLE IF NOT EXISTS` 不改已存在表）。
 
 ## 关键约定
 

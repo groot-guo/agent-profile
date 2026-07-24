@@ -1,12 +1,18 @@
-export { findTranscriptFiles, readTranscript } from './scanner';
-export { parseTranscript } from './parser';
-export type { ParseOptions } from './parser';
 export { analyzeSession } from './analyzer';
-export { calcCost } from './pricing';
-export { diagnoseSession, DEFAULT_THRESHOLDS } from './diagnosis';
 export type {
-  DiagnosisType, Severity, DiagnosisFinding, DiagnosisResult,
-  DiagnosisThresholds, DiagnoseOptions,
-  LlmDiagnoseContext, LlmFinding, LlmDiagnoser,
+  DiagnoseOptions,
+  DiagnosisFinding,
+  DiagnosisResult,
+  DiagnosisThresholds,
+  DiagnosisType,
+  LlmDiagnoseContext,
+  LlmDiagnoser,
+  LlmFinding,
+  Severity,
 } from './diagnosis';
+export { DEFAULT_THRESHOLDS, diagnoseSession } from './diagnosis';
+export type { ParseOptions } from './parser';
+export { parseTranscript } from './parser';
+export { calcCost } from './pricing';
+export { findTranscriptFiles, readTranscript } from './scanner';
 export type * from './types';

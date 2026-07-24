@@ -1,5 +1,5 @@
-import Database from 'better-sqlite3';
 import type { Pricing } from '@agent-profile/core';
+import Database from 'better-sqlite3';
 
 export const db = new Database('trace.db');
 

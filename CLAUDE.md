@@ -27,7 +27,7 @@ transcript file
   → Scanner (scan/dedup/incremental)
   → Parser (NDJSON parse, tool_use↔tool_result pairing, parentUuid chain)
   → Analyzer (4 token types, context size, cache hit rate, cost)
-  → SQLite (server/trace.db)
+  → SQLite (apps/server/trace.db)
   → Web UI (Next.js)
 ```
 
@@ -47,9 +47,9 @@ transcript file
 
 ## Data Model
 
-Four tables (`server/src/db.ts`): `sessions` (sessionId + file mtime/size/lines + 4 token aggregates + peak/avg context + cache_hit_rate + cwd), `spans` (llm_turn / tool_call, 4 token types + `context_tokens` + `output_bytes` + metadata, >10KB truncated), `pricing` (model → 4 token unit prices), `model_context` (model → context window size).
+Four tables (`apps/server/src/db.ts`): `sessions` (sessionId + file mtime/size/lines + 4 token aggregates + peak/avg context + cache_hit_rate + cwd), `spans` (llm_turn / tool_call, 4 token types + `context_tokens` + `output_bytes` + metadata, >10KB truncated), `pricing` (model → 4 token unit prices), `model_context` (model → context window size).
 
-**Schema changes require deleting `server/trace.db`** — `CREATE TABLE IF NOT EXISTS` won't alter existing tables; old db missing new columns causes INSERT failure. `trace.db` is generated under `server/` (better-sqlite3 relative path, cwd = server/), not project root.
+**Schema changes require deleting `apps/server/trace.db`** — `CREATE TABLE IF NOT EXISTS` won't alter existing tables; old db missing new columns causes INSERT failure. `trace.db` is generated under `apps/server/` (better-sqlite3 relative path, cwd = apps/server/), not project root.
 
 ## Ports
 

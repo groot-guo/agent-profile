@@ -10,10 +10,11 @@ export function calcCost(span: Span, pricing?: Pricing): { cost: number; unknown
   if (!pricing) return { cost: 0, unknown: true };
 
   const cost =
-    (span.inputTokens * pricing.inputPrice
-      + span.cacheCreationTokens * pricing.cacheCreationPrice
-      + span.cacheReadTokens * pricing.cacheReadPrice
-      + span.outputTokens * pricing.outputPrice) / 1_000_000;
+    (span.inputTokens * pricing.inputPrice +
+      span.cacheCreationTokens * pricing.cacheCreationPrice +
+      span.cacheReadTokens * pricing.cacheReadPrice +
+      span.outputTokens * pricing.outputPrice) /
+    1_000_000;
 
   return { cost, unknown: false };
 }

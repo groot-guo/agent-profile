@@ -1,37 +1,70 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import type { DiagnosisResult, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
-import type { SessionDetail, Span, DiagnosisResult } from '@agent-profile/core';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API || 'http://localhost:3000/api';
 
 // 明亮主题配色
 const C = {
-  bg: '#f6f8fa', card: '#ffffff', border: '#d0d7de', borderSoft: '#eaeef2',
-  text: '#1f2328', sub: '#656d76', mute: '#8c959f',
+  bg: '#f6f8fa',
+  card: '#ffffff',
+  border: '#d0d7de',
+  borderSoft: '#eaeef2',
+  text: '#1f2328',
+  sub: '#656d76',
+  mute: '#8c959f',
   link: '#0969da',
-  input: '#0969da', cc: '#8250df', cr: '#1a7f37', out: '#bc4c00',
-  high: '#cf222e', medium: '#9a6700', low: '#8c959f',
-  axis: '#d0d7de', grid: '#eaeef2',
+  input: '#0969da',
+  cc: '#8250df',
+  cr: '#1a7f37',
+  out: '#bc4c00',
+  high: '#cf222e',
+  medium: '#9a6700',
+  low: '#8c959f',
+  axis: '#d0d7de',
+  grid: '#eaeef2',
 };
 
 const TOOL_CAT: Record<string, string> = {
-  Read: '文件操作', Write: '文件操作', Edit: '文件操作', Grep: '文件操作', Glob: '文件操作',
-  Bash: '命令执行', WebFetch: '网络', WebSearch: '网络', AskUserQuestion: '用户交互',
-  Workflow: '编排', Task: '编排', ToolSearch: '元工具', TodoWrite: '元工具',
+  Read: '文件操作',
+  Write: '文件操作',
+  Edit: '文件操作',
+  Grep: '文件操作',
+  Glob: '文件操作',
+  Bash: '命令执行',
+  WebFetch: '网络',
+  WebSearch: '网络',
+  AskUserQuestion: '用户交互',
+  Workflow: '编排',
+  Task: '编排',
+  ToolSearch: '元工具',
+  TodoWrite: '元工具',
 };
 const DIAG_LABEL: Record<string, string> = {
-  repeated_read: '重复读取', large_output: '大输出携带', low_cache: 'cache 命中低',
-  context_bloat: '上下文堆积', long_thinking: 'thinking 过长', repeated_failure: '重复试错',
+  repeated_read: '重复读取',
+  large_output: '大输出携带',
+  low_cache: 'cache 命中低',
+  context_bloat: '上下文堆积',
+  long_thinking: 'thinking 过长',
+  repeated_failure: '重复试错',
   read_scope_too_large: '读取范围过大',
-  thinking_detour: 'thinking 偏离', ineffective_exploration: '无效探索', tool_off_target: '工具偏离',
+  thinking_detour: 'thinking 偏离',
+  ineffective_exploration: '无效探索',
+  tool_off_target: '工具偏离',
 };
 const SEV_COLOR: Record<string, string> = { high: C.high, medium: C.medium, low: C.low };
 const CAT_COLOR: Record<string, string> = {
-  文件操作: '#fb8f1e', 命令执行: '#d4a72c', 网络: '#bf8700', 用户交互: '#218bff',
-  MCP: '#bc4c00', 编排: '#d1572a', 元工具: '#8c959f', 其他: '#6e7681',
+  文件操作: '#fb8f1e',
+  命令执行: '#d4a72c',
+  网络: '#bf8700',
+  用户交互: '#218bff',
+  MCP: '#bc4c00',
+  编排: '#d1572a',
+  元工具: '#8c959f',
+  其他: '#6e7681',
 };
 const catOf = (name: string) => (name.startsWith('mcp__') ? 'MCP' : TOOL_CAT[name] || '其他');
 
@@ -56,8 +89,13 @@ function fmtTime(ms: number): string {
 }
 
 interface ContextPoint {
-  startTime: number; contextTokens: number; inputTokens: number;
-  cacheCreationTokens: number; cacheReadTokens: number; model?: string; contextWindow: number | null;
+  startTime: number;
+  contextTokens: number;
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  model?: string;
+  contextWindow: number | null;
 }
 
 // 明细表分页每页行数
@@ -74,12 +112,20 @@ export default function SessionPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/session/${id}`).then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))),
-      fetch(`${API}/session/${id}/context`).then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))),
+      fetch(`${API}/session/${id}`).then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+      ),
+      fetch(`${API}/session/${id}/context`).then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+      ),
       // diagnosis 为辅助层，失败不拖垮主数据展示
-      fetch(`${API}/session/${id}/diagnosis`).then((r) => r.ok ? r.json() : null),
+      fetch(`${API}/session/${id}/diagnosis`).then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([d, c, dg]) => { setData(d); setCtx(c); setDiag(dg); })
+      .then(([d, c, dg]) => {
+        setData(d);
+        setCtx(c);
+        setDiag(dg);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
   }, [id]);
@@ -99,30 +145,72 @@ export default function SessionPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
-      <Link href="/" style={{ color: C.link, fontSize: 13, textDecoration: 'none' }}>← Sessions</Link>
-      <h2 style={{ margin: '8px 0 4px', fontSize: 22, fontWeight: 600, color: C.text }}>{data.name || data.id.slice(0, 8)}</h2>
+      <Link href="/" style={{ color: C.link, fontSize: 13, textDecoration: 'none' }}>
+        ← Sessions
+      </Link>
+      <h2 style={{ margin: '8px 0 4px', fontSize: 22, fontWeight: 600, color: C.text }}>
+        {data.name || data.id.slice(0, 8)}
+      </h2>
       <div style={{ fontSize: 12, color: C.sub, marginBottom: 16 }}>
         {data.filePath} · {data.claudeVersion || '-'} · {data.gitBranch || '-'}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 20 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          gap: 10,
+          marginBottom: 20,
+        }}
+      >
         <Metric label="时长" value={fmtMs(dur)} />
         <Metric label="消息轮" value={`${data.messageCount}`} />
         <Metric label="工具调用" value={`${tools.length}`} />
         <Metric label="峰值上下文" value={fmtT(data.peakContextTokens)} />
         <Metric label="cache 命中" value={`${(data.cacheHitRate * 100).toFixed(1)}%`} />
-        <Metric label="Cost" value={data.costUnknownCount > 0 ? '—' : `¥${data.totalCost.toFixed(4)}`} warn={data.costUnknownCount > 0} />
+        <Metric
+          label="Cost"
+          value={data.costUnknownCount > 0 ? '—' : `¥${data.totalCost.toFixed(4)}`}
+          warn={data.costUnknownCount > 0}
+        />
       </div>
 
       <Card title="工具调用次数（按名聚合，不按参数）">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {toolBars.map(([name, count]) => (
             <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-              <span style={{ width: 180, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-              <div style={{ flex: 1, height: 18, background: C.borderSoft, borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ width: `${(count / maxToolCount) * 100}%`, height: '100%', background: CAT_COLOR[catOf(name)] || C.mute, borderRadius: 3 }} />
+              <span
+                style={{
+                  width: 180,
+                  color: C.text,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {name}
+              </span>
+              <div
+                style={{
+                  flex: 1,
+                  height: 18,
+                  background: C.borderSoft,
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${(count / maxToolCount) * 100}%`,
+                    height: '100%',
+                    background: CAT_COLOR[catOf(name)] || C.mute,
+                    borderRadius: 3,
+                  }}
+                />
               </div>
-              <span style={{ width: 70, textAlign: 'right', color: C.sub }}>{count} 次 · {((count / tools.length) * 100).toFixed(0)}%</span>
+              <span style={{ width: 70, textAlign: 'right', color: C.sub }}>
+                {count} 次 · {((count / tools.length) * 100).toFixed(0)}%
+              </span>
             </div>
           ))}
         </div>
@@ -133,7 +221,12 @@ export default function SessionPage() {
       </Card>
 
       <Card title="Token 拆解">
-        <TokenBar input={data.inputTokens} cc={data.cacheCreationTokens} cr={data.cacheReadTokens} out={data.outputTokens} />
+        <TokenBar
+          input={data.inputTokens}
+          cc={data.cacheCreationTokens}
+          cr={data.cacheReadTokens}
+          out={data.outputTokens}
+        />
       </Card>
 
       <Card title={`诊断建议${diag ? ` · 可优化 ~${fmtT(diag.totalWastedTokens)} token` : ''}`}>
@@ -153,7 +246,14 @@ export default function SessionPage() {
 
 function Metric({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px' }}>
+    <div
+      style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 8,
+        padding: '10px 12px',
+      }}
+    >
       <div style={{ fontSize: 18, fontWeight: 600, color: warn ? C.medium : C.text }}>{value}</div>
       <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
     </div>
@@ -162,7 +262,15 @@ function Metric({ label, value, warn }: { label: string; value: string; warn?: b
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
+    <div
+      style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 20,
+      }}
+    >
       <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 12 }}>{title}</div>
       {children}
     </div>
@@ -179,15 +287,38 @@ function TokenBar({ input, cc, cr, out }: { input: number; cc: number; cr: numbe
   ];
   return (
     <div>
-      <div style={{ display: 'flex', height: 14, borderRadius: 4, overflow: 'hidden', background: C.borderSoft }}>
-        {items.map((i) => <div key={i.l} style={{ width: `${(i.v / total) * 100}%`, background: i.c, minWidth: i.v > 0 ? 3 : 0 }} />)}
+      <div
+        style={{
+          display: 'flex',
+          height: 14,
+          borderRadius: 4,
+          overflow: 'hidden',
+          background: C.borderSoft,
+        }}
+      >
+        {items.map((i) => (
+          <div
+            key={i.l}
+            style={{ width: `${(i.v / total) * 100}%`, background: i.c, minWidth: i.v > 0 ? 3 : 0 }}
+          />
+        ))}
       </div>
       <div style={{ display: 'flex', gap: 16, fontSize: 12, marginTop: 8, flexWrap: 'wrap' }}>
         {items.map((i) => (
           <span key={i.l} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ display: 'inline-block', width: 9, height: 9, background: i.c, borderRadius: 2 }} />
+            <span
+              style={{
+                display: 'inline-block',
+                width: 9,
+                height: 9,
+                background: i.c,
+                borderRadius: 2,
+              }}
+            />
             <span style={{ color: C.text, fontWeight: 600 }}>{fmtT(i.v)}</span>
-            <span style={{ color: C.sub }}>{i.l} · {((i.v / total) * 100).toFixed(1)}%</span>
+            <span style={{ color: C.sub }}>
+              {i.l} · {((i.v / total) * 100).toFixed(1)}%
+            </span>
           </span>
         ))}
       </div>
@@ -197,7 +328,9 @@ function TokenBar({ input, cc, cr, out }: { input: number; cc: number; cr: numbe
 
 function ContextChart({ points }: { points: ContextPoint[] }) {
   if (points.length === 0) return <div style={{ color: C.sub, fontSize: 12 }}>无数据</div>;
-  const W = 1000, H = 240, PAD = 44;
+  const W = 1000,
+    H = 240,
+    PAD = 44;
   const peak = Math.max(...points.map((p) => p.contextTokens));
   const window = points[0].contextWindow;
   const maxCtx = Math.max(peak, ...(window ? [window] : [0])) * 1.08 || 1;
@@ -207,28 +340,56 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
   // 堆叠面积：cr(底) + cc + input(顶)，累加 = contextTokens
   const area = (topFn: (p: ContextPoint) => number, botFn: (p: ContextPoint) => number) => {
     let d = '';
-    points.forEach((p, i) => { d += `${i === 0 ? 'M' : 'L'}${x(i)},${y(topFn(p))} `; });
-    for (let i = points.length - 1; i >= 0; i--) { d += `L${x(i)},${y(botFn(points[i]))} `; }
-    return d + 'Z';
+    points.forEach((p, i) => {
+      d += `${i === 0 ? 'M' : 'L'}${x(i)},${y(topFn(p))} `;
+    });
+    for (let i = points.length - 1; i >= 0; i--) {
+      d += `L${x(i)},${y(botFn(points[i]))} `;
+    }
+    return `${d}Z`;
   };
   const crTop = (p: ContextPoint) => p.cacheReadTokens;
   const ccTop = (p: ContextPoint) => p.cacheReadTokens + p.cacheCreationTokens;
   const inTop = (p: ContextPoint) => p.contextTokens;
   const zero = () => 0;
-  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.contextTokens)}`).join(' ');
+  const linePath = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.contextTokens)}`)
+    .join(' ');
 
   return (
     <div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ background: C.card, borderRadius: 6, border: `1px solid ${C.borderSoft}` }}>
+      <svg
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ background: C.card, borderRadius: 6, border: `1px solid ${C.borderSoft}` }}
+      >
         {/* 网格线 */}
         {[0.25, 0.5, 0.75].map((f) => (
-          <line key={f} x1={PAD} y1={PAD + (H - PAD * 2) * f} x2={W - PAD} y2={PAD + (H - PAD * 2) * f} stroke={C.grid} strokeWidth={1} />
+          <line
+            key={f}
+            x1={PAD}
+            y1={PAD + (H - PAD * 2) * f}
+            x2={W - PAD}
+            y2={PAD + (H - PAD * 2) * f}
+            stroke={C.grid}
+            strokeWidth={1}
+          />
         ))}
         {/* 窗口上限线 */}
         {window && (
           <>
-            <line x1={PAD} y1={y(window)} x2={W - PAD} y2={y(window)} stroke={C.high} strokeWidth={1} strokeDasharray="5 3" />
-            <text x={W - PAD} y={y(window) - 5} fill={C.high} fontSize={10} textAnchor="end">窗口上限 {fmtT(window)}</text>
+            <line
+              x1={PAD}
+              y1={y(window)}
+              x2={W - PAD}
+              y2={y(window)}
+              stroke={C.high}
+              strokeWidth={1}
+              strokeDasharray="5 3"
+            />
+            <text x={W - PAD} y={y(window) - 5} fill={C.high} fontSize={10} textAnchor="end">
+              窗口上限 {fmtT(window)}
+            </text>
           </>
         )}
         {/* 堆叠面积：cr(绿,底) → cc(紫) → input(蓝,顶) */}
@@ -240,15 +401,34 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
         {/* 轴 */}
         <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={C.axis} />
         <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke={C.axis} />
-        <text x={PAD} y={PAD - 6} fill={C.sub} fontSize={10}>{fmtT(maxCtx)}</text>
-        <text x={PAD} y={H - PAD + 14} fill={C.sub} fontSize={10}>{fmtTime(points[0].startTime)}</text>
-        <text x={W - PAD} y={H - PAD + 14} fill={C.sub} fontSize={10} textAnchor="end">{fmtTime(points[points.length - 1].startTime)}</text>
+        <text x={PAD} y={PAD - 6} fill={C.sub} fontSize={10}>
+          {fmtT(maxCtx)}
+        </text>
+        <text x={PAD} y={H - PAD + 14} fill={C.sub} fontSize={10}>
+          {fmtTime(points[0].startTime)}
+        </text>
+        <text x={W - PAD} y={H - PAD + 14} fill={C.sub} fontSize={10} textAnchor="end">
+          {fmtTime(points[points.length - 1].startTime)}
+        </text>
       </svg>
-      <div style={{ display: 'flex', gap: 16, fontSize: 11, marginTop: 8, color: C.sub, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 16,
+          fontSize: 11,
+          marginTop: 8,
+          color: C.sub,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
         <Legend color={C.input} label="input" />
         <Legend color={C.cc} label="cache_creation" />
         <Legend color={C.cr} label="cache_read" />
-        <span>峰值 {fmtT(peak)}{window ? `，利用率 ${((peak / window) * 100).toFixed(1)}%` : '（窗口未配）'}</span>
+        <span>
+          峰值 {fmtT(peak)}
+          {window ? `，利用率 ${((peak / window) * 100).toFixed(1)}%` : '（窗口未配）'}
+        </span>
       </div>
     </div>
   );
@@ -257,21 +437,78 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
 function Legend({ color, label }: { color: string; label: string }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ display: 'inline-block', width: 10, height: 10, background: color, opacity: 0.45, borderRadius: 2 }} />
+      <span
+        style={{
+          display: 'inline-block',
+          width: 10,
+          height: 10,
+          background: color,
+          opacity: 0.45,
+          borderRadius: 2,
+        }}
+      />
       {label}
     </span>
   );
 }
 
-function Pager({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
+function Pager({
+  page,
+  totalPages,
+  onPage,
+}: {
+  page: number;
+  totalPages: number;
+  onPage: (p: number) => void;
+}) {
   if (totalPages <= 1) return null;
-  const bstyle = { background: 'none', border: `1px solid ${C.border}`, color: C.link, cursor: 'pointer', fontSize: 12, padding: '4px 10px', borderRadius: 5 } as const;
-  const dstyle = { background: 'none', border: `1px solid ${C.border}`, color: C.mute, cursor: 'default', fontSize: 12, padding: '4px 10px', borderRadius: 5, opacity: 0.5 } as const;
+  const bstyle = {
+    background: 'none',
+    border: `1px solid ${C.border}`,
+    color: C.link,
+    cursor: 'pointer',
+    fontSize: 12,
+    padding: '4px 10px',
+    borderRadius: 5,
+  } as const;
+  const dstyle = {
+    background: 'none',
+    border: `1px solid ${C.border}`,
+    color: C.mute,
+    cursor: 'default',
+    fontSize: 12,
+    padding: '4px 10px',
+    borderRadius: 5,
+    opacity: 0.5,
+  } as const;
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, fontSize: 12, color: C.sub }}>
-      <button style={page <= 1 ? dstyle : bstyle} disabled={page <= 1} onClick={() => onPage(page - 1)}>上一页</button>
-      <span>第 {page} / {totalPages} 页 · 每页 {TABLE_LIMIT} 行</span>
-      <button style={page >= totalPages ? dstyle : bstyle} disabled={page >= totalPages} onClick={() => onPage(page + 1)}>下一页</button>
+    <div
+      style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'center',
+        marginTop: 10,
+        fontSize: 12,
+        color: C.sub,
+      }}
+    >
+      <button
+        style={page <= 1 ? dstyle : bstyle}
+        disabled={page <= 1}
+        onClick={() => onPage(page - 1)}
+      >
+        上一页
+      </button>
+      <span>
+        第 {page} / {totalPages} 页 · 每页 {TABLE_LIMIT} 行
+      </span>
+      <button
+        style={page >= totalPages ? dstyle : bstyle}
+        disabled={page >= totalPages}
+        onClick={() => onPage(page + 1)}
+      >
+        下一页
+      </button>
     </div>
   );
 }
@@ -304,7 +541,9 @@ function TurnsTable({ turns }: { turns: Span[] }) {
                 <td style={{ padding: '6px 8px', color: C.mute }}>{i + 1}</td>
                 <td style={{ padding: '6px 8px' }}>{fmtTime(t.startTime)}</td>
                 <td style={{ padding: '6px 8px' }}>{t.model || '-'}</td>
-                <td style={{ padding: '6px 8px' }}>{fmtMs(t.endTime ? t.endTime - t.startTime : 0)}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  {fmtMs(t.endTime ? t.endTime - t.startTime : 0)}
+                </td>
                 <td style={{ padding: '6px 8px', color: C.input }}>{fmtT(t.inputTokens)}</td>
                 <td style={{ padding: '6px 8px', color: C.cc }}>{fmtT(t.cacheCreationTokens)}</td>
                 <td style={{ padding: '6px 8px', color: C.cr }}>{fmtT(t.cacheReadTokens)}</td>
@@ -345,11 +584,21 @@ function ToolsTable({ tools }: { tools: Span[] }) {
               <tr key={t.id} style={{ borderBottom: `1px solid ${C.borderSoft}`, color: C.text }}>
                 <td style={{ padding: '6px 8px', color: C.mute }}>{i + 1}</td>
                 <td style={{ padding: '6px 8px' }}>{t.name}</td>
-                <td style={{ padding: '6px 8px' }}><span style={{ color: CAT_COLOR[catOf(t.name)] || C.mute }}>{catOf(t.name)}</span></td>
+                <td style={{ padding: '6px 8px' }}>
+                  <span style={{ color: CAT_COLOR[catOf(t.name)] || C.mute }}>{catOf(t.name)}</span>
+                </td>
                 <td style={{ padding: '6px 8px' }}>{fmtTime(t.startTime)}</td>
-                <td style={{ padding: '6px 8px' }}>{fmtMs(t.endTime ? t.endTime - t.startTime : 0)}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  {fmtMs(t.endTime ? t.endTime - t.startTime : 0)}
+                </td>
                 <td style={{ padding: '6px 8px' }}>{fmtBytes(t.outputBytes)}</td>
-                <td style={{ padding: '6px 8px' }}>{t.isError ? <span style={{ color: C.high }}>❌</span> : <span style={{ color: C.cr }}>ok</span>}</td>
+                <td style={{ padding: '6px 8px' }}>
+                  {t.isError ? (
+                    <span style={{ color: C.high }}>❌</span>
+                  ) : (
+                    <span style={{ color: C.cr }}>ok</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -368,14 +617,41 @@ function DiagnosisList({ result }: { result: DiagnosisResult | null }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {result.findings.map((f, i) => (
-        <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, borderLeft: `3px solid ${SEV_COLOR[f.severity]}`, background: C.bg }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div
+          key={f.spanIds[0] ?? i}
+          style={{
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            padding: 10,
+            borderLeft: `3px solid ${SEV_COLOR[f.severity]}`,
+            background: C.bg,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: 12,
+            }}
+          >
             <div style={{ minWidth: 0 }}>
-              <span style={{ fontSize: 10, color: SEV_COLOR[f.severity], fontWeight: 600, marginRight: 6 }}>{DIAG_LABEL[f.type]}</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  color: SEV_COLOR[f.severity],
+                  fontWeight: 600,
+                  marginRight: 6,
+                }}
+              >
+                {DIAG_LABEL[f.type]}
+              </span>
               <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{f.title}</span>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.cc }}>~{fmtT(f.wastedTokens)}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.cc }}>
+                ~{fmtT(f.wastedTokens)}
+              </div>
               <div style={{ fontSize: 10, color: f.costUnknown ? C.medium : C.sub }}>
                 {f.costUnknown ? '未定价' : `¥${f.wastedCost.toFixed(5)}`}
               </div>

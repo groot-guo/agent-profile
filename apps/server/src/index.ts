@@ -1,7 +1,7 @@
-import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { registerRoutes } from './routes';
+import Fastify from 'fastify';
 import { closeDb } from './db';
+import { registerRoutes } from './routes';
 
 const app = Fastify({ logger: true });
 
@@ -19,5 +19,11 @@ try {
   process.exit(1);
 }
 
-process.on('SIGINT', () => { closeDb(); process.exit(0); });
-process.on('SIGTERM', () => { closeDb(); process.exit(0); });
+process.on('SIGINT', () => {
+  closeDb();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  closeDb();
+  process.exit(0);
+});

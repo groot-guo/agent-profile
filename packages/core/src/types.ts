@@ -1,10 +1,18 @@
 // ===== transcript 原始结构（NDJSON 每行一个事件） =====
 
 export type TranscriptType =
-  | 'assistant' | 'user' | 'system'
-  | 'ai-title' | 'attachment' | 'file-history-delta'
-  | 'file-history-snapshot' | 'last-prompt' | 'mode'
-  | 'permission-mode' | 'queue-operation' | string;
+  | 'assistant'
+  | 'user'
+  | 'system'
+  | 'ai-title'
+  | 'attachment'
+  | 'file-history-delta'
+  | 'file-history-snapshot'
+  | 'last-prompt'
+  | 'mode'
+  | 'permission-mode'
+  | 'queue-operation'
+  | string;
 
 // assistant message 的 usage（四类 token + server 工具）
 export interface TranscriptUsage {
@@ -29,7 +37,7 @@ export interface TextBlock {
 }
 export interface ToolUseBlock {
   type: 'tool_use';
-  id: string;        // 配对 tool_result 的 key
+  id: string; // 配对 tool_result 的 key
   name: string;
   input: unknown;
 }
@@ -55,7 +63,7 @@ export interface TranscriptMessage {
 export interface TranscriptEntry {
   uuid: string;
   parentUuid?: string | null;
-  timestamp: string;            // ISO8601
+  timestamp: string; // ISO8601
   sessionId?: string;
   session_id?: string;
   isSidechain?: boolean;
@@ -66,7 +74,7 @@ export interface TranscriptEntry {
   gitBranch?: string;
   version?: string;
   effort?: string;
-  aiTitle?: string;             // type='ai-title' 行携带
+  aiTitle?: string; // type='ai-title' 行携带
 }
 
 // ===== 分析后结构 =====
@@ -74,22 +82,22 @@ export interface TranscriptEntry {
 export type SpanType = 'llm_turn' | 'tool_call' | 'thinking' | 'answer';
 
 export interface Span {
-  id: string;                    // transcript uuid
+  id: string; // transcript uuid
   sessionId: string;
-  parentId?: string | null;       // parentUuid
+  parentId?: string | null; // parentUuid
   type: SpanType;
   name: string;
-  startTime: number;             // ms epoch
+  startTime: number; // ms epoch
   endTime?: number;
   inputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
   outputTokens: number;
-  contextTokens: number;          // llm_turn: input+cc+cr（该轮上下文大小）
-  outputBytes: number;            // tool_call: result 字节数
+  contextTokens: number; // llm_turn: input+cc+cr（该轮上下文大小）
+  outputBytes: number; // tool_call: result 字节数
   model?: string;
   cost: number;
-  costUnknown: boolean;           // 模型无定价
+  costUnknown: boolean; // 模型无定价
   stopReason?: string | null;
   isError: boolean;
   isSidechain: boolean;
@@ -146,7 +154,7 @@ export interface SessionDetail extends SessionSummary {
 // ===== pricing =====
 export interface Pricing {
   model: string;
-  inputPrice: number;             // USD / 1M tokens
+  inputPrice: number; // USD / 1M tokens
   cacheCreationPrice: number;
   cacheReadPrice: number;
   outputPrice: number;

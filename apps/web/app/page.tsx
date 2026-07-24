@@ -1,16 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import type { SessionSummary } from '@agent-profile/core';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API || 'http://localhost:3000/api';
 
 const C = {
-  bg: '#f6f8fa', card: '#ffffff', border: '#d0d7de', borderSoft: '#eaeef2',
-  text: '#1f2328', sub: '#656d76', mute: '#8c959f',
-  link: '#0969da', input: '#0969da', cc: '#8250df', cr: '#1a7f37', out: '#bc4c00',
-  high: '#cf222e', medium: '#9a6700',
+  bg: '#f6f8fa',
+  card: '#ffffff',
+  border: '#d0d7de',
+  borderSoft: '#eaeef2',
+  text: '#1f2328',
+  sub: '#656d76',
+  mute: '#8c959f',
+  link: '#0969da',
+  input: '#0969da',
+  cc: '#8250df',
+  cr: '#1a7f37',
+  out: '#bc4c00',
+  high: '#cf222e',
+  medium: '#9a6700',
 };
 
 function fmtTokens(n: number): string {
@@ -34,7 +44,7 @@ function projectOf(filePath: string): string {
 }
 // Claude Code project 目录名是 cwd 路径的 / → -，还原可读路径
 function decodeProject(p: string): string {
-  if (p.startsWith('-')) return '/' + p.slice(1).replace(/-/g, '/');
+  if (p.startsWith('-')) return `/${p.slice(1).replace(/-/g, '/')}`;
   return p;
 }
 
@@ -62,7 +72,7 @@ export default function HomePage() {
     fetchSessions();
     const t = setInterval(fetchSessions, 5000);
     return () => clearInterval(t);
-  }, []);
+  }, [fetchSessions]);
 
   const onScan = async () => {
     setScanning(true);
@@ -101,29 +111,68 @@ export default function HomePage() {
           value={dir}
           onChange={(e) => setDir(e.target.value)}
           placeholder="transcript 目录，如 /Users/you/.claude/projects（留空默认 ~/.claude/projects）"
-          style={{ flex: 1, padding: '8px 12px', background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, outline: 'none' }}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            background: C.card,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 6,
+            fontSize: 13,
+            outline: 'none',
+          }}
           onKeyDown={(e) => e.key === 'Enter' && onScan()}
         />
         <button
           onClick={onScan}
           disabled={scanning}
-          style={{ padding: '8px 20px', background: scanning ? '#aceebb' : '#2da44e', color: '#fff', border: 'none', borderRadius: 6, cursor: scanning ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}
+          style={{
+            padding: '8px 20px',
+            background: scanning ? '#aceebb' : '#2da44e',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: scanning ? 'wait' : 'pointer',
+            fontSize: 13,
+            fontWeight: 600,
+          }}
         >
           {scanning ? 'Scanning…' : 'Scan'}
         </button>
       </div>
 
-      {scanResult && <div style={{ fontSize: 12, color: C.cr, marginBottom: 12 }}>✓ {scanResult}</div>}
+      {scanResult && (
+        <div style={{ fontSize: 12, color: C.cr, marginBottom: 12 }}>✓ {scanResult}</div>
+      )}
       {error && <div style={{ fontSize: 12, color: C.high, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: C.sub,
+          marginBottom: 10,
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}
+      >
         Sessions {sessions.length > 0 && `(${sessions.length})`}
       </div>
 
       {loading ? (
         <div style={{ color: C.sub, padding: 40, textAlign: 'center' }}>Loading…</div>
       ) : sessions.length === 0 ? (
-        <div style={{ color: C.sub, padding: 48, textAlign: 'center', background: C.card, border: `1px solid ${C.borderSoft}`, borderRadius: 8, fontSize: 13 }}>
+        <div
+          style={{
+            color: C.sub,
+            padding: 48,
+            textAlign: 'center',
+            background: C.card,
+            border: `1px solid ${C.borderSoft}`,
+            borderRadius: 8,
+            fontSize: 13,
+          }}
+        >
           暂无数据。输入 Claude Code projects 目录后点 Scan 开始分析。
         </div>
       ) : (
@@ -159,7 +208,14 @@ function ProjectGroup({ project, sessions }: { project: string; sessions: Sessio
     <div>
       <div
         onClick={() => setOpen(!open)}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer', userSelect: 'none' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 8,
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
       >
         <span style={{ color: C.sub, fontSize: 10, width: 12 }}>{open ? '▼' : '▶'}</span>
         <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{project}</span>
@@ -185,14 +241,30 @@ function SessionCard({ s }: { s: SessionSummary }) {
     <Link
       href={`/session/${s.id}`}
       style={{
-        display: 'grid', gridTemplateColumns: '2.2fr 0.8fr 2fr 0.8fr', gap: 16,
-        alignItems: 'center', padding: '14px 18px', background: C.card,
-        border: `1px solid ${C.border}`, borderRadius: 8, textDecoration: 'none', color: 'inherit',
+        display: 'grid',
+        gridTemplateColumns: '2.2fr 0.8fr 2fr 0.8fr',
+        gap: 16,
+        alignItems: 'center',
+        padding: '14px 18px',
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 8,
+        textDecoration: 'none',
+        color: 'inherit',
         transition: 'border-color 0.15s',
       }}
     >
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 600,
+            color: C.text,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {s.name || s.id.slice(0, 8)}
         </div>
         <div style={{ fontSize: 11, color: C.sub, marginTop: 3 }}>
@@ -206,7 +278,16 @@ function SessionCard({ s }: { s: SessionSummary }) {
       </div>
 
       <div>
-        <div style={{ display: 'flex', height: 7, borderRadius: 3, overflow: 'hidden', background: C.borderSoft, marginBottom: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            height: 7,
+            borderRadius: 3,
+            overflow: 'hidden',
+            background: C.borderSoft,
+            marginBottom: 4,
+          }}
+        >
           <div style={{ width: `${(s.inputTokens / total) * 100}%`, background: C.input }} />
           <div style={{ width: `${(s.cacheCreationTokens / total) * 100}%`, background: C.cc }} />
           <div style={{ width: `${(s.cacheReadTokens / total) * 100}%`, background: C.cr }} />

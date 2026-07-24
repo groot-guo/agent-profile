@@ -1,6 +1,6 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { TranscriptEntry } from './types';
 
 function expandHome(p: string): string {
@@ -24,7 +24,7 @@ function walk(dir: string, out: string[]) {
   }
   for (const name of entries) {
     const full = join(dir, name);
-    let st;
+    let st: ReturnType<typeof statSync> | undefined;
     try {
       st = statSync(full);
     } catch {

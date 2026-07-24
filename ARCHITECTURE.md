@@ -3,6 +3,7 @@
 Offline profile analysis for AI coding agent session transcripts. Scans local session files (Claude Code / Codex / Zed), reconstructs tokens / context / cost / duration / tool calls, and provides data for cost optimization, context health, and performance analysis.
 
 Detailed designs in `docs/`:
+
 - `docs/diagnosis.md` — heuristic + LLM diagnosis
 - `docs/multi-agent.md` — Codex / Zed ingestion
 - `docs/stats.md` — consumption statistics
@@ -16,7 +17,7 @@ session files (.jsonl / SQLite)
   → Scanner (discover, dedupe, incremental)
   → Parser (NDJSON / zstd blob decode, tool_use↔tool_result pairing, parentUuid chain)
   → Analyzer (4 token types, context size, cache hit rate, cost)
-  → SQLite (server/trace.db)
+  → SQLite (apps/server/trace.db)
   → Web UI (Next.js)
 ```
 
@@ -24,22 +25,22 @@ session files (.jsonl / SQLite)
 
 pnpm workspace, TypeScript.
 
-| Package | Responsibility |
-|---|---|
-| `packages/core` (`@agent-profile/core`) | scanner / parser / analyzer / pricing / diagnosis / types. Pure logic, shared by server and web (web reads src via transpilePackages). |
-| `server` (`trace-server`) | Fastify + better-sqlite3. `db.ts` (schema + pricing/model_context lookup), `routes.ts` (scan + REST API). |
-| `web` (`agent-profile-web`) | Next.js App Router. Session list (grouped by project) + detail (tool bar chart, context growth chart, token breakdown, diagnosis, paginated tables). |
+| Package                                 | Responsibility                                                                                                                                       |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core` (`@agent-profile/core`) | scanner / parser / analyzer / pricing / diagnosis / types. Pure logic, shared by server and web (web reads src via transpilePackages).               |
+| `server` (`trace-server`)               | Fastify + better-sqlite3. `db.ts` (schema + pricing/model_context lookup), `routes.ts` (scan + REST API).                                            |
+| `web` (`agent-profile-web`)             | Next.js App Router. Session list (grouped by project) + detail (tool bar chart, context growth chart, token breakdown, diagnosis, paginated tables). |
 
 ## Data Model
 
-Four tables (`server/src/db.ts`):
+Four tables (`apps/server/src/db.ts`):
 
 - **sessions**: id + file mtime/size/lines + 4 token aggregates + peak/avg context + cache_hit_rate + cwd + `agent` (planned: claude-code | codex | zed).
 - **spans**: llm_turn | tool_call. 4 token types + `context_tokens` + `output_bytes` + metadata (thinking/prompt/response/tool input+output, truncated >10KB). parentId chain, isSidechain.
 - **pricing**: model → 4 token unit prices (CNY / 1M tokens).
 - **model_context**: model → context window size.
 
-Schema changes require deleting `server/trace.db` (`CREATE TABLE IF NOT EXISTS` won't alter existing tables; old db missing new columns causes INSERT failure). `trace.db` is generated under `server/` (better-sqlite3 relative path, cwd = server/), not project root.
+Schema changes require deleting `apps/server/trace.db` (`CREATE TABLE IF NOT EXISTS` won't alter existing tables; old db missing new columns causes INSERT failure). `trace.db` is generated under `apps/server/` (better-sqlite3 relative path, cwd = apps/server/), not project root.
 
 ## Analysis Logic
 
@@ -52,25 +53,26 @@ Schema changes require deleting `server/trace.db` (`CREATE TABLE IF NOT EXISTS` 
 
 ## API
 
-| Method | Path | Description |
-|---|---|---|
-| POST | /api/scan | Scan + incremental import + analyze |
-| GET | /api/sessions | Session list |
-| GET | /api/session/:id | Session detail (with spans) |
-| GET | /api/session/:id/turns | LLM turn details |
-| GET | /api/session/:id/tools | Tool call details |
-| GET | /api/session/:id/context | Context growth curve data |
-| GET | /api/session/:id/diagnosis | Diagnosis findings (heuristic + LLM if enabled) |
-| GET/PUT | /api/pricing · /api/model-context | Pricing / context window |
-| GET | /api/stats | (planned) consumption statistics |
+| Method  | Path                              | Description                                     |
+| ------- | --------------------------------- | ----------------------------------------------- |
+| POST    | /api/scan                         | Scan + incremental import + analyze             |
+| GET     | /api/sessions                     | Session list                                    |
+| GET     | /api/session/:id                  | Session detail (with spans)                     |
+| GET     | /api/session/:id/turns            | LLM turn details                                |
+| GET     | /api/session/:id/tools            | Tool call details                               |
+| GET     | /api/session/:id/context          | Context growth curve data                       |
+| GET     | /api/session/:id/diagnosis        | Diagnosis findings (heuristic + LLM if enabled) |
+| GET/PUT | /api/pricing · /api/model-context | Pricing / context window                        |
+| GET     | /api/stats                        | (planned) consumption statistics                |
 
 ## Directory
 
 ```
 agent-profile/
+├── apps/
+│   ├── server/src/{index,db,routes}.ts
+│   └── web/app/{page.tsx, session/[id]/page.tsx}
 ├── packages/core/src/{scanner,parser,analyzer,pricing,diagnosis,types}.ts
-├── server/src/{index,db,routes}.ts
-├── web/app/{page.tsx, session/[id]/page.tsx}
 └── docs/                     # design docs (English) + zh/ (Chinese sync)
 ```
 
