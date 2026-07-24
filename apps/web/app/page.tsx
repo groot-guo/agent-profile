@@ -27,6 +27,7 @@ export default function HomePage() {
   const [dir, setDir] = useState('');
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState('');
+  const [agentFilter, setAgentFilter] = useState<string>('all');
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -132,6 +133,15 @@ export default function HomePage() {
       )}
       {error && <div style={{ fontSize: 12, color: C.high, marginBottom: 12 }}>{error}</div>}
 
+      {/* Agent filter tabs */}
+      {!loading && sessions.length > 0 && (
+        <AgentFilter
+          sessions={sessions}
+          selected={agentFilter}
+          onSelect={setAgentFilter}
+        />
+      )}
+
       <div
         style={{
           fontSize: 13,
@@ -142,7 +152,9 @@ export default function HomePage() {
           letterSpacing: 0.5,
         }}
       >
-        Sessions {sessions.length > 0 && `(${sessions.length})`}
+        Sessions{' '}
+        {sessions.length > 0 &&
+          `(${agentFilter === 'all' ? sessions.length : sessions.filter((s) => s.agent === agentFilter).length})`}
       </div>
 
       {loading ? (
@@ -162,8 +174,56 @@ export default function HomePage() {
           暂无数据。输入 Claude Code projects 目录后点 Scan 开始分析。
         </div>
       ) : (
-        <ProjectGroups sessions={sessions} />
+        <ProjectGroups
+          sessions={agentFilter === 'all' ? sessions : sessions.filter((s) => s.agent === agentFilter)}
+        />
       )}
+    </div>
+  );
+}
+
+function AgentFilter({
+  sessions,
+  selected,
+  onSelect,
+}: {
+  sessions: SessionSummary[];
+  selected: string;
+  onSelect: (agent: string) => void;
+}) {
+  const counts = new Map<string, number>();
+  counts.set('all', sessions.length);
+  for (const s of sessions) {
+    counts.set(s.agent, (counts.get(s.agent) || 0) + 1);
+  }
+  const agents = ['all', ...new Set(sessions.map((s) => s.agent))];
+
+  return (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+      {agents.map((agent) => {
+        const active = selected === agent;
+        const color = agent === 'all' ? C.link : AGENT_COLORS[agent] || AGENT_COLORS.unknown;
+        return (
+          <button
+            key={agent}
+            onClick={() => onSelect(agent)}
+            style={{
+              padding: '5px 14px',
+              borderRadius: 16,
+              border: active ? `1.5px solid ${color}` : `1px solid ${C.border}`,
+              background: active ? `${color}12` : C.card,
+              color: active ? color : C.sub,
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: active ? 600 : 400,
+              transition: 'all 0.15s',
+            }}
+          >
+            {agent === 'all' ? 'All' : AGENT_LABELS[agent] || agent}
+            <span style={{ marginLeft: 5, opacity: 0.7 }}>{counts.get(agent) || 0}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
