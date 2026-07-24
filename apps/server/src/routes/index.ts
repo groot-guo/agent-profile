@@ -4,6 +4,7 @@ import { registerHealthRoutes } from './health';
 import { registerPricingRoutes } from './pricing';
 import { registerScanRoutes } from './scan';
 import { registerSessionRoutes } from './sessions';
+import { registerStatsRoutes } from './stats';
 
 export function registerRoutes(app: FastifyInstance) {
   registerScanRoutes(app);
@@ -11,4 +12,5 @@ export function registerRoutes(app: FastifyInstance) {
   registerDiagnosisRoutes(app);
   registerPricingRoutes(app);
   registerHealthRoutes(app);
+  registerStatsRoutes(app);
 }

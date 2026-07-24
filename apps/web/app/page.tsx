@@ -71,12 +71,22 @@ export default function HomePage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 700, color: C.text }}>
-          Agent <span style={{ color: C.link }}>Profile</span>
-        </h1>
-        <p style={{ margin: 0, fontSize: 13, color: C.sub }}>
-          Claude Code session transcript 的离线分析：Token · Cost · 调用链 · 诊断
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 700, color: C.text }}>
+              Agent <span style={{ color: C.link }}>Profile</span>
+            </h1>
+            <p style={{ margin: 0, fontSize: 13, color: C.sub }}>
+              Claude Code session transcript 的离线分析：Token · Cost · 调用链 · 诊断
+            </p>
+          </div>
+          <Link
+            href="/stats"
+            style={{ fontSize: 13, color: C.link, textDecoration: 'none', fontWeight: 600, padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 6, background: C.card }}
+          >
+            Stats →
+          </Link>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
