@@ -6,7 +6,7 @@ import type {
   ToolResultBlock,
   TranscriptEntry,
   TranscriptMessage,
-} from './types';
+} from '../types';
 
 const METADATA_LIMIT = 10_000; // 10KB 截断，防 metadata 膨胀
 

@@ -1,4 +1,4 @@
-import type { ParsedSession, Span, SpanType } from './types';
+import type { ParsedSession, Span, SpanType } from '../types';
 
 const METADATA_LIMIT = 10_000;
 
@@ -73,7 +73,7 @@ export async function parseZedThread(input: ZedThreadInput): Promise<ParsedSessi
   // 尝试复用 Claude Code parser（NDJSON 格式）
   try {
     // parseTranscript 在同一 package 内，直接引用
-    const { parseTranscript } = await import('./parser.js');
+    const { parseTranscript } = await import('./claude.js');
     const parsed = parseTranscript(entries as any, {
       filePath: `zed://threads/${input.id}`,
       agent: 'zed',

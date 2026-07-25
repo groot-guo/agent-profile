@@ -1,4 +1,4 @@
-import type { ParsedSession, Span, SpanType } from './types';
+import type { ParsedSession, Span, SpanType } from '../types';
 
 interface CodexEntry {
   timestamp: string;

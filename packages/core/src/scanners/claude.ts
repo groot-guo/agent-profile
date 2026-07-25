@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { TranscriptEntry } from './types';
+import type { TranscriptEntry } from '../types';
 
 function expandHome(p: string): string {
   if (p === '~' || p.startsWith('~/')) return homedir() + p.slice(1);

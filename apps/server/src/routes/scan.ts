@@ -1,6 +1,5 @@
 import { statSync } from 'node:fs';
 import {
-  AGENT_LABELS,
   analyzeSession,
   detectAgent,
   findTranscriptFiles,

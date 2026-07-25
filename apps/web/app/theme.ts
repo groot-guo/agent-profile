@@ -70,6 +70,9 @@ export function catOf(name: string) {
 export const AGENT_LABELS: Record<string, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
+  'kimi-code': 'Kimi Code',
+  'mimo-code': 'MiMo Code',
+  opencode: 'Open Code',
   zed: 'Zed',
   unknown: 'Unknown',
 };
@@ -77,6 +80,9 @@ export const AGENT_LABELS: Record<string, string> = {
 export const AGENT_COLORS: Record<string, string> = {
   'claude-code': '#0969da',
   codex: '#8250df',
+  'kimi-code': '#8B5CF6',
+  'mimo-code': '#F97316',
+  opencode: '#10A37F',
   zed: '#1a7f37',
   unknown: '#656d76',
 };
@@ -85,6 +91,9 @@ export const AGENT_COLORS: Record<string, string> = {
 export const AGENT_ICONS: Record<string, string> = {
   'claude-code': 'C',
   codex: 'X',
+  'kimi-code': 'K',
+  'mimo-code': 'M',
+  opencode: 'O',
   zed: 'Z',
   unknown: '?',
 };

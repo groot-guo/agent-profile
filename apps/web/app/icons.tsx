@@ -8,8 +8,14 @@ export function getAgentIcon(agent: string, size?: number): ReactNode {
       return <ClaudeCode size={s} />;
     case 'codex':
       return <OpenAI size={s} />;
+    case 'kimi-code':
+      return <Kimi size={s} />;
+    case 'mimo-code':
+      return <OpenAI size={s} />; // MiMo 基于 OpenCode
+    case 'opencode':
+      return <OpenAI size={s} />;
     case 'zed':
-      return <OpenAI size={s} />; // Zed 暂无专属图标，后续替换
+      return <OpenAI size={s} />; // Zed 暂无专属图标
     default:
       return <Anthropic size={s} />;
   }
