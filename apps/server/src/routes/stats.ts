@@ -73,6 +73,14 @@ function buildLogBins(values: number[], config: { label: string; thresholds: num
   return bins;
 }
 
+function extractProjectFromPath(filePath: string): string {
+  const parts = filePath.split('/');
+  const idx = parts.indexOf('projects');
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+  // 取父目录名作为项目名
+  return parts[parts.length - 2] || parts[parts.length - 1] || '';
+}
+
 export function registerStatsRoutes(app: FastifyInstance) {
   app.get('/api/stats', async () => {
     const sessions = db
