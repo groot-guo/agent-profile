@@ -20,6 +20,11 @@ export const AGENT_LABELS: Record<string, string> = {
   'kimi-code': 'Kimi Code',
   'mimo-code': 'MiMo Code',
   'opencode': 'Open Code',
+  'copilot': 'Copilot',
+  'cursor': 'Cursor',
+  'windsurf': 'Windsurf',
+  'gemini-cli': 'Gemini CLI',
+  'zcode': 'ZCode',
   'zed': 'Zed',
 };
 
@@ -31,5 +36,9 @@ export function detectAgent(filePath: string): string {
   if (filePath.includes(join(home, '.kimi-code')) || filePath.includes(join(home, '.kimi'))) return 'kimi-code';
   if (filePath.includes(join(home, '.local', 'share', 'opencode'))) return 'opencode';
   if (filePath.includes('mimocode') || filePath.includes('mimo-code')) return 'mimo-code';
+  // 其他常见 agent（目录待验证）
+  if (filePath.includes('.cursor')) return 'cursor';
+  if (filePath.includes('.windsurf')) return 'windsurf';
+  if (filePath.includes('.gemini') || filePath.includes('gemini-cli')) return 'gemini-cli';
   return 'unknown';
 }

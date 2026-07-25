@@ -73,6 +73,11 @@ export const AGENT_LABELS: Record<string, string> = {
   'kimi-code': 'Kimi Code',
   'mimo-code': 'MiMo Code',
   opencode: 'Open Code',
+  copilot: 'Copilot',
+  cursor: 'Cursor',
+  windsurf: 'Windsurf',
+  'gemini-cli': 'Gemini CLI',
+  zcode: 'ZCode',
   zed: 'Zed',
   unknown: 'Unknown',
 };
@@ -83,6 +88,11 @@ export const AGENT_COLORS: Record<string, string> = {
   'kimi-code': '#8B5CF6',
   'mimo-code': '#F97316',
   opencode: '#10A37F',
+  copilot: '#34D399',
+  cursor: '#6366F1',
+  windsurf: '#06B6D4',
+  'gemini-cli': '#4285F4',
+  zcode: '#F59E0B',
   zed: '#1a7f37',
   unknown: '#656d76',
 };
