@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { DashboardView } from './dashboard';
 import { API, DEFAULT_SCAN_DIR } from './config';
 import { getAgentIcon } from './icons';
-import { AGENT_COLORS, AGENT_ICONS, AGENT_LABELS, C } from './theme';
+import { AGENT_COLORS, AGENT_LABELS, C } from './theme';
 
 function projectOf(filePath: string): string {
   const parts = filePath.split('/');
@@ -24,7 +24,6 @@ export default function HomePage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [dir, setDir] = useState('');
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState('');
   const [agentFilter, setAgentFilter] = useState<string>('all');
@@ -53,7 +52,7 @@ export default function HomePage() {
       const res = await fetch(`${API}/scan`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ dir: dir || DEFAULT_SCAN_DIR }),
+        body: JSON.stringify({ dir: DEFAULT_SCAN_DIR }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = (await res.json()) as { scanned: number; imported: number; skipped: number };
@@ -93,28 +92,19 @@ export default function HomePage() {
       }}>
         {/* Sidebar header */}
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.borderSoft}`, background: C.bg }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.text, flex: 1 }}>
-              Agent <span style={{ color: C.link }}>Profile</span>
-            </h1>
-            <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 4, flex: 1 }}>
               <button onClick={() => { setLoading(true); fetchSessions(); }}
-                style={{ padding: '3px 8px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, cursor: 'pointer', fontSize: 12, color: C.text }}>🔄</button>
-              <Link href="/stats"
-                style={{ fontSize: 12, color: C.link, textDecoration: 'none', padding: '3px 8px', border: `1px solid ${C.border}`, borderRadius: 4 }}>📊</Link>
+                style={{ padding: '4px 12px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, cursor: 'pointer', fontSize: 11, color: C.text, flex: 1 }}>
+                🔄 刷新
+              </button>
+              <button onClick={onScan} disabled={scanning}
+                style={{ padding: '4px 12px', background: scanning ? '#aceebb' : '#2da44e', color: '#fff', border: 'none', borderRadius: 4, cursor: scanning ? 'wait' : 'pointer', fontSize: 11, fontWeight: 600 }}>
+                {scanning ? '...' : 'Re-scan'}
+              </button>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <input
-              value={dir} onChange={(e) => setDir(e.target.value)}
-              placeholder={DEFAULT_SCAN_DIR}
-              style={{ flex: 1, padding: '4px 8px', background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, outline: 'none' }}
-              onKeyDown={(e) => e.key === 'Enter' && onScan()}
-            />
-            <button onClick={onScan} disabled={scanning}
-              style={{ padding: '4px 10px', background: scanning ? '#aceebb' : '#2da44e', color: '#fff', border: 'none', borderRadius: 4, cursor: scanning ? 'wait' : 'pointer', fontSize: 11, fontWeight: 600 }}>
-              {scanning ? '...' : 'Scan'}
-            </button>
+            <Link href="/stats"
+              style={{ fontSize: 12, color: C.link, textDecoration: 'none', padding: '3px 8px', border: `1px solid ${C.border}`, borderRadius: 4 }}>📊</Link>
           </div>
           {scanResult && <div style={{ fontSize: 10, color: C.cr, marginTop: 4 }}>✓ {scanResult}</div>}
           {error && <div style={{ fontSize: 10, color: C.high, marginTop: 4 }}>{error}</div>}
