@@ -163,18 +163,18 @@ export default function HomePage() {
           <div style={{ height: '100%' }}>
             <div style={{ padding: '8px 16px', borderBottom: `1px solid ${C.border}`, background: C.card, display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={() => setSelectedId(null)}
-                style={{ padding: '2px 8px', background: 'none', border: `1px solid ${C.border}`, borderRadius: 4, cursor: 'pointer', fontSize: 11, color: C.sub }}>✕ Close</button>
+                style={{ padding: '4px 12px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, cursor: 'pointer', fontSize: 12, color: C.link }}>
+                ← 回到主页
+              </button>
               <span style={{ fontSize: 12, color: C.sub, flex: 1 }}>
                 {(() => { const s = sessions.find((x) => x.id === selectedId); return s ? <>{getAgentIcon(s.agent, 14)} {s.name || s.id.slice(0, 8)}</> : ''; })()}
               </span>
-              <a href={`/session/${selectedId}`} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 11, color: C.link, textDecoration: 'none' }}>🔗 新窗口打开</a>
             </div>
             <iframe src={`/session/${selectedId}?embed=1`}
               style={{ width: '100%', height: 'calc(100% - 37px)', border: 'none', background: C.bg }} />
           </div>
         ) : (
-          <DashboardView />
+          <DashboardView onSelectSession={(id) => setSelectedId(id)} />
         )}
       </div>
     </div>

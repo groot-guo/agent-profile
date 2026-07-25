@@ -33,6 +33,7 @@ interface ModelStats {
   sessions: number;
   totalInputTokens: number;
   totalOutputTokens: number;
+  totalCost: number;
 }
 
 interface DistributionData {
@@ -42,17 +43,17 @@ interface DistributionData {
   agentDistribution: { agent: string; count: number; tokens: number }[];
 }
 
-function extractModel(sessions: { id: string }[]): Map<string, { count: number; tokens: number }> {
-  const models = new Map<string, { count: number; tokens: number }>();
+function extractModel(sessions: { id: string }[]): Map<string, { count: number; tokens: number; cost: number }> {
+  const models = new Map<string, { count: number; tokens: number; cost: number }>();
   for (const s of sessions) {
     const rows = db
-      .prepare(`SELECT model, input_tokens + cache_creation_tokens + cache_read_tokens + output_tokens as tokens FROM spans WHERE session_id = ? AND type = 'llm_turn'`)
-      .all(s.id) as { model?: string; tokens: number }[];
+      .prepare(`SELECT model, input_tokens + cache_creation_tokens + cache_read_tokens + output_tokens as tokens, cost FROM spans WHERE session_id = ? AND type = 'llm_turn'`)
+      .all(s.id) as { model?: string; tokens: number; cost: number }[];
     for (const r of rows) {
       const m = r.model || 'unknown';
       const entry = models.get(m);
-      if (entry) { entry.count++; entry.tokens += r.tokens; }
-      else models.set(m, { count: 1, tokens: r.tokens });
+      if (entry) { entry.count++; entry.tokens += r.tokens; entry.cost += r.cost; }
+      else models.set(m, { count: 1, tokens: r.tokens, cost: r.cost });
     }
   }
   return models;
@@ -129,10 +130,10 @@ export function registerStatsRoutes(app: FastifyInstance) {
       agent, sessions: e.sessions, totalTokens: e.tokens, totalCost: e.cost, avgCacheHitRate: e.cacheHit / e.sessions,
     })).sort((a, b) => b.sessions - a.sessions);
 
-    // By project (cwd)
+    // By project (cwd)，fallback 从 filePath 提取项目名
     const projMap = new Map<string, { sessions: number; tokens: number; cost: number }>();
     for (const s of sessions) {
-      const cwd = (s.cwd as string) || (s.name as string) || 'unknown';
+      const cwd = (s.cwd as string) || extractProjectFromPath(s.filePath as string) || 'unknown';
       const entry = projMap.get(cwd) || { sessions: 0, tokens: 0, cost: 0 };
       entry.sessions++;
       entry.tokens += ((s.inputTokens as number) || 0) + ((s.cacheCreationTokens as number) || 0) + ((s.cacheReadTokens as number) || 0) + ((s.outputTokens as number) || 0);
@@ -146,7 +147,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
     // By model (from spans)
     const modelMap = extractModel(sessions as { id: string }[]);
     const byModel: ModelStats[] = [...modelMap.entries()].map(([model, e]) => ({
-      model, sessions: e.count, totalInputTokens: e.tokens, totalOutputTokens: 0,
+      model, sessions: e.count, totalInputTokens: e.tokens, totalOutputTokens: 0, totalCost: e.cost,
     })).sort((a, b) => b.sessions - a.sessions);
 
     // Distributions

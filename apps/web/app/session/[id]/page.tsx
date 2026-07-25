@@ -84,7 +84,7 @@ export default function SessionPage() {
         {data.agent ? getAgentIcon(data.agent, 20) : null} {data.name || data.id.slice(0, 8)}
       </h2>
       <div style={{ fontSize: 12, color: C.sub, marginBottom: 16 }}>
-        {data.filePath} · {data.claudeVersion || '-'} · {data.gitBranch || '-'}
+        {data.claudeVersion || '-'} · {data.messageCount} msgs · {data.gitBranch || data.cwd || ''}
       </div>
 
       <div

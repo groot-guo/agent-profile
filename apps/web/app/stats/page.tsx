@@ -14,7 +14,7 @@ interface StatsData {
   };
   byAgent: { agent: string; sessions: number; totalTokens: number; totalCost: number; avgCacheHitRate: number }[];
   byProject: { cwd: string; sessions: number; totalTokens: number; totalCost: number }[];
-  byModel: { model: string; sessions: number; totalInputTokens: number; totalOutputTokens: number }[];
+  byModel: { model: string; sessions: number; totalInputTokens: number; totalOutputTokens: number; totalCost: number }[];
   distribution: {
     costBins: { bin: string; min: number; max: number | null; count: number }[];
     tokenBins: { bin: string; min: number; max: number | null; count: number }[];
@@ -95,7 +95,7 @@ export default function StatsPage() {
             {byModel.slice(0, 8).map((m) => (
               <div key={m.model} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{getModelIcon(m.model, 14)} {m.model}</span>
-                <span style={{ color: C.sub }}>{m.sessions} turns · {fmtTokens(m.totalInputTokens)}</span>
+                <span style={{ color: C.sub }}>{m.sessions} turns · {fmtTokens(m.totalInputTokens)} · ¥{m.totalCost.toFixed(4)}</span>
               </div>
             ))}
           </div>

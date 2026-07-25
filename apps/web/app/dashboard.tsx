@@ -23,7 +23,7 @@ interface ToolFreq {
   errors: number;
 }
 
-export function DashboardView() {
+export function DashboardView({ onSelectSession }: { onSelectSession?: (id: string) => void }) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [overview, setOverview] = useState<StatsOverview | null>(null);
   const [toolFreqs, setToolFreqs] = useState<ToolFreq[]>([]);
@@ -116,13 +116,13 @@ export function DashboardView() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {toolFreqs.map((t) => (
                 <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                  <span style={{ width: 160, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>{t.name}</span>
+                  <span style={{ width: 120, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, fontSize: 11 }}>{t.name}</span>
                   <div style={{ flex: 1, height: 14, background: C.borderSoft, borderRadius: 3, overflow: 'hidden' }}>
                     <div style={{ width: `${(t.count / toolFreqs[0].count) * 100}%`, height: '100%', background: t.errors > 0 ? C.medium : C.link, borderRadius: 3 }} />
                   </div>
-                  <span style={{ width: 60, textAlign: 'right', color: C.sub, flexShrink: 0 }}>
+                  <span style={{ width: 80, textAlign: 'right', color: C.sub, flexShrink: 0, fontSize: 11 }}>
                     {t.count} 次
-                    {t.errors > 0 && <span style={{ color: C.high }}> ({t.errors} err)</span>}
+                    {t.errors > 0 && <span style={{ color: C.high }}> err {t.errors}</span>}
                   </span>
                 </div>
               ))}
@@ -137,10 +137,12 @@ export function DashboardView() {
           <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 8, textTransform: 'uppercase' }}>Top by Cost</div>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8 }}>
             {topByCost.map((s, i) => (
-              <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center' }}>
-                <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12 }}>
-                  <span style={{ color: C.mute, marginRight: 6 }}>#{i + 1}</span>
-                  {getAgentIcon(s.agent, 13)}{s.name || s.id.slice(0, 8)}
+              <div key={s.id} onClick={() => onSelectSession?.(s.id)}
+                style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center', cursor: 'pointer' }}>
+                <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ color: C.mute, marginRight: 4 }}>#{i + 1}</span>
+                  {getAgentIcon(s.agent, 13)}
+                  <span>{s.name || s.id.slice(0, 8)}</span>
                 </span>
                 <span style={{ color: C.out, fontWeight: 600, flexShrink: 0 }}>¥{s.totalCost.toFixed(4)}</span>
               </div>
@@ -153,10 +155,12 @@ export function DashboardView() {
             {topByTokens.map((s, i) => {
               const total = s.inputTokens + s.cacheCreationTokens + s.cacheReadTokens + s.outputTokens;
               return (
-                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center' }}>
-                  <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12 }}>
-                    <span style={{ color: C.mute, marginRight: 6 }}>#{i + 1}</span>
-                    {getAgentIcon(s.agent, 13)}{s.name || s.id.slice(0, 8)}
+                <div key={s.id} onClick={() => onSelectSession?.(s.id)}
+                  style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center', cursor: 'pointer' }}>
+                  <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ color: C.mute, marginRight: 4 }}>#{i + 1}</span>
+                    {getAgentIcon(s.agent, 13)}
+                    <span>{s.name || s.id.slice(0, 8)}</span>
                   </span>
                   <span style={{ color: C.link, fontWeight: 600, flexShrink: 0 }}>{fmtTokens(total)}</span>
                 </div>
