@@ -2,10 +2,10 @@
 
 import type { DiagnosisResult, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { API } from '../../config';
-import { C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, SEV_COLOR, TOOL_CAT } from '../../theme';
+import { AGENT_ICONS, C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, SEV_COLOR } from '../../theme';
 
 // 明细表分页每页行数
 const TABLE_LIMIT = 30;
@@ -22,7 +22,9 @@ interface ContextPoint {
 
 export default function SessionPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const isEmbed = searchParams.get('embed') === '1';
   const [data, setData] = useState<SessionDetail | null>(null);
   const [ctx, setCtx] = useState<ContextPoint[]>([]);
   const [diag, setDiag] = useState<DiagnosisResult | null>(null);
@@ -72,11 +74,13 @@ export default function SessionPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
-      <Link href="/" style={{ color: C.link, fontSize: 13, textDecoration: 'none' }}>
-        ← Sessions
-      </Link>
+      {!isEmbed && (
+        <Link href="/" style={{ color: C.link, fontSize: 13, textDecoration: 'none' }}>
+          ← Sessions
+        </Link>
+      )}
       <h2 style={{ margin: '8px 0 4px', fontSize: 22, fontWeight: 600, color: C.text }}>
-        {data.name || data.id.slice(0, 8)}
+        {data.agent ? AGENT_ICONS[data.agent] || '' : ''} {data.name || data.id.slice(0, 8)}
       </h2>
       <div style={{ fontSize: 12, color: C.sub, marginBottom: 16 }}>
         {data.filePath} · {data.claudeVersion || '-'} · {data.gitBranch || '-'}
@@ -115,41 +119,28 @@ export default function SessionPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {toolBars.map(([name, count]) => (
             <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-              <span
-                style={{
-                  width: 180,
-                  color: C.text,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              <span style={{ width: 180, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {name}
               </span>
-              <div
-                style={{
-                  flex: 1,
-                  height: 18,
-                  background: C.borderSoft,
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    width: `${(count / maxToolCount) * 100}%`,
-                    height: '100%',
-                    background: CAT_COLOR[catOf(name)] || C.mute,
-                    borderRadius: 3,
-                  }}
-                />
+              <div style={{ flex: 1, height: 18, background: C.borderSoft, borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${(count / maxToolCount) * 100}%`, height: '100%', background: CAT_COLOR[catOf(name)] || C.mute, borderRadius: 3 }} />
               </div>
               <span style={{ width: 70, textAlign: 'right', color: C.sub }}>
-                {count} 次 · {((count / mainTools.length) * 100).toFixed(0)}%
+                {count} 次 · {mainTools.length > 0 ? ((count / mainTools.length) * 100).toFixed(0) : 0}%
               </span>
             </div>
           ))}
         </div>
+      </Card>
+
+      {/* Tool error rate */}
+      <Card title="工具错误率">
+        <ToolErrors tools={mainTools} />
+      </Card>
+
+      {/* Tool timeline */}
+      <Card title="工具调用时间线">
+        <ToolTimeline tools={mainTools} />
       </Card>
 
       <Card title="上下文窗口增长曲线">
@@ -612,6 +603,77 @@ function SidechainSummary({
               </div>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolErrors({ tools }: { tools: Span[] }) {
+  const byName = new Map<string, { total: number; errors: number }>();
+  for (const t of tools) {
+    const entry = byName.get(t.name) || { total: 0, errors: 0 };
+    entry.total++;
+    if (t.isError) entry.errors++;
+    byName.set(t.name, entry);
+  }
+  const list = [...byName.entries()].filter(([, e]) => e.errors > 0).sort((a, b) => b[1].errors - a[1].errors);
+  if (list.length === 0) return <div style={{ fontSize: 12, color: C.cr }}>✓ 无工具错误</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {list.map(([name, e]) => (
+        <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <span style={{ width: 160, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          <div style={{ flex: 1, height: 14, background: C.borderSoft, borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${((e.total - e.errors) / e.total) * 100}%`, height: '100%', background: C.cr, borderRadius: 3 }} />
+          </div>
+          <span style={{ width: 100, textAlign: 'right', color: C.high, fontSize: 11 }}>
+            {e.errors}/{e.total} err ({((e.errors / e.total) * 100).toFixed(0)}%)
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ToolTimeline({ tools }: { tools: Span[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayed = showAll ? tools : tools.slice(-50);
+  if (tools.length === 0) return <div style={{ fontSize: 12, color: C.sub }}>无工具调用</div>;
+
+  return (
+    <div>
+      <div style={{ maxHeight: 300, overflowY: 'auto', fontSize: 11 }}>
+        {displayed.map((t, i) => {
+          const dur = t.endTime ? t.endTime - t.startTime : 0;
+          const cat = catOf(t.name);
+          return (
+            <div key={t.id} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0',
+              borderBottom: `1px solid ${C.borderSoft}`, color: C.text,
+            }}>
+              <span style={{ color: C.mute, width: 24, textAlign: 'right', flexShrink: 0 }}>#{tools.length - (showAll ? tools.length - i : tools.length - 50 + i)}</span>
+              <span style={{ width: 50, color: C.sub, flexShrink: 0 }}>{fmtTime(t.startTime)}</span>
+              <span style={{
+                padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+                background: `${CAT_COLOR[cat] || C.mute}20`, color: CAT_COLOR[cat] || C.mute,
+                flexShrink: 0,
+              }}>{cat}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{t.name}</span>
+              <span style={{ color: C.sub, flexShrink: 0 }}>{fmtDuration(dur)}</span>
+              <span style={{ width: 50, textAlign: 'right', color: C.sub, flexShrink: 0 }}>{fmtBytes(t.outputBytes)}</span>
+              {t.isError ? <span style={{ color: C.high, flexShrink: 0 }}>❌</span> : <span style={{ color: C.cr, flexShrink: 0 }}>✓</span>}
+            </div>
+          );
+        })}
+      </div>
+      {tools.length > 50 && !showAll && (
+        <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: C.sub }}>
+          显示最近 50 次（共 {tools.length} 次）·{' '}
+          <button onClick={() => setShowAll(true)} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', fontSize: 11 }}>
+            显示全部
+          </button>
         </div>
       )}
     </div>

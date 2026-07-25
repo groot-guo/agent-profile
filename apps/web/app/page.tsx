@@ -3,10 +3,10 @@
 import type { SessionSummary } from '@agent-profile/core';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { DashboardView } from './dashboard';
 import { API, DEFAULT_SCAN_DIR } from './config';
-import { AGENT_COLORS, AGENT_LABELS, C, fmtDuration, fmtTokens } from './theme';
+import { AGENT_COLORS, AGENT_ICONS, AGENT_LABELS, C, fmtTokens } from './theme';
 
-// 从 filePath 提取 project（~/.claude/projects/<project>/<file>.jsonl）
 function projectOf(filePath: string): string {
   const parts = filePath.split('/');
   const idx = parts.indexOf('projects');
@@ -14,7 +14,6 @@ function projectOf(filePath: string): string {
   return parts[parts.length - 2] || 'unknown';
 }
 
-// Claude Code project 目录名是 cwd 路径的 / → -，还原可读路径
 function decodeProject(p: string): string {
   if (p.startsWith('-')) return `/${p.slice(1).replace(/-/g, '/')}`;
   return p;
@@ -28,6 +27,7 @@ export default function HomePage() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState('');
   const [agentFilter, setAgentFilter] = useState<string>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -42,10 +42,7 @@ export default function HomePage() {
     }
   }, []);
 
-  // 首次加载 + 手动刷新（不再轮询）
-  useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+  useEffect(() => { fetchSessions(); }, [fetchSessions]);
 
   const onScan = async () => {
     setScanning(true);
@@ -68,316 +65,152 @@ export default function HomePage() {
     }
   };
 
-  return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 700, color: C.text }}>
-              Agent <span style={{ color: C.link }}>Profile</span>
-            </h1>
-            <p style={{ margin: 0, fontSize: 13, color: C.sub }}>
-              Claude Code session transcript 的离线分析：Token · Cost · 调用链 · 诊断
-            </p>
-          </div>
-          <Link
-            href="/stats"
-            style={{ fontSize: 13, color: C.link, textDecoration: 'none', fontWeight: 600, padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 6, background: C.card }}
-          >
-            Stats →
-          </Link>
-        </div>
-      </div>
+  const filtered = agentFilter === 'all' ? sessions : sessions.filter((s) => s.agent === agentFilter);
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input
-          value={dir}
-          onChange={(e) => setDir(e.target.value)}
-          placeholder={`transcript 目录，如 /Users/you/.claude/projects（留空默认 ${DEFAULT_SCAN_DIR}）`}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            background: C.card,
-            color: C.text,
-            border: `1px solid ${C.border}`,
-            borderRadius: 6,
-            fontSize: 13,
-            outline: 'none',
-          }}
-          onKeyDown={(e) => e.key === 'Enter' && onScan()}
-        />
-        <button
-          onClick={onScan}
-          disabled={scanning}
-          style={{
-            padding: '8px 20px',
-            background: scanning ? '#aceebb' : '#2da44e',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            cursor: scanning ? 'wait' : 'pointer',
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          {scanning ? 'Scanning…' : 'Scan'}
-        </button>
-        <button
-          onClick={() => { setLoading(true); fetchSessions(); }}
-          style={{
-            padding: '8px 16px',
-            background: C.card,
-            color: C.text,
-            border: `1px solid ${C.border}`,
-            borderRadius: 6,
-            cursor: 'pointer',
-            fontSize: 13,
-          }}
-        >
-          🔄
-        </button>
-      </div>
-
-      {scanResult && (
-        <div style={{ fontSize: 12, color: C.cr, marginBottom: 12 }}>✓ {scanResult}</div>
-      )}
-      {error && <div style={{ fontSize: 12, color: C.high, marginBottom: 12 }}>{error}</div>}
-
-      {/* Agent filter tabs */}
-      {!loading && sessions.length > 0 && (
-        <AgentFilter
-          sessions={sessions}
-          selected={agentFilter}
-          onSelect={setAgentFilter}
-        />
-      )}
-
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          color: C.sub,
-          marginBottom: 10,
-          textTransform: 'uppercase',
-          letterSpacing: 0.5,
-        }}
-      >
-        Sessions{' '}
-        {sessions.length > 0 &&
-          `(${agentFilter === 'all' ? sessions.length : sessions.filter((s) => s.agent === agentFilter).length})`}
-      </div>
-
-      {loading ? (
-        <div style={{ color: C.sub, padding: 40, textAlign: 'center' }}>Loading…</div>
-      ) : sessions.length === 0 ? (
-        <div
-          style={{
-            color: C.sub,
-            padding: 48,
-            textAlign: 'center',
-            background: C.card,
-            border: `1px solid ${C.borderSoft}`,
-            borderRadius: 8,
-            fontSize: 13,
-          }}
-        >
-          暂无数据。输入 Claude Code projects 目录后点 Scan 开始分析。
-        </div>
-      ) : (
-        <ProjectGroups
-          sessions={agentFilter === 'all' ? sessions : sessions.filter((s) => s.agent === agentFilter)}
-        />
-      )}
-    </div>
-  );
-}
-
-function AgentFilter({
-  sessions,
-  selected,
-  onSelect,
-}: {
-  sessions: SessionSummary[];
-  selected: string;
-  onSelect: (agent: string) => void;
-}) {
-  const counts = new Map<string, number>();
-  counts.set('all', sessions.length);
-  for (const s of sessions) {
-    counts.set(s.agent, (counts.get(s.agent) || 0) + 1);
-  }
-  const agents = ['all', ...new Set(sessions.map((s) => s.agent))];
-
-  return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-      {agents.map((agent) => {
-        const active = selected === agent;
-        const color = agent === 'all' ? C.link : AGENT_COLORS[agent] || AGENT_COLORS.unknown;
-        return (
-          <button
-            key={agent}
-            onClick={() => onSelect(agent)}
-            style={{
-              padding: '5px 14px',
-              borderRadius: 16,
-              border: active ? `1.5px solid ${color}` : `1px solid ${C.border}`,
-              background: active ? `${color}12` : C.card,
-              color: active ? color : C.sub,
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: active ? 600 : 400,
-              transition: 'all 0.15s',
-            }}
-          >
-            {agent === 'all' ? 'All' : AGENT_LABELS[agent] || agent}
-            <span style={{ marginLeft: 5, opacity: 0.7 }}>{counts.get(agent) || 0}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ProjectGroups({ sessions }: { sessions: SessionSummary[] }) {
+  // Group by project for sidebar tree
   const groups = new Map<string, SessionSummary[]>();
-  for (const s of sessions) {
+  for (const s of filtered) {
     const p = s.cwd || decodeProject(projectOf(s.filePath));
     const arr = groups.get(p);
     if (arr) arr.push(s);
     else groups.set(p, [s]);
   }
-  const list = [...groups.entries()].sort(
-    (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
-  );
+  const projectList = [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+
+  // Agent counts for filter
+  const agentCounts = new Map<string, number>();
+  agentCounts.set('all', sessions.length);
+  for (const s of sessions) agentCounts.set(s.agent, (agentCounts.get(s.agent) || 0) + 1);
+  const agents = ['all', ...new Set(sessions.map((s) => s.agent))];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {list.map(([proj, ss]) => (
-        <ProjectGroup key={proj} project={proj} sessions={ss} />
-      ))}
+    <div style={{ display: 'flex', height: 'calc(100vh - 53px)', overflow: 'hidden' }}>
+      {/* ======== SIDEBAR ======== */}
+      <div style={{
+        width: 320, minWidth: 320, borderRight: `1px solid ${C.border}`,
+        background: C.card, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        {/* Sidebar header */}
+        <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.borderSoft}`, background: C.bg }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.text, flex: 1 }}>
+              Agent <span style={{ color: C.link }}>Profile</span>
+            </h1>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={() => { setLoading(true); fetchSessions(); }}
+                style={{ padding: '3px 8px', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, cursor: 'pointer', fontSize: 12, color: C.text }}>🔄</button>
+              <Link href="/stats"
+                style={{ fontSize: 12, color: C.link, textDecoration: 'none', padding: '3px 8px', border: `1px solid ${C.border}`, borderRadius: 4 }}>📊</Link>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input
+              value={dir} onChange={(e) => setDir(e.target.value)}
+              placeholder={DEFAULT_SCAN_DIR}
+              style={{ flex: 1, padding: '4px 8px', background: C.card, color: C.text, border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 11, outline: 'none' }}
+              onKeyDown={(e) => e.key === 'Enter' && onScan()}
+            />
+            <button onClick={onScan} disabled={scanning}
+              style={{ padding: '4px 10px', background: scanning ? '#aceebb' : '#2da44e', color: '#fff', border: 'none', borderRadius: 4, cursor: scanning ? 'wait' : 'pointer', fontSize: 11, fontWeight: 600 }}>
+              {scanning ? '...' : 'Scan'}
+            </button>
+          </div>
+          {scanResult && <div style={{ fontSize: 10, color: C.cr, marginTop: 4 }}>✓ {scanResult}</div>}
+          {error && <div style={{ fontSize: 10, color: C.high, marginTop: 4 }}>{error}</div>}
+        </div>
+
+        {/* Agent filter tabs */}
+        <div style={{ padding: '6px 14px', borderBottom: `1px solid ${C.borderSoft}`, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {agents.map((agent) => {
+            const active = agentFilter === agent;
+            const color = agent === 'all' ? C.link : AGENT_COLORS[agent] || AGENT_COLORS.unknown;
+            return (
+              <button key={agent} onClick={() => setAgentFilter(agent)}
+                style={{
+                  padding: '2px 10px', borderRadius: 12, fontSize: 11, cursor: 'pointer',
+                  border: active ? `1.5px solid ${color}` : `1px solid ${C.borderSoft}`,
+                  background: active ? `${color}12` : 'transparent',
+                  color: active ? color : C.sub, fontWeight: active ? 600 : 400,
+                }}>
+                {AGENT_ICONS[agent] || ''} {agent === 'all' ? 'All' : AGENT_LABELS[agent] || agent}
+                <span style={{ marginLeft: 3, opacity: 0.6 }}>{agentCounts.get(agent)}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Session list */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loading ? (
+            <div style={{ padding: 24, color: C.sub, textAlign: 'center', fontSize: 12 }}>Loading…</div>
+          ) : (
+            projectList.map(([proj, ss]) => (
+              <ProjectNode key={proj} project={proj} sessions={ss} selectedId={selectedId} onSelect={setSelectedId} />
+            ))
+          )}
+        </div>
+
+        {/* Sidebar footer */}
+        <div style={{ padding: '6px 14px', borderTop: `1px solid ${C.borderSoft}`, fontSize: 10, color: C.mute }}>
+          {sessions.length} sessions · {projectList.length} projects
+        </div>
+      </div>
+
+      {/* ======== CONTENT AREA ======== */}
+      <div style={{ flex: 1, overflowY: 'auto', background: C.bg }}>
+        {selectedId ? (
+          <div style={{ height: '100%' }}>
+            <div style={{ padding: '8px 16px', borderBottom: `1px solid ${C.border}`, background: C.card, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button onClick={() => setSelectedId(null)}
+                style={{ padding: '2px 8px', background: 'none', border: `1px solid ${C.border}`, borderRadius: 4, cursor: 'pointer', fontSize: 11, color: C.sub }}>✕ Close</button>
+              <span style={{ fontSize: 12, color: C.sub, flex: 1 }}>
+                {(() => { const s = sessions.find((x) => x.id === selectedId); return s ? `${AGENT_ICONS[s.agent] || ''} ${s.name || s.id.slice(0, 8)}` : ''; })()}
+              </span>
+              <a href={`/session/${selectedId}`} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 11, color: C.link, textDecoration: 'none' }}>🔗 新窗口打开</a>
+            </div>
+            <iframe src={`/session/${selectedId}?embed=1`}
+              style={{ width: '100%', height: 'calc(100% - 37px)', border: 'none', background: C.bg }} />
+          </div>
+        ) : (
+          <DashboardView />
+        )}
+      </div>
     </div>
   );
 }
 
-function ProjectGroup({ project, sessions }: { project: string; sessions: SessionSummary[] }) {
+function ProjectNode({ project, sessions, selectedId, onSelect }: {
+  project: string; sessions: SessionSummary[]; selectedId: string | null; onSelect: (id: string) => void;
+}) {
   const [open, setOpen] = useState(true);
   return (
     <div>
-      <div
-        onClick={() => setOpen(!open)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginBottom: 8,
-          cursor: 'pointer',
-          userSelect: 'none',
-        }}
-      >
-        <span style={{ color: C.sub, fontSize: 10, width: 12 }}>{open ? '▼' : '▶'}</span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{project}</span>
-        <span style={{ fontSize: 11, color: C.sub }}>{sessions.length} sessions</span>
+      <div onClick={() => setOpen(!open)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', cursor: 'pointer', userSelect: 'none', background: C.bg }}>
+        <span style={{ color: C.sub, fontSize: 9 }}>{open ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          📁 {project.split('/').pop() || project}
+        </span>
+        <span style={{ fontSize: 10, color: C.sub }}>{sessions.length}</span>
       </div>
-      {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 20 }}>
-          {sessions.map((s) => (
-            <SessionCard key={s.id} s={s} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SessionCard({ s }: { s: SessionSummary }) {
-  const dur = s.endTime ? s.endTime - s.startTime : 0;
-  const cache = s.cacheCreationTokens + s.cacheReadTokens;
-  const total = s.inputTokens + cache + s.outputTokens || 1;
-  const unknown = s.costUnknownCount > 0;
-  return (
-    <Link
-      href={`/session/${s.id}`}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '2.2fr 0.8fr 2fr 0.8fr',
-        gap: 16,
-        alignItems: 'center',
-        padding: '14px 18px',
-        background: C.card,
-        border: `1px solid ${C.border}`,
-        borderRadius: 8,
-        textDecoration: 'none',
-        color: 'inherit',
-        transition: 'border-color 0.15s',
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-          <span
-            style={{
-              fontSize: 10,
-              padding: '1px 6px',
-              borderRadius: 3,
-              background: (AGENT_COLORS[s.agent] || AGENT_COLORS.unknown) + '18',
-              color: AGENT_COLORS[s.agent] || AGENT_COLORS.unknown,
-              fontWeight: 600,
-            }}
-          >
-            {AGENT_LABELS[s.agent] || s.agent}
+      {open && sessions.map((s) => (
+        <div key={s.id} onClick={() => onSelect(s.id)}
+          style={{
+            padding: '5px 14px 5px 32px', cursor: 'pointer', fontSize: 12, color: selectedId === s.id ? C.link : C.text,
+            background: selectedId === s.id ? `${C.link}0D` : 'transparent',
+            borderLeft: selectedId === s.id ? `3px solid ${C.link}` : '3px solid transparent',
+            display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden',
+          }}>
+          <span style={{ flexShrink: 0 }}>{AGENT_ICONS[s.agent] || '❓'}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {s.name || s.id.slice(0, 8)}
+          </span>
+          <span style={{ fontSize: 10, color: s.costUnknownCount > 0 ? C.medium : C.sub, flexShrink: 0 }}>
+            {s.costUnknownCount > 0 ? '—' : `¥${s.totalCost.toFixed(2)}`}
           </span>
         </div>
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 600,
-            color: C.text,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {s.name || s.id.slice(0, 8)}
-        </div>
-        <div style={{ fontSize: 11, color: C.sub, marginTop: 3 }}>
-          {s.messageCount} msgs · {s.claudeVersion || 'unknown'}
-        </div>
-      </div>
-
-      <div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{fmtDuration(dur)}</div>
-        <div style={{ fontSize: 10, color: C.sub }}>duration</div>
-      </div>
-
-      <div>
-        <div
-          style={{
-            display: 'flex',
-            height: 7,
-            borderRadius: 3,
-            overflow: 'hidden',
-            background: C.borderSoft,
-            marginBottom: 4,
-          }}
-        >
-          <div style={{ width: `${(s.inputTokens / total) * 100}%`, background: C.input }} />
-          <div style={{ width: `${(s.cacheCreationTokens / total) * 100}%`, background: C.cc }} />
-          <div style={{ width: `${(s.cacheReadTokens / total) * 100}%`, background: C.cr }} />
-          <div style={{ width: `${(s.outputTokens / total) * 100}%`, background: C.out }} />
-        </div>
-        <div style={{ fontSize: 10, color: C.sub }}>
-          <span style={{ color: C.input }}>in {fmtTokens(s.inputTokens)}</span>{' '}
-          <span style={{ color: C.cr }}>cache {fmtTokens(cache)}</span>{' '}
-          <span style={{ color: C.out }}>out {fmtTokens(s.outputTokens)}</span>
-        </div>
-      </div>
-
-      <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: unknown ? C.medium : C.text }}>
-          {unknown ? '—' : `¥${s.totalCost.toFixed(4)}`}
-        </div>
-        <div style={{ fontSize: 10, color: unknown ? C.medium : C.sub }}>
-          {unknown ? `⚠ ${s.costUnknownCount} 未定价` : 'cost'}
-        </div>
-      </div>
-    </Link>
+      ))}
+    </div>
   );
 }

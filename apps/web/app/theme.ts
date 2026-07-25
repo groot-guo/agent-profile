@@ -81,6 +81,13 @@ export const AGENT_COLORS: Record<string, string> = {
   unknown: '#656d76',
 };
 
+export const AGENT_ICONS: Record<string, string> = {
+  'claude-code': '💻',
+  codex: '📦',
+  zed: '✏️',
+  unknown: '❓',
+};
+
 // 格式化工具函数
 export function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
