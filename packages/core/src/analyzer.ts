@@ -26,19 +26,19 @@ export function analyzeSession(
 
   for (const span of parsed.spans) {
     if (span.type === 'llm_turn') {
-      span.contextTokens = span.inputTokens + span.cacheCreationTokens + span.cacheReadTokens;
+      span.contextTokens = (span.inputTokens || 0) + (span.cacheCreationTokens || 0) + (span.cacheReadTokens || 0);
       const pricing = pricingLookup(span.model);
       const { cost, unknown } = calcCost(span, pricing);
       span.cost = cost;
       span.costUnknown = unknown;
       if (unknown) costUnknownCount++;
-      inputTokens += span.inputTokens;
-      cacheCreationTokens += span.cacheCreationTokens;
-      cacheReadTokens += span.cacheReadTokens;
-      outputTokens += span.outputTokens;
-      totalCost += cost;
-      peakContext = Math.max(peakContext, span.contextTokens);
-      sumContext += span.contextTokens;
+      inputTokens += span.inputTokens || 0;
+      cacheCreationTokens += span.cacheCreationTokens || 0;
+      cacheReadTokens += span.cacheReadTokens || 0;
+      outputTokens += span.outputTokens || 0;
+      totalCost += cost || 0;
+      peakContext = Math.max(peakContext, span.contextTokens || 0);
+      sumContext += span.contextTokens || 0;
       llmTurnCount++;
     } else {
       span.contextTokens = 0;

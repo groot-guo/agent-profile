@@ -219,7 +219,7 @@ function detectReadScope(
     if (!READ_TOOLS.has(tool.name)) continue;
     if (tool.outputBytes < t.readScopeBytes) continue;
     const lim = extractReadLimit(tool);
-    if (lim?.limit) continue; // 有 limit 不算整文件读
+    if (lim?.limit != null) continue; // 有 limit 不算整文件读（limit=0 也是显式设置）
     const path = extractFilePath(tool);
     const estTok = estTokens(tool.outputBytes, t);
     const wastedTokens = Math.round(estTok * 0.5); // 假设只需读一半
