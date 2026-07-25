@@ -169,6 +169,17 @@ export function DashboardView({ onSelectSession }: { onSelectSession?: (id: stri
           </div>
         </div>
       </div>
+
+      {/* 数据计算声明 */}
+      <div style={{ marginTop: 32, padding: '14px 16px', background: `${C.bg}`, border: `1px solid ${C.borderSoft}`, borderRadius: 8, fontSize: 11, color: C.mute, lineHeight: 1.7 }}>
+        <div style={{ fontWeight: 600, color: C.sub, marginBottom: 4 }}>📐 数据说明</div>
+        <div>· Token 数据来源：transcript 原始 <code style={{ background: C.borderSoft, padding: '1px 4px', borderRadius: 2 }}>usage</code> 字段（input / cache_creation / cache_read / output），未做估算或补全</div>
+        <div>· Cost：本工具按模型定价表计算（¥ / 1M tokens），公式 = (input × in_price + cc × cc_price + cr × cr_price + output × out_price) / 1e6</div>
+        <div>· contextTokens = input + cache_creation + cache_read（由本工具聚合）</div>
+        <div>· cache 命中率 = cache_read / (input + cache_creation + cache_read)（由本工具计算）</div>
+        <div>· 未定价模型：cost 显示 —，标记 costUnknown</div>
+        <div>· 扫描目录：~/.claude/projects、~/.codex/sessions、Zed threads.db（启动时自动扫描）</div>
+      </div>
     </div>
   );
 }
