@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,7 +19,6 @@ export interface ZedThreadMeta {
 // 判断 threads.db 是否存在
 export function hasZedThreadsDb(): boolean {
   try {
-    const { statSync } = require('node:fs');
     statSync(zedThreadsDbPath());
     return true;
   } catch {

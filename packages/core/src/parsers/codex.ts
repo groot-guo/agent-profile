@@ -20,7 +20,8 @@ function safeStringify(v: unknown): string {
 }
 
 function toMs(iso: string): number {
-  return new Date(iso).getTime();
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
 }
 
 function makeSpan(p: {
@@ -68,7 +69,7 @@ export function parseCodexTranscript(
   // 2. 收集 reasoning 文本构建 session name
   const allReasoningTexts: string[] = [];
   for (const e of sorted) {
-    if (e.type === 'event_msg' && e.payload.type === 'agent_reasoning') {
+    if (e.type === 'event_msg' && e.payload && e.payload.type === 'agent_reasoning') {
       const t = e.payload.text as string;
       if (t) allReasoningTexts.push(t);
     }
@@ -80,7 +81,7 @@ export function parseCodexTranscript(
   // 3. 构建 call_id → tool_call_output 映射
   const toolOutputs = new Map<string, { entry: CodexEntry; output: unknown; isError: boolean }>();
   for (const e of sorted) {
-    if (e.type === 'response_item' && e.payload.type === 'custom_tool_call_output') {
+    if (e.type === 'response_item' && e.payload && e.payload.type === 'custom_tool_call_output') {
       const callId = e.payload.call_id as string;
       const output = e.payload.output;
       const isError = !!e.payload.is_error;
@@ -93,13 +94,13 @@ export function parseCodexTranscript(
   let currentTurn: CodexEntry[] = [];
 
   for (const e of sorted) {
-    if ((e.type === 'turn_context' || e.type === 'event_msg' && e.payload.type === 'task_started') && currentTurn.length > 0) {
+    if ((e.type === 'turn_context' || (e.type === 'event_msg' && e.payload && e.payload.type === 'task_started')) && currentTurn.length > 0) {
       // 新的 turn 开始前，保存当前 turn
       // 仅当有实际内容时才保存（排除孤立的 turn_context）
       const hasContent = currentTurn.some(
         (x) =>
-          (x.type === 'response_item' && (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
-          (x.type === 'event_msg' && x.payload.type === 'token_count'),
+          (x.type === 'response_item' && x.payload && (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
+          (x.type === 'event_msg' && x.payload && x.payload.type === 'token_count'),
       );
       if (hasContent) turns.push(currentTurn);
       currentTurn = [];
@@ -110,8 +111,8 @@ export function parseCodexTranscript(
   if (currentTurn.length > 0) {
     const hasContent = currentTurn.some(
       (x) =>
-        (x.type === 'response_item' && (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
-        (x.type === 'event_msg' && x.payload.type === 'token_count'),
+        (x.type === 'response_item' && x.payload && (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
+        (x.type === 'event_msg' && x.payload && x.payload.type === 'token_count'),
     );
     if (hasContent) turns.push(currentTurn);
   }
@@ -138,7 +139,7 @@ export function parseCodexTranscript(
     let inputTokens = 0, cacheReadTokens = 0, outputTokens = 0;
     for (let i = turnEntries.length - 1; i >= 0; i--) {
       const e = turnEntries[i];
-      if (e.type === 'event_msg' && e.payload.type === 'token_count') {
+      if (e.type === 'event_msg' && e.payload && e.payload.type === 'token_count') {
         const lastUsage = (e.payload.info as Record<string, unknown>)?.last_token_usage as
           | Record<string, number>
           | undefined;
@@ -169,8 +170,10 @@ export function parseCodexTranscript(
 
     // reasoning → thinking spans
     for (const e of turnEntries) {
-      if (e.type === 'response_item' && e.payload.type === 'reasoning') {
-        const content = e.payload.content as Array<{ type: string; text?: string }> | undefined;
+      if (e.type === 'response_item' && e.payload && e.payload.type === 'reasoning') {
+        const content = Array.isArray(e.payload.content)
+          ? (e.payload.content as Array<{ type: string; text?: string }>)
+          : undefined;
         const text = content
           ?.filter((c) => c.type === 'input_text')
           .map((c) => c.text || '')
@@ -194,7 +197,7 @@ export function parseCodexTranscript(
 
     // event_msg|agent_reasoning → thinking spans
     for (const e of turnEntries) {
-      if (e.type === 'event_msg' && e.payload.type === 'agent_reasoning') {
+      if (e.type === 'event_msg' && e.payload && e.payload.type === 'agent_reasoning') {
         const text = e.payload.text as string;
         if (text) {
           spans.push(
@@ -215,7 +218,7 @@ export function parseCodexTranscript(
 
     // custom_tool_call + output → tool_call spans
     for (const e of turnEntries) {
-      if (e.type === 'response_item' && e.payload.type === 'custom_tool_call') {
+      if (e.type === 'response_item' && e.payload && e.payload.type === 'custom_tool_call') {
         const callId = e.payload.call_id as string;
         const toolName = (e.payload.name as string) || 'unknown';
         const input = e.payload.input;

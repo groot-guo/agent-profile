@@ -26,7 +26,8 @@ function safeStringify(v: unknown): string {
 }
 
 function toMs(iso: string): number {
-  return new Date(iso).getTime();
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
 }
 
 function asBlocks(msg?: TranscriptMessage): ContentBlock[] {

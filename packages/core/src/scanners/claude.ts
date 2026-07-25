@@ -12,7 +12,15 @@ function expandHome(p: string): string {
 // 异步递归扫描目录下所有 *.jsonl（排除 journal.jsonl）
 export async function findTranscriptFiles(root: string): Promise<string[]> {
   const out: string[] = [];
-  const dirs = [resolve(expandHome(root))];
+  const rootDir = resolve(expandHome(root));
+  const dirs = [rootDir];
+  const seen = new Set<string>();
+  // 根目录也加入 seen，防止子目录中符号链接回根目录导致循环
+  try {
+    const rootSt = await stat(rootDir);
+    if (rootSt.ino != null) seen.add(`${rootSt.dev}:${rootSt.ino}`);
+    else seen.add(rootDir);
+  } catch { /* 根目录不可访问，seen 为空，后续 readdir 也会失败 */ }
 
   while (dirs.length > 0) {
     const dir = dirs.pop()!;
@@ -31,7 +39,11 @@ export async function findTranscriptFiles(root: string): Promise<string[]> {
         continue;
       }
       if (st.isDirectory()) {
-        dirs.push(full);
+        const real = st.ino != null ? `${st.dev}:${st.ino}` : full;
+        if (!seen.has(real)) {
+          seen.add(real);
+          dirs.push(full);
+        }
       } else if (name.endsWith('.jsonl') && name !== 'journal.jsonl') {
         out.push(full);
       }

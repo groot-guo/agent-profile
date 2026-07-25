@@ -83,10 +83,31 @@ export function parseMiMoSession(
     (a, b) => (a.data.time?.created || 0) - (b.data.time?.created || 0),
   );
 
+  // 提取 session 名称：优先短标题，长系统指令 → 用首条 reasoning 摘要
+  let name: string | undefined;
+  if (sessionMeta.title.length <= 200) {
+    name = sessionMeta.title;
+  } else {
+    // 尝试从首条 assistant reasoning 提取摘要
+    for (const msg of sorted) {
+      if (msg.data.role !== 'assistant') continue;
+      for (const part of msg.parts || []) {
+        if (part.data.type === 'reasoning' && part.data.text) {
+          const firstLine = part.data.text.split('\n')[0].replace(/^\*+/, '').replace(/\*+$/, '').trim();
+          name = firstLine.slice(0, 80) || sessionMeta.title.slice(0, 80);
+          break;
+        }
+      }
+      if (name) break;
+    }
+    if (!name) name = sessionMeta.title.slice(0, 80) + '…';
+  }
+
   // 构建 callID → tool output 映射
   const toolOutputs = new Map<string, { output: unknown; status: string }>();
   for (const msg of sorted) {
-    for (const part of msg.parts) {
+    const parts = msg.parts || [];
+    for (const part of parts) {
       if (part.data.type === 'tool' && part.data.callID) {
         const state = part.data.state;
         if (state?.output !== undefined) {
@@ -128,7 +149,8 @@ export function parseMiMoSession(
     );
 
     // parts → sub-spans
-    for (const part of msg.parts) {
+    const msgParts = msg.parts || [];
+    for (const part of msgParts) {
       const pd = part.data;
       if (pd.type === 'reasoning' && pd.text) {
         spans.push(
@@ -171,7 +193,7 @@ export function parseMiMoSession(
   return {
     sessionId: sid,
     meta: {
-      name: sessionMeta.title,
+      name,
       filePath: `mimo://sessions/${sid}`,
       startTime: sessionMeta.time_created,
       endTime: sessionMeta.time_updated,
