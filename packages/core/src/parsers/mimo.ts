@@ -16,14 +16,14 @@ function safeStringify(v: unknown): string {
 function makeSpan(p: {
   id: string; sessionId: string; parentId?: string | null; type: SpanType;
   name: string; startTime: number; endTime?: number;
-  inputTokens?: number; cacheReadTokens?: number; outputTokens?: number;
+  inputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number; outputTokens?: number;
   model?: string; isError?: boolean; isSidechain?: boolean;
   outputBytes?: number; metadata?: Record<string, unknown>;
 }): Span {
   return {
     id: p.id, sessionId: p.sessionId, parentId: p.parentId ?? null,
     type: p.type, name: p.name, startTime: p.startTime, endTime: p.endTime,
-    inputTokens: p.inputTokens || 0, cacheCreationTokens: 0,
+    inputTokens: p.inputTokens || 0, cacheCreationTokens: p.cacheCreationTokens || 0,
     cacheReadTokens: p.cacheReadTokens || 0, outputTokens: p.outputTokens || 0,
     contextTokens: 0, outputBytes: p.outputBytes || 0, model: p.model,
     cost: 0, costUnknown: false, isError: !!p.isError, isSidechain: !!p.isSidechain,
@@ -105,6 +105,7 @@ export function parseMiMoSession(
     const turnEnd = d.time?.completed;
     const tokens = d.tokens;
     const inputTokens = tokens?.input || 0;
+    const cacheCreationTokens = tokens?.cache?.write || 0;
     const cacheReadTokens = tokens?.cache?.read || 0;
     const outputTokens = (tokens?.output || 0) + (tokens?.reasoning || 0);
 
@@ -119,6 +120,7 @@ export function parseMiMoSession(
         startTime: turnStart,
         endTime: turnEnd,
         inputTokens,
+        cacheCreationTokens,
         cacheReadTokens,
         outputTokens,
         model: d.modelID,

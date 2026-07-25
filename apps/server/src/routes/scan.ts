@@ -373,8 +373,8 @@ export async function scanMiMoSessions(): Promise<{ scanned: number; imported: n
 
   const getExisting = db.prepare('SELECT id FROM sessions WHERE id = ?');
   const insertSession = db.prepare(`
-    INSERT OR REPLACE INTO sessions (id, name, file_path, agent, start_time, end_time, cwd, input_tokens, cache_read_tokens, output_tokens, total_cost, message_count, imported_at)
-    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @inputTokens, @cacheReadTokens, @outputTokens, @totalCost, @messageCount, @importedAt)
+    INSERT OR REPLACE INTO sessions (id, name, file_path, agent, start_time, end_time, cwd, input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, total_cost, cost_unknown_count, peak_context_tokens, avg_context_tokens, cache_hit_rate, message_count, imported_at)
+    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @totalCost, @costUnknownCount, @peakContextTokens, @avgContextTokens, @cacheHitRate, @messageCount, @importedAt)
   `);
   const insertSpan = db.prepare(`
     INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
@@ -418,12 +418,19 @@ export async function scanMiMoSessions(): Promise<{ scanned: number; imported: n
       if (existing) continue;
 
       const msgs = msgBySession.get(s.id) || [];
-      const messages = msgs.map((m) => ({
-        id: m.id,
-        agent_id: m.agent_id,
-        data: JSON.parse(m.data),
-        parts: (partByMsg.get(m.id) || []).map((p) => ({ id: p.id, data: JSON.parse(p.data) })),
-      }));
+      const messages = [];
+      for (const m of msgs) {
+        try {
+          const data = JSON.parse(m.data);
+          const parts = (partByMsg.get(m.id) || []).map((p) => {
+            try { return { id: p.id, data: JSON.parse(p.data) }; }
+            catch { return { id: p.id, data: { type: 'text', text: '' } }; }
+          });
+          messages.push({ id: m.id, agent_id: m.agent_id, data, parts });
+        } catch {
+          // 跳过损坏的消息行
+        }
+      }
 
       const parsed = parseMiMoSession(s, messages as any);
       if (!parsed) continue;
@@ -435,9 +442,11 @@ export async function scanMiMoSessions(): Promise<{ scanned: number; imported: n
         id: summary.id, name: summary.name ?? null, filePath: summary.filePath,
         agent: 'mimo-code', startTime: summary.startTime, endTime: summary.endTime ?? null,
         cwd: summary.cwd ?? null,
-        inputTokens: summary.inputTokens, cacheReadTokens: summary.cacheReadTokens,
-        outputTokens: summary.outputTokens, totalCost: summary.totalCost,
-        messageCount: summary.messageCount, importedAt: now,
+        inputTokens: summary.inputTokens, cacheCreationTokens: summary.cacheCreationTokens,
+        cacheReadTokens: summary.cacheReadTokens, outputTokens: summary.outputTokens,
+        totalCost: summary.totalCost, costUnknownCount: summary.costUnknownCount,
+        peakContextTokens: summary.peakContextTokens, avgContextTokens: summary.avgContextTokens,
+        cacheHitRate: summary.cacheHitRate, messageCount: summary.messageCount, importedAt: now,
       });
       for (const sp of spans) {
         insertSpan.run({

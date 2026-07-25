@@ -270,7 +270,7 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
   for (let i = 1; i < points.length; i++) {
     const delta = points[i].contextTokens - points[i - 1].contextTokens;
     if (delta <= 0) continue;
-    const isSpike = delta > peak * 0.2 || delta > 20_000;
+    const isSpike = peak > 0 && (delta > peak * 0.2 || delta > 20_000);
     if (!isSpike) continue;
 
     // 找到该时间窗口内的工具调用

@@ -31,14 +31,15 @@ export const AGENT_LABELS: Record<string, string> = {
 // 根据文件路径推断 agent 类型
 export function detectAgent(filePath: string): string {
   const home = homedir();
-  if (filePath.includes(join(home, '.claude', 'projects'))) return 'claude-code';
-  if (filePath.includes(join(home, '.codex'))) return 'codex';
-  if (filePath.includes(join(home, '.kimi-code')) || filePath.includes(join(home, '.kimi'))) return 'kimi-code';
-  if (filePath.includes(join(home, '.local', 'share', 'opencode'))) return 'opencode';
-  if (filePath.includes('mimocode') || filePath.includes('mimo-code')) return 'mimo-code';
+  if (filePath.startsWith(join(home, '.claude', 'projects'))) return 'claude-code';
+  if (filePath.startsWith(join(home, '.codex'))) return 'codex';
+  if (filePath.startsWith(join(home, '.kimi-code')) || filePath.startsWith(join(home, '.kimi'))) return 'kimi-code';
+  if (filePath.startsWith(join(home, '.local', 'share', 'opencode'))) return 'opencode';
+  // MiMo: SQLite DB 路径通过特殊前缀识别，JSONL 扫描不适用
+  if (filePath.startsWith('mimo://')) return 'mimo-code';
   // 其他常见 agent（目录待验证）
-  if (filePath.includes('.cursor')) return 'cursor';
-  if (filePath.includes('.windsurf')) return 'windsurf';
-  if (filePath.includes('.gemini') || filePath.includes('gemini-cli')) return 'gemini-cli';
+  if (filePath.includes(join(home, '.cursor'))) return 'cursor';
+  if (filePath.includes(join(home, '.windsurf'))) return 'windsurf';
+  if (filePath.includes(join(home, '.gemini')) || filePath.includes('gemini-cli')) return 'gemini-cli';
   return 'unknown';
 }
