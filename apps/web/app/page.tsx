@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { DashboardView } from './dashboard';
 import { API, DEFAULT_SCAN_DIR } from './config';
-import { AGENT_COLORS, AGENT_ICONS, AGENT_LABELS, C, fmtTokens } from './theme';
+import { getAgentIcon } from './icons';
+import { AGENT_COLORS, AGENT_ICONS, AGENT_LABELS, C } from './theme';
 
 function projectOf(filePath: string): string {
   const parts = filePath.split('/');
@@ -132,7 +133,7 @@ export default function HomePage() {
                   background: active ? `${color}12` : 'transparent',
                   color: active ? color : C.sub, fontWeight: active ? 600 : 400,
                 }}>
-                {AGENT_ICONS[agent] || ''} {agent === 'all' ? 'All' : AGENT_LABELS[agent] || agent}
+                {agent !== 'all' && <span style={{ marginRight: 2 }}>{getAgentIcon(agent, 12)}</span>} {agent === 'all' ? 'All' : AGENT_LABELS[agent] || agent}
                 <span style={{ marginLeft: 3, opacity: 0.6 }}>{agentCounts.get(agent)}</span>
               </button>
             );
@@ -164,7 +165,7 @@ export default function HomePage() {
               <button onClick={() => setSelectedId(null)}
                 style={{ padding: '2px 8px', background: 'none', border: `1px solid ${C.border}`, borderRadius: 4, cursor: 'pointer', fontSize: 11, color: C.sub }}>✕ Close</button>
               <span style={{ fontSize: 12, color: C.sub, flex: 1 }}>
-                {(() => { const s = sessions.find((x) => x.id === selectedId); return s ? `${AGENT_ICONS[s.agent] || ''} ${s.name || s.id.slice(0, 8)}` : ''; })()}
+                {(() => { const s = sessions.find((x) => x.id === selectedId); return s ? <>{getAgentIcon(s.agent, 14)} {s.name || s.id.slice(0, 8)}</> : ''; })()}
               </span>
               <a href={`/session/${selectedId}`} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: 11, color: C.link, textDecoration: 'none' }}>🔗 新窗口打开</a>
@@ -202,7 +203,7 @@ function ProjectNode({ project, sessions, selectedId, onSelect }: {
             borderLeft: selectedId === s.id ? `3px solid ${C.link}` : '3px solid transparent',
             display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden',
           }}>
-          <span style={{ flexShrink: 0 }}>{AGENT_ICONS[s.agent] || '❓'}</span>
+          <span style={{ flexShrink: 0 }}>{getAgentIcon(s.agent, 13)}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             {s.name || s.id.slice(0, 8)}
           </span>

@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { API } from '../../config';
-import { AGENT_ICONS, C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, SEV_COLOR } from '../../theme';
+import { getAgentIcon } from '../../icons';
+import { C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, SEV_COLOR } from '../../theme';
 
 // 明细表分页每页行数
 const TABLE_LIMIT = 30;
@@ -80,7 +81,7 @@ export default function SessionPage() {
         </Link>
       )}
       <h2 style={{ margin: '8px 0 4px', fontSize: 22, fontWeight: 600, color: C.text }}>
-        {data.agent ? AGENT_ICONS[data.agent] || '' : ''} {data.name || data.id.slice(0, 8)}
+        {data.agent ? getAgentIcon(data.agent, 20) : null} {data.name || data.id.slice(0, 8)}
       </h2>
       <div style={{ fontSize: 12, color: C.sub, marginBottom: 16 }}>
         {data.filePath} · {data.claudeVersion || '-'} · {data.gitBranch || '-'}

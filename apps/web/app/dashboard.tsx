@@ -3,7 +3,8 @@
 import type { SessionSummary } from '@agent-profile/core';
 import { useEffect, useState } from 'react';
 import { API } from './config';
-import { AGENT_COLORS, AGENT_LABELS, AGENT_ICONS, C, fmtTokens } from './theme';
+import { getAgentIcon, getModelIcon } from './icons';
+import { AGENT_COLORS, AGENT_LABELS, C, fmtTokens } from './theme';
 
 interface StatsOverview {
   totalSessions: number;
@@ -97,7 +98,7 @@ export function DashboardView() {
               padding: '10px 18px', background: C.card, border: `1px solid ${C.border}`,
               borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, minWidth: 120,
             }}>
-              <span style={{ fontSize: 18 }}>{AGENT_ICONS[agent] || '❓'}</span>
+              <span style={{ fontSize: 18 }}>{getAgentIcon(agent, 18)}</span>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: AGENT_COLORS[agent] || C.mute }}>{AGENT_LABELS[agent] || agent}</div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: C.text }}>{count}</div>
@@ -139,7 +140,7 @@ export function DashboardView() {
               <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center' }}>
                 <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12 }}>
                   <span style={{ color: C.mute, marginRight: 6 }}>#{i + 1}</span>
-                  {AGENT_ICONS[s.agent] || ''} {s.name || s.id.slice(0, 8)}
+                  {getAgentIcon(s.agent, 13)}{s.name || s.id.slice(0, 8)}
                 </span>
                 <span style={{ color: C.out, fontWeight: 600, flexShrink: 0 }}>¥{s.totalCost.toFixed(4)}</span>
               </div>
@@ -155,7 +156,7 @@ export function DashboardView() {
                 <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center' }}>
                   <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12 }}>
                     <span style={{ color: C.mute, marginRight: 6 }}>#{i + 1}</span>
-                    {AGENT_ICONS[s.agent] || ''} {s.name || s.id.slice(0, 8)}
+                    {getAgentIcon(s.agent, 13)}{s.name || s.id.slice(0, 8)}
                   </span>
                   <span style={{ color: C.link, fontWeight: 600, flexShrink: 0 }}>{fmtTokens(total)}</span>
                 </div>

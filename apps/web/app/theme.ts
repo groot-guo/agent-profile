@@ -81,11 +81,12 @@ export const AGENT_COLORS: Record<string, string> = {
   unknown: '#656d76',
 };
 
+// 文字 fallback（SVG 图标优先，见 icons.tsx）
 export const AGENT_ICONS: Record<string, string> = {
-  'claude-code': '💻',
-  codex: '📦',
-  zed: '✏️',
-  unknown: '❓',
+  'claude-code': 'C',
+  codex: 'X',
+  zed: 'Z',
+  unknown: '?',
 };
 
 // 格式化工具函数

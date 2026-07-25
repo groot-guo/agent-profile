@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { API } from '../config';
-import { AGENT_COLORS, AGENT_LABELS, C, fmtDuration, fmtTokens } from '../theme';
+import { getAgentIcon, getModelIcon } from '../icons';
+import { AGENT_COLORS, AGENT_LABELS, C, fmtTokens } from '../theme';
 
 interface StatsData {
   overview: {
@@ -68,7 +69,7 @@ export default function StatsPage() {
           <div style={{ flex: 1, minWidth: 200 }}>
             {byAgent.map((a) => (
               <div key={a.agent} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                <span><span style={{ color: AGENT_COLORS[a.agent] || C.mute, fontWeight: 600 }}>●</span> {AGENT_LABELS[a.agent] || a.agent}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{getAgentIcon(a.agent, 14)} {AGENT_LABELS[a.agent] || a.agent}</span>
                 <span style={{ color: C.sub }}>{a.sessions} sessions · {fmtTokens(a.totalTokens)} · ¥{a.totalCost.toFixed(2)}</span>
               </div>
             ))}
@@ -93,7 +94,7 @@ export default function StatsPage() {
           <div style={{ flex: 1, minWidth: 200 }}>
             {byModel.slice(0, 8).map((m) => (
               <div key={m.model} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                <span><span style={{ color: modelColor(m.model), fontWeight: 600 }}>●</span> {m.model}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{getModelIcon(m.model, 14)} {m.model}</span>
                 <span style={{ color: C.sub }}>{m.sessions} turns · {fmtTokens(m.totalInputTokens)}</span>
               </div>
             ))}
