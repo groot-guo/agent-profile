@@ -145,7 +145,7 @@ export default function SessionPage() {
       </Card>
 
       <Card title="上下文窗口增长曲线">
-        <ContextChart points={ctx} />
+        <ContextChart points={ctx} tools={mainTools} />
       </Card>
 
       <Card title="Token 拆解">
@@ -254,7 +254,7 @@ function TokenBar({ input, cc, cr, out }: { input: number; cc: number; cr: numbe
   );
 }
 
-function ContextChart({ points }: { points: ContextPoint[] }) {
+function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[] }) {
   if (points.length === 0) return <div style={{ color: C.sub, fontSize: 12 }}>无数据</div>;
   const W = 1000,
     H = 240,
@@ -264,6 +264,30 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
   const maxCtx = Math.max(peak, ...(window ? [window] : [0])) * 1.08 || 1;
   const x = (i: number) => PAD + (i / (points.length - 1 || 1)) * (W - PAD * 2);
   const y = (v: number) => H - PAD - (v / maxCtx) * (H - PAD * 2);
+
+  // Spike detection
+  const spikes: { turnIdx: number; delta: number; tools: Span[]; cx: number; cy: number }[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const delta = points[i].contextTokens - points[i - 1].contextTokens;
+    if (delta <= 0) continue;
+    const isSpike = delta > peak * 0.2 || delta > 20_000;
+    if (!isSpike) continue;
+
+    // 找到该时间窗口内的工具调用
+    const t0 = points[i - 1].startTime;
+    const t1 = points[i].startTime;
+    const windowTools = tools
+      .filter((t) => t.startTime >= t0 && t.startTime <= t1)
+      .sort((a, b) => b.outputBytes - a.outputBytes)
+      .slice(0, 2);
+    spikes.push({
+      turnIdx: i,
+      delta,
+      tools: windowTools,
+      cx: x(i),
+      cy: y(points[i].contextTokens),
+    });
+  }
 
   // 堆叠面积：cr(底) + cc + input(顶)，累加 = contextTokens
   const area = (topFn: (p: ContextPoint) => number, botFn: (p: ContextPoint) => number) => {
@@ -326,6 +350,15 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
         <path d={area(inTop, ccTop)} fill={C.input} fillOpacity={0.22} />
         {/* 顶层线 */}
         <path d={linePath} fill="none" stroke={C.input} strokeWidth={1.5} />
+        {/* Spike markers */}
+        {spikes.map((sp, idx) => (
+          <g key={`spike-${idx}`}>
+            <line x1={sp.cx} y1={sp.cy + 4} x2={sp.cx} y2={sp.cy - 20} stroke={C.high} strokeWidth={1} strokeDasharray="3 2" opacity={0.7} />
+            <circle cx={sp.cx} cy={sp.cy} r={4} fill={C.high} fillOpacity={0.8} stroke={C.card} strokeWidth={1}>
+              <title>{`+${fmtTokens(sp.delta)} tokens${sp.tools.length > 0 ? ` — ${sp.tools.map((t) => t.name).join(', ')}` : ''}`}</title>
+            </circle>
+          </g>
+        ))}
         {/* 轴 */}
         <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={C.axis} />
         <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke={C.axis} />
@@ -358,6 +391,25 @@ function ContextChart({ points }: { points: ContextPoint[] }) {
           {window ? `，利用率 ${((peak / window) * 100).toFixed(1)}%` : '（窗口未配）'}
         </span>
       </div>
+      {/* Spike 标注列表 */}
+      {spikes.length > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.borderSoft}` }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 6 }}>📈 上下文波动分析</div>
+          {spikes.map((sp, idx) => (
+            <div key={idx} style={{ fontSize: 11, color: C.text, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: C.high, fontWeight: 600, flexShrink: 0 }}>●</span>
+              <span>
+                Turn {sp.turnIdx} 增长 <span style={{ color: C.high, fontWeight: 600 }}>+{fmtTokens(sp.delta)}</span> tokens
+                {sp.tools.length > 0 && (
+                  <span style={{ color: C.sub }}>
+                    {' '}— {sp.tools.map((t) => `${t.name} ${fmtBytes(t.outputBytes)}`).join(', ')}
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
