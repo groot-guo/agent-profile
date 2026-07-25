@@ -30,6 +30,6 @@ export function detectAgent(filePath: string): string {
   if (filePath.includes(join(home, '.codex'))) return 'codex';
   if (filePath.includes(join(home, '.kimi-code')) || filePath.includes(join(home, '.kimi'))) return 'kimi-code';
   if (filePath.includes(join(home, '.local', 'share', 'opencode'))) return 'opencode';
-  if (filePath.includes(join(home, '.mimo')) || filePath.includes('mimo-code')) return 'mimo-code';
+  if (filePath.includes('mimocode') || filePath.includes('mimo-code')) return 'mimo-code';
   return 'unknown';
 }

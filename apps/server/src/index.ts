@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { config } from './config';
 import { closeDb } from './db';
 import { registerRoutes } from './routes/index';
-import { autoScan, scanZedThreads } from './routes/scan';
+import { autoScan, scanMiMoSessions, scanZedThreads } from './routes/scan';
 
 const app = Fastify({ logger: true });
 
@@ -39,6 +39,15 @@ try {
     })
     .catch((err) => {
       console.warn(`Zed scan failed: ${err instanceof Error ? err.message : err}`);
+    });
+
+  // 扫描 MiMo Code
+  scanMiMoSessions()
+    .then((r) => {
+      if (r.scanned > 0) console.log(`MiMo scan done: ${r.scanned} sessions, ${r.imported} imported`);
+    })
+    .catch((err) => {
+      console.warn(`MiMo scan failed: ${err instanceof Error ? err.message : err}`);
     });
 } catch (err) {
   app.log.error(err);

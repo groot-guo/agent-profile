@@ -16,6 +16,7 @@ export { parseCodexTranscript } from './parsers/codex';
 export type { ParseOptions } from './parsers/claude';
 export { parseTranscript } from './parsers/claude';
 export type { CodexParseOptions } from './parsers/codex';
+export { parseMiMoSession } from './parsers/mimo';
 export { parseZedThread } from './parsers/zed';
 export type { ZedThreadInput } from './parsers/zed';
 export { calcCost } from './pricing';

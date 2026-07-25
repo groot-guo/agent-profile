@@ -1,10 +1,12 @@
 import { statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import {
   analyzeSession,
   detectAgent,
   findTranscriptFiles,
   hasZedThreadsDb,
   parseCodexTranscript,
+  parseMiMoSession,
   parseTranscript,
   parseZedThread,
   readTranscript,
@@ -353,4 +355,107 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
   }
 
   return { scanned: threads.length, imported };
+}
+
+// 扫描 MiMo Code 数据库
+const MIMO_DB_PATH = `${homedir()}/.local/share/mimocode/mimocode.db`;
+
+export async function scanMiMoSessions(): Promise<{ scanned: number; imported: number }> {
+  let exists: boolean;
+  try { const s = statSync(MIMO_DB_PATH); exists = !!s; } catch { exists = false; }
+  if (!exists) return { scanned: 0, imported: 0 };
+
+  const mimoDb = new (await import('better-sqlite3')).default(MIMO_DB_PATH, { readonly: true });
+  const sessions = mimoDb.prepare('SELECT id, title, directory, time_created, time_updated FROM session ORDER BY time_created DESC').all() as {
+    id: string; title: string; directory: string; time_created: number; time_updated: number;
+  }[];
+  if (sessions.length === 0) { mimoDb.close(); return { scanned: 0, imported: 0 }; }
+
+  const getExisting = db.prepare('SELECT id FROM sessions WHERE id = ?');
+  const insertSession = db.prepare(`
+    INSERT OR REPLACE INTO sessions (id, name, file_path, agent, start_time, end_time, cwd, input_tokens, cache_read_tokens, output_tokens, total_cost, message_count, imported_at)
+    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @inputTokens, @cacheReadTokens, @outputTokens, @totalCost, @messageCount, @importedAt)
+  `);
+  const insertSpan = db.prepare(`
+    INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
+      input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
+      output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
+    VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
+      @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @contextTokens,
+      @outputBytes, @model, @cost, @costUnknown, @stopReason, @isError, @isSidechain, @metadata)
+  `);
+  const delSpans = db.prepare('DELETE FROM spans WHERE session_id = ?');
+  const delSession = db.prepare('DELETE FROM sessions WHERE id = ?');
+
+  // 预加载所有 messages + parts
+  const allMessages = mimoDb.prepare('SELECT id, session_id, agent_id, data FROM message ORDER BY time_created').all() as {
+    id: string; session_id: string; agent_id: string; data: string;
+  }[];
+  const allParts = mimoDb.prepare('SELECT id, message_id, session_id, data FROM part').all() as {
+    id: string; message_id: string; session_id: string; data: string;
+  }[];
+  mimoDb.close();
+
+  // 按 session 分组
+  const msgBySession = new Map<string, typeof allMessages>();
+  const partByMsg = new Map<string, typeof allParts>();
+  for (const m of allMessages) {
+    const arr = msgBySession.get(m.session_id) || [];
+    arr.push(m);
+    msgBySession.set(m.session_id, arr);
+  }
+  for (const p of allParts) {
+    const arr = partByMsg.get(p.message_id) || [];
+    arr.push(p);
+    partByMsg.set(p.message_id, arr);
+  }
+
+  const now = Date.now();
+  let imported = 0;
+  for (const s of sessions) {
+    try {
+      const existing = getExisting.get(s.id);
+      if (existing) continue;
+
+      const msgs = msgBySession.get(s.id) || [];
+      const messages = msgs.map((m) => ({
+        id: m.id,
+        agent_id: m.agent_id,
+        data: JSON.parse(m.data),
+        parts: (partByMsg.get(m.id) || []).map((p) => ({ id: p.id, data: JSON.parse(p.data) })),
+      }));
+
+      const parsed = parseMiMoSession(s, messages as any);
+      if (!parsed) continue;
+
+      const { summary, spans } = analyzeSession(parsed, getPricing, undefined, now);
+      delSpans.run(s.id);
+      delSession.run(s.id);
+      insertSession.run({
+        id: summary.id, name: summary.name ?? null, filePath: summary.filePath,
+        agent: 'mimo-code', startTime: summary.startTime, endTime: summary.endTime ?? null,
+        cwd: summary.cwd ?? null,
+        inputTokens: summary.inputTokens, cacheReadTokens: summary.cacheReadTokens,
+        outputTokens: summary.outputTokens, totalCost: summary.totalCost,
+        messageCount: summary.messageCount, importedAt: now,
+      });
+      for (const sp of spans) {
+        insertSpan.run({
+          id: sp.id, sessionId: sp.sessionId, parentId: sp.parentId ?? null,
+          type: sp.type, name: sp.name, startTime: sp.startTime, endTime: sp.endTime ?? null,
+          inputTokens: sp.inputTokens, cacheCreationTokens: sp.cacheCreationTokens,
+          cacheReadTokens: sp.cacheReadTokens, outputTokens: sp.outputTokens,
+          contextTokens: sp.contextTokens, outputBytes: sp.outputBytes,
+          model: sp.model ?? null, cost: sp.cost, costUnknown: sp.costUnknown ? 1 : 0,
+          stopReason: sp.stopReason ?? null, isError: sp.isError ? 1 : 0,
+          isSidechain: sp.isSidechain ? 1 : 0,
+          metadata: sp.metadata ? JSON.stringify(sp.metadata) : null,
+        });
+      }
+      imported++;
+    } catch (err) {
+      console.warn(`MiMo session ${s.id} parse failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  return { scanned: sessions.length, imported };
 }

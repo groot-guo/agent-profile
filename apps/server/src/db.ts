@@ -86,7 +86,9 @@ db.exec(`
     ('deepseek-v4-pro', 3, 3, 0.025, 6, 0),
     ('DeepSeek-V4-Flash', 1, 1, 0.02, 2, 0),
     ('deepseek-v4-flash-202605', 1, 1, 0.02, 2, 0),
-    ('deepseek-v4-flash-260425', 1, 1, 0.02, 2, 0)
+    ('deepseek-v4-flash-260425', 1, 1, 0.02, 2, 0),
+    ('mimo-v2.5-pro', 3, 3, 0.025, 6, 0),
+    ('mimo-v2.5-pro-ultraspeed', 3, 3, 0.025, 6, 0)
 `);
 
 export function getPricing(model?: string): Pricing | undefined {
