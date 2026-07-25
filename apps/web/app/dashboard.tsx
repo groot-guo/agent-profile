@@ -30,10 +30,12 @@ export function DashboardView({ onSelectSession }: { onSelectSession?: (id: stri
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
-      fetch(`${API}/stats`).then((r) => r.json()),
-      fetch(`${API}/sessions`).then((r) => r.json()),
+      fetch(`${API}/stats`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
+      fetch(`${API}/sessions`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
     ]).then(async ([stats, sessionList]) => {
+      if (cancelled) return;
       setOverview(stats.overview);
       setSessions(sessionList);
 
@@ -57,7 +59,11 @@ export function DashboardView({ onSelectSession }: { onSelectSession?: (id: stri
         .slice(0, 15);
       setToolFreqs(freqs);
       setLoading(false);
+    }).catch((err) => {
+      if (!cancelled) setLoading(false);
+      console.warn('Dashboard load failed:', err instanceof Error ? err.message : err);
     });
+    return () => { cancelled = true; };
   }, []);
 
   if (loading) return <div style={{ padding: 24, color: C.sub, textAlign: 'center' }}>Loading dashboard…</div>;

@@ -593,7 +593,7 @@ function TurnsTable({ turns }: { turns: Span[] }) {
           <tbody>
             {shown.map((t, i) => (
               <tr key={t.id} style={{ borderBottom: `1px solid ${C.borderSoft}`, color: C.text }}>
-                <td style={{ padding: '6px 8px', color: C.mute }}>{i + 1}</td>
+                <td style={{ padding: '6px 8px', color: C.mute }}>{(page - 1) * TABLE_LIMIT + i + 1}</td>
                 <td style={{ padding: '6px 8px' }}>{fmtTime(t.startTime)}</td>
                 <td style={{ padding: '6px 8px' }}>{t.model || '-'}</td>
                 <td style={{ padding: '6px 8px' }}>
@@ -637,7 +637,7 @@ function ToolsTable({ tools }: { tools: Span[] }) {
           <tbody>
             {shown.map((t, i) => (
               <tr key={t.id} style={{ borderBottom: `1px solid ${C.borderSoft}`, color: C.text }}>
-                <td style={{ padding: '6px 8px', color: C.mute }}>{i + 1}</td>
+                <td style={{ padding: '6px 8px', color: C.mute }}>{(page - 1) * TABLE_LIMIT + i + 1}</td>
                 <td style={{ padding: '6px 8px' }}>{t.name}</td>
                 <td style={{ padding: '6px 8px' }}>
                   <span style={{ color: CAT_COLOR[catOf(t.name)] || C.mute }}>{catOf(t.name)}</span>
@@ -781,7 +781,7 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
               display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0',
               borderBottom: `1px solid ${C.borderSoft}`, color: C.text,
             }}>
-              <span style={{ color: C.mute, width: 24, textAlign: 'right', flexShrink: 0 }}>#{tools.length - (showAll ? tools.length - i : tools.length - 50 + i)}</span>
+              <span style={{ color: C.mute, width: 24, textAlign: 'right', flexShrink: 0 }}>#{showAll || tools.length <= 50 ? i + 1 : tools.length - 50 + i + 1}</span>
               <span style={{ width: 50, color: C.sub, flexShrink: 0 }}>{fmtTime(t.startTime)}</span>
               <span style={{
                 padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 600,

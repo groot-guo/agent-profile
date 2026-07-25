@@ -57,90 +57,99 @@ export function registerScanRoutes(app: FastifyInstance) {
     const delSpans = db.prepare('DELETE FROM spans WHERE session_id = ?');
     const delSession = db.prepare('DELETE FROM sessions WHERE id = ?');
     const getExisting = db.prepare('SELECT file_mtime, file_size FROM sessions WHERE id = ?');
-    const tx = db.transaction((rows: Span[]) => {
-      for (const s of rows)
-        insertSpan.run({
-          id: s.id,
-          sessionId: s.sessionId,
-          parentId: s.parentId ?? null,
-          type: s.type,
-          name: s.name,
-          startTime: s.startTime,
-          endTime: s.endTime ?? null,
-          inputTokens: s.inputTokens,
-          cacheCreationTokens: s.cacheCreationTokens,
-          cacheReadTokens: s.cacheReadTokens,
-          outputTokens: s.outputTokens,
-          contextTokens: s.contextTokens,
-          outputBytes: s.outputBytes,
-          model: s.model ?? null,
-          cost: s.cost,
-          costUnknown: s.costUnknown ? 1 : 0,
-          stopReason: s.stopReason ?? null,
-          isError: s.isError ? 1 : 0,
-          isSidechain: s.isSidechain ? 1 : 0,
-          metadata: s.metadata ? JSON.stringify(s.metadata) : null,
+
+    const upsertFile = db.transaction(
+      (parsed: ReturnType<typeof parseTranscript>, mtime: number, size: number, lines: number) => {
+        const existing = getExisting.get(parsed!.sessionId) as
+          | { file_mtime: number; file_size: number }
+          | undefined;
+        if (existing) {
+          delSpans.run(parsed!.sessionId);
+          delSession.run(parsed!.sessionId);
+        }
+        const { summary, spans } = analyzeSession(parsed!, getPricing, { mtime, size, lines }, Date.now());
+        insertSession.run({
+          id: summary.id,
+          name: summary.name ?? null,
+          filePath: summary.filePath,
+          agent: summary.agent,
+          fileMtime: mtime,
+          fileSize: size,
+          fileLines: lines,
+          startTime: summary.startTime,
+          endTime: summary.endTime ?? null,
+          cwd: summary.cwd ?? null,
+          gitBranch: summary.gitBranch ?? null,
+          claudeVersion: summary.claudeVersion ?? null,
+          inputTokens: summary.inputTokens,
+          cacheCreationTokens: summary.cacheCreationTokens,
+          cacheReadTokens: summary.cacheReadTokens,
+          outputTokens: summary.outputTokens,
+          totalCost: summary.totalCost,
+          costUnknownCount: summary.costUnknownCount,
+          peakContextTokens: summary.peakContextTokens,
+          avgContextTokens: summary.avgContextTokens,
+          cacheHitRate: summary.cacheHitRate,
+          messageCount: summary.messageCount,
+          importedAt: summary.importedAt,
         });
-    });
+        for (const s of spans)
+          insertSpan.run({
+            id: s.id,
+            sessionId: s.sessionId,
+            parentId: s.parentId ?? null,
+            type: s.type,
+            name: s.name,
+            startTime: s.startTime,
+            endTime: s.endTime ?? null,
+            inputTokens: s.inputTokens,
+            cacheCreationTokens: s.cacheCreationTokens,
+            cacheReadTokens: s.cacheReadTokens,
+            outputTokens: s.outputTokens,
+            contextTokens: s.contextTokens,
+            outputBytes: s.outputBytes,
+            model: s.model ?? null,
+            cost: s.cost,
+            costUnknown: s.costUnknown ? 1 : 0,
+            stopReason: s.stopReason ?? null,
+            isError: s.isError ? 1 : 0,
+            isSidechain: s.isSidechain ? 1 : 0,
+            metadata: s.metadata ? JSON.stringify(s.metadata) : null,
+          });
+      },
+    );
 
     for (const file of files) {
-      const st = statSync(file);
-      const mtime = st.mtimeMs,
-        size = st.size;
-      const entries = await readTranscript(file);
-      const lines = entries.length;
-      const agent = detectAgent(file);
-      const parsed = agent === 'codex'
-        ? parseCodexTranscript(entries as any, { filePath: file })
-        : parseTranscript(entries, { filePath: file, agent });
-      if (!parsed) {
-        skipped++;
-        continue;
-      }
+      try {
+        const st = statSync(file);
+        const mtime = st.mtimeMs,
+          size = st.size;
+        const entries = await readTranscript(file);
+        const lines = entries.length;
+        const agent = detectAgent(file);
+        const parsed = agent === 'codex'
+          ? parseCodexTranscript(entries as any, { filePath: file })
+          : parseTranscript(entries, { filePath: file, agent });
+        if (!parsed) {
+          skipped++;
+          continue;
+        }
 
-      const existing = getExisting.get(parsed.sessionId) as
-        | { file_mtime: number; file_size: number }
-        | undefined;
-      if (existing && existing.file_mtime === mtime && existing.file_size === size) {
-        skipped++;
-        continue; // 未变
-      }
-      if (existing) {
-        delSpans.run(parsed.sessionId);
-        delSession.run(parsed.sessionId);
-        updated++;
-      } else {
-        imported++;
-      }
+        const existing = getExisting.get(parsed.sessionId) as
+          | { file_mtime: number; file_size: number }
+          | undefined;
+        if (existing && existing.file_mtime === mtime && existing.file_size === size) {
+          skipped++;
+          continue;
+        }
+        if (existing) updated++;
+        else imported++;
 
-      const { summary, spans } = analyzeSession(parsed, getPricing, { mtime, size, lines }, Date.now());
-      insertSession.run({
-        id: summary.id,
-        name: summary.name ?? null,
-        filePath: summary.filePath,
-        agent: summary.agent,
-        fileMtime: mtime,
-        fileSize: size,
-        fileLines: lines,
-        startTime: summary.startTime,
-        endTime: summary.endTime ?? null,
-        cwd: summary.cwd ?? null,
-        gitBranch: summary.gitBranch ?? null,
-        claudeVersion: summary.claudeVersion ?? null,
-        inputTokens: summary.inputTokens,
-        cacheCreationTokens: summary.cacheCreationTokens,
-        cacheReadTokens: summary.cacheReadTokens,
-        outputTokens: summary.outputTokens,
-        totalCost: summary.totalCost,
-        costUnknownCount: summary.costUnknownCount,
-        peakContextTokens: summary.peakContextTokens,
-        avgContextTokens: summary.avgContextTokens,
-        cacheHitRate: summary.cacheHitRate,
-        messageCount: summary.messageCount,
-        importedAt: summary.importedAt,
-      });
-      tx(spans);
-      sessionIds.push(summary.id);
+        upsertFile(parsed, mtime, size, lines);
+        sessionIds.push(parsed.sessionId);
+      } catch (err) {
+        console.warn(`Scan: skip ${file}: ${err instanceof Error ? err.message : err}`);
+      }
     }
 
     const result: ScanResult = { scanned: files.length, imported, skipped, updated, sessionIds };
@@ -323,31 +332,34 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
 
       const { summary, spans } = analyzeSession(parsed, getPricing, undefined, now);
 
-      delSpans.run(t.id);
-      delSession.run(t.id);
-      insertSession.run({
-        id: summary.id,
-        name: summary.name ?? null,
-        filePath: summary.filePath,
-        agent: 'zed',
-        startTime: summary.startTime,
-        endTime: summary.endTime ?? null,
-        cwd: summary.cwd ?? null,
-        importedAt: now,
-      });
-      for (const s of spans) {
-        insertSpan.run({
-          id: s.id, sessionId: s.sessionId, parentId: s.parentId ?? null,
-          type: s.type, name: s.name, startTime: s.startTime, endTime: s.endTime ?? null,
-          inputTokens: s.inputTokens, cacheCreationTokens: s.cacheCreationTokens,
-          cacheReadTokens: s.cacheReadTokens, outputTokens: s.outputTokens,
-          contextTokens: s.contextTokens, outputBytes: s.outputBytes,
-          model: s.model ?? null, cost: s.cost, costUnknown: s.costUnknown ? 1 : 0,
-          stopReason: s.stopReason ?? null, isError: s.isError ? 1 : 0,
-          isSidechain: s.isSidechain ? 1 : 0,
-          metadata: s.metadata ? JSON.stringify(s.metadata) : null,
+      const upsertZed = db.transaction(() => {
+        delSpans.run(t.id);
+        delSession.run(t.id);
+        insertSession.run({
+          id: summary.id,
+          name: summary.name ?? null,
+          filePath: summary.filePath,
+          agent: 'zed',
+          startTime: summary.startTime,
+          endTime: summary.endTime ?? null,
+          cwd: summary.cwd ?? null,
+          importedAt: now,
         });
-      }
+        for (const s of spans) {
+          insertSpan.run({
+            id: s.id, sessionId: s.sessionId, parentId: s.parentId ?? null,
+            type: s.type, name: s.name, startTime: s.startTime, endTime: s.endTime ?? null,
+            inputTokens: s.inputTokens, cacheCreationTokens: s.cacheCreationTokens,
+            cacheReadTokens: s.cacheReadTokens, outputTokens: s.outputTokens,
+            contextTokens: s.contextTokens, outputBytes: s.outputBytes,
+            model: s.model ?? null, cost: s.cost, costUnknown: s.costUnknown ? 1 : 0,
+            stopReason: s.stopReason ?? null, isError: s.isError ? 1 : 0,
+            isSidechain: s.isSidechain ? 1 : 0,
+            metadata: s.metadata ? JSON.stringify(s.metadata) : null,
+          });
+        }
+      });
+      upsertZed();
       imported++;
     } catch (err) {
       console.warn(`Zed thread ${t.id} parse failed: ${err instanceof Error ? err.message : err}`);
@@ -436,31 +448,34 @@ export async function scanMiMoSessions(): Promise<{ scanned: number; imported: n
       if (!parsed) continue;
 
       const { summary, spans } = analyzeSession(parsed, getPricing, undefined, now);
-      delSpans.run(s.id);
-      delSession.run(s.id);
-      insertSession.run({
-        id: summary.id, name: summary.name ?? null, filePath: summary.filePath,
-        agent: 'mimo-code', startTime: summary.startTime, endTime: summary.endTime ?? null,
-        cwd: summary.cwd ?? null,
-        inputTokens: summary.inputTokens, cacheCreationTokens: summary.cacheCreationTokens,
-        cacheReadTokens: summary.cacheReadTokens, outputTokens: summary.outputTokens,
-        totalCost: summary.totalCost, costUnknownCount: summary.costUnknownCount,
-        peakContextTokens: summary.peakContextTokens, avgContextTokens: summary.avgContextTokens,
-        cacheHitRate: summary.cacheHitRate, messageCount: summary.messageCount, importedAt: now,
-      });
-      for (const sp of spans) {
-        insertSpan.run({
-          id: sp.id, sessionId: sp.sessionId, parentId: sp.parentId ?? null,
-          type: sp.type, name: sp.name, startTime: sp.startTime, endTime: sp.endTime ?? null,
-          inputTokens: sp.inputTokens, cacheCreationTokens: sp.cacheCreationTokens,
-          cacheReadTokens: sp.cacheReadTokens, outputTokens: sp.outputTokens,
-          contextTokens: sp.contextTokens, outputBytes: sp.outputBytes,
-          model: sp.model ?? null, cost: sp.cost, costUnknown: sp.costUnknown ? 1 : 0,
-          stopReason: sp.stopReason ?? null, isError: sp.isError ? 1 : 0,
-          isSidechain: sp.isSidechain ? 1 : 0,
-          metadata: sp.metadata ? JSON.stringify(sp.metadata) : null,
+      const upsertMiMo = db.transaction(() => {
+        delSpans.run(s.id);
+        delSession.run(s.id);
+        insertSession.run({
+          id: summary.id, name: summary.name ?? null, filePath: summary.filePath,
+          agent: 'mimo-code', startTime: summary.startTime, endTime: summary.endTime ?? null,
+          cwd: summary.cwd ?? null,
+          inputTokens: summary.inputTokens, cacheCreationTokens: summary.cacheCreationTokens,
+          cacheReadTokens: summary.cacheReadTokens, outputTokens: summary.outputTokens,
+          totalCost: summary.totalCost, costUnknownCount: summary.costUnknownCount,
+          peakContextTokens: summary.peakContextTokens, avgContextTokens: summary.avgContextTokens,
+          cacheHitRate: summary.cacheHitRate, messageCount: summary.messageCount, importedAt: now,
         });
-      }
+        for (const sp of spans) {
+          insertSpan.run({
+            id: sp.id, sessionId: sp.sessionId, parentId: sp.parentId ?? null,
+            type: sp.type, name: sp.name, startTime: sp.startTime, endTime: sp.endTime ?? null,
+            inputTokens: sp.inputTokens, cacheCreationTokens: sp.cacheCreationTokens,
+            cacheReadTokens: sp.cacheReadTokens, outputTokens: sp.outputTokens,
+            contextTokens: sp.contextTokens, outputBytes: sp.outputBytes,
+            model: sp.model ?? null, cost: sp.cost, costUnknown: sp.costUnknown ? 1 : 0,
+            stopReason: sp.stopReason ?? null, isError: sp.isError ? 1 : 0,
+            isSidechain: sp.isSidechain ? 1 : 0,
+            metadata: sp.metadata ? JSON.stringify(sp.metadata) : null,
+          });
+        }
+      });
+      upsertMiMo();
       imported++;
     } catch (err) {
       console.warn(`MiMo session ${s.id} parse failed: ${err instanceof Error ? err.message : err}`);

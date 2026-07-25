@@ -43,17 +43,17 @@ interface DistributionData {
   agentDistribution: { agent: string; count: number; tokens: number }[];
 }
 
-function extractModel(sessions: { id: string }[]): Map<string, { count: number; tokens: number; cost: number }> {
-  const models = new Map<string, { count: number; tokens: number; cost: number }>();
+function extractModel(sessions: { id: string }[]): Map<string, { count: number; inputTokens: number; outputTokens: number; cost: number }> {
+  const models = new Map<string, { count: number; inputTokens: number; outputTokens: number; cost: number }>();
   for (const s of sessions) {
     const rows = db
-      .prepare(`SELECT model, input_tokens + cache_creation_tokens + cache_read_tokens + output_tokens as tokens, cost FROM spans WHERE session_id = ? AND type = 'llm_turn'`)
-      .all(s.id) as { model?: string; tokens: number; cost: number }[];
+      .prepare(`SELECT model, input_tokens + cache_creation_tokens + cache_read_tokens as inputTokens, output_tokens as outputTokens, cost FROM spans WHERE session_id = ? AND type = 'llm_turn'`)
+      .all(s.id) as { model?: string; inputTokens: number; outputTokens: number; cost: number }[];
     for (const r of rows) {
       const m = r.model || 'unknown';
       const entry = models.get(m);
-      if (entry) { entry.count++; entry.tokens += r.tokens; entry.cost += r.cost; }
-      else models.set(m, { count: 1, tokens: r.tokens, cost: r.cost });
+      if (entry) { entry.count++; entry.inputTokens += r.inputTokens; entry.outputTokens += r.outputTokens; entry.cost += r.cost; }
+      else models.set(m, { count: 1, inputTokens: r.inputTokens, outputTokens: r.outputTokens, cost: r.cost });
     }
   }
   return models;
@@ -155,7 +155,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
     // By model (from spans)
     const modelMap = extractModel(sessions as { id: string }[]);
     const byModel: ModelStats[] = [...modelMap.entries()].map(([model, e]) => ({
-      model, sessions: e.count, totalInputTokens: e.tokens, totalOutputTokens: 0, totalCost: e.cost,
+      model, sessions: e.count, totalInputTokens: e.inputTokens, totalOutputTokens: e.outputTokens, totalCost: e.cost,
     })).sort((a, b) => b.sessions - a.sessions);
 
     // Distributions
@@ -183,7 +183,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
     ]);
 
     const modelDist = [...modelMap.entries()].map(([model, e]) => ({
-      model, count: e.count, tokens: e.tokens,
+      model, count: e.count, tokens: e.inputTokens + e.outputTokens,
     })).sort((a, b) => b.count - a.count);
 
     const agentDist = [...agentMap.entries()].map(([agent, e]) => ({
