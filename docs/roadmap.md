@@ -14,8 +14,10 @@ Task IDs (T5–T15) map to task system (#5–#15).
 | P2.19 LLM interface reserved (designed, not implemented)      | interface done / impl pending |
 | UI light theme + paginated tables + project grouping (by cwd) | done                          |
 | pricing seed (DeepSeek) + typecheck fix                       | done                          |
-| data source                                                   | Claude Code only              |
+| data source                                                   | Claude Code + Codex           |
 | Architecture refactor (async scanner, DB abs path, routes split, config/theme extraction, auto-scan) | done |
+| IDE-style UI (sidebar project tree + dashboard + embed detail) | done |
+| @lobehub/icons (agent & model SVG icons)                      | done |
 
 ## Batch 1 · Multi-Agent Data Ingestion
 
