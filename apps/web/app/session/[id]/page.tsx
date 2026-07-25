@@ -3,7 +3,7 @@
 import type { DiagnosisResult, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
 import { getAgentIcon } from '../../icons';
 import { C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, SEV_COLOR } from '../../theme';
@@ -17,6 +17,7 @@ interface ContextPoint {
   inputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
+  outputTokens?: number;
   model?: string;
   contextWindow: number | null;
 }
@@ -257,13 +258,38 @@ function TokenBar({ input, cc, cr, out }: { input: number; cc: number; cr: numbe
 function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[] }) {
   if (points.length === 0) return <div style={{ color: C.sub, fontSize: 12 }}>无数据</div>;
   const W = 1000,
-    H = 240,
-    PAD = 44;
+    H = 260,
+    PAD = 50;
   const peak = Math.max(...points.map((p) => p.contextTokens));
   const window = points[0].contextWindow;
   const maxCtx = Math.max(peak, ...(window ? [window] : [0])) * 1.08 || 1;
   const x = (i: number) => PAD + (i / (points.length - 1 || 1)) * (W - PAD * 2);
   const y = (v: number) => H - PAD - (v / maxCtx) * (H - PAD * 2);
+
+  // Hover state
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    // Find nearest point
+    let nearest = 0;
+    let minDist = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const dist = Math.abs(x(i) - mouseX);
+      if (dist < minDist) { minDist = dist; nearest = i; }
+    }
+    // Only show if within chart area
+    if (mouseX >= PAD - 10 && mouseX <= W - PAD + 10) {
+      setHoverIdx(nearest);
+    } else {
+      setHoverIdx(null);
+    }
+  };
 
   // Spike detection
   const spikes: { turnIdx: number; delta: number; tools: Span[]; cx: number; cy: number }[] = [];
@@ -311,9 +337,12 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
   return (
     <div>
       <svg
+        ref={svgRef}
         width="100%"
         viewBox={`0 0 ${W} ${H}`}
-        style={{ background: C.card, borderRadius: 6, border: `1px solid ${C.borderSoft}` }}
+        style={{ background: C.card, borderRadius: 6, border: `1px solid ${C.borderSoft}`, cursor: 'crosshair' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoverIdx(null)}
       >
         {/* 网格线 */}
         {[0.25, 0.5, 0.75].map((f) => (
@@ -350,6 +379,52 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
         <path d={area(inTop, ccTop)} fill={C.input} fillOpacity={0.22} />
         {/* 顶层线 */}
         <path d={linePath} fill="none" stroke={C.input} strokeWidth={1.5} />
+        {/* Hover crosshair + tooltip */}
+        {hoverIdx !== null && (() => {
+          const p = points[hoverIdx];
+          const hx = x(hoverIdx);
+          const hy = y(p.contextTokens);
+          const totalInput = p.inputTokens + p.cacheCreationTokens + p.cacheReadTokens;
+          const tooltipW = 200, tooltipH = 90;
+          const tipX = hx + 12 + tooltipW > W ? hx - tooltipW - 12 : hx + 12;
+          const tipY = Math.max(10, hy - tooltipH / 2);
+          return (
+            <g>
+              {/* 竖线十字线 */}
+              <line x1={hx} y1={PAD} x2={hx} y2={H - PAD} stroke={C.mute} strokeWidth={1} strokeDasharray="4 3" opacity={0.5} />
+              {/* 数据点圆 */}
+              <circle cx={hx} cy={hy} r={5} fill={C.input} stroke={C.card} strokeWidth={2} />
+              {/* Tooltip 背景 */}
+              <rect x={tipX} y={tipY} width={tooltipW} height={tooltipH} rx={5} fill={C.card} stroke={C.border} strokeWidth={1} opacity={0.96} />
+              {/* Tooltip 内容 */}
+              <text x={tipX + 10} y={tipY + 18} fill={C.sub} fontSize={11} fontWeight={600}>
+                Turn {hoverIdx + 1} · {fmtTime(p.startTime)}
+              </text>
+              <text x={tipX + 10} y={tipY + 36} fill={C.text} fontSize={12} fontWeight={700}>
+                上下文 {fmtTokens(p.contextTokens)}
+              </text>
+              <text x={tipX + 10} y={tipY + 52} fill={C.sub} fontSize={11}>
+                <tspan fill={C.input}>input {fmtTokens(p.inputTokens)}</tspan>
+                {' + '}
+                <tspan fill={C.cc}>cc {fmtTokens(p.cacheCreationTokens)}</tspan>
+                {' + '}
+                <tspan fill={C.cr}>cr {fmtTokens(p.cacheReadTokens)}</tspan>
+              </text>
+              <text x={tipX + 10} y={tipY + 68} fill={C.sub} fontSize={11}>
+                总输入 {fmtTokens(totalInput)} · 输出 {fmtTokens(p.outputTokens ?? 0)}
+              </text>
+              {p.contextWindow && (
+                <text x={tipX + 10} y={tipY + 82} fill={C.sub} fontSize={10}>
+                  窗口利用率 {((p.contextTokens / p.contextWindow) * 100).toFixed(1)}%
+                </text>
+              )}
+            </g>
+          );
+        })()}
+        {/* 悬停时的高亮点（所有数据点） */}
+        {hoverIdx !== null && points.map((p, i) => (
+          <circle key={`dot-${i}`} cx={x(i)} cy={y(p.contextTokens)} r={i === hoverIdx ? 5 : 2} fill={i === hoverIdx ? C.input : C.mute} opacity={0.6} />
+        ))}
         {/* Spike markers */}
         {spikes.map((sp, idx) => (
           <g key={`spike-${idx}`}>
