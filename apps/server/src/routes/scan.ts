@@ -46,7 +46,7 @@ export function registerScanRoutes(app: FastifyInstance) {
         @cacheHitRate, @messageCount, @importedAt)
     `);
     const insertSpan = db.prepare(`
-      INSERT INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
+      INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
         input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
         output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
       VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
@@ -163,7 +163,7 @@ export async function autoScan(dir: string) {
       @cacheHitRate, @messageCount, @importedAt)
   `);
   const insertSpan = db.prepare(`
-    INSERT INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
+    INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
       input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
       output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
     VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
@@ -279,7 +279,7 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
     VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @importedAt)
   `);
   const insertSpan = db.prepare(`
-    INSERT OR IGNORE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
+    INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
       input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
       output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
     VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
