@@ -1,4 +1,4 @@
-import { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, calcEfficiencyScore, diagnoseSessionSync, type SessionDetail, type SessionSummary } from '@agent-profile/core';
+import { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, analyzeToolParams, calcEfficiencyScore, diagnoseSessionSync, type SessionDetail, type SessionSummary } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import { db, getModelContext, getPricing } from '../db';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
@@ -137,6 +137,18 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
       .all(req.params.id) as Record<string, unknown>[];
     return analyzePerformance(rows.map(parseSpanRow));
+  });
+
+  // 工具参数分析
+  app.get<{ Params: { id: string } }>('/api/session/:id/tool-params', async (req, reply) => {
+    const session = db
+      .prepare(`SELECT id FROM sessions WHERE id = ?`)
+      .get(req.params.id) as { id: string } | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    const rows = db
+      .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
+      .all(req.params.id) as Record<string, unknown>[];
+    return analyzeToolParams(rows.map(parseSpanRow));
   });
 
   // 数据导出

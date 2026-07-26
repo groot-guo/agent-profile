@@ -1,6 +1,6 @@
 export { AGENT_LABELS, detectAgent } from './agent';
-export { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, analyzeSession, calcEfficiencyScore } from './analyzer';
-export type { EfficiencyScore } from './analyzer';
+export { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, analyzeSession, analyzeToolParams, calcEfficiencyScore } from './analyzer';
+export type { EfficiencyScore, ToolParamAnalysis } from './analyzer';
 export type {
   DiagnoseOptions,
   DiagnosisFinding,

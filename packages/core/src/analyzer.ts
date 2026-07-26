@@ -390,3 +390,90 @@ export function analyzePerformance(spans: Span[]): PerformanceMetrics {
 
   return { turnLatency, toolLatency, toolLatencyByName, slowTurns, throughput, sessionDuration };
 }
+
+// ===== 工具参数分析 =====
+
+const BASH_CMD_MAP: [RegExp, string][] = [
+  [/^(ls|ll|dir)\b/, 'list'],
+  [/^find\b/, 'find'],
+  [/^grep\b/, 'grep'],
+  [/^cd\b/, 'cd'],
+  [/^(git|gh)\b/, 'git'],
+  [/^(npm|pnpm|yarn|npx)\b/, 'npm'],
+  [/^(cat|head|tail)\b/, 'cat'],
+  [/^(echo|printf)\b/, 'echo'],
+  [/^(mkdir|touch|rm|mv|cp|chmod)\b/, 'fs'],
+  [/^(python|python3|node|ts-node|tsx|go|rustc|cargo)\b/, 'run'],
+  [/^(curl|wget)\b/, 'curl'],
+  [/^(test|vitest|jest|mocha|pytest|cargo test|go test)\b/, 'test'],
+  [/^(ps|kill|top|htop)\b/, 'process'],
+  [/^(docker|kubectl)\b/, 'container'],
+  [/^(sed|awk|jq|cut|sort|uniq|wc)\b/, 'text'],
+];
+
+function classifyBash(cmd: string): string {
+  const trimmed = cmd.trim();
+  for (const [re, cat] of BASH_CMD_MAP) {
+    if (re.test(trimmed)) return cat;
+  }
+  return 'other';
+}
+
+export interface ToolParamAnalysis {
+  bashCategories: { category: string; count: number }[];
+  readParamStats: { withLimit: number; withoutLimit: number; avgLimit?: number };
+  frequentPairs: { pair: string; count: number }[];
+}
+
+export function analyzeToolParams(spans: Span[]): ToolParamAnalysis {
+  const tools = spans.filter((s) => s.type === 'tool_call').sort((a, b) => a.startTime - b.startTime);
+
+  // Bash command classification
+  const bashCats = new Map<string, number>();
+  for (const t of tools) {
+    if (t.name !== 'Bash') continue;
+    const input = t.metadata?.input;
+    if (typeof input !== 'string') continue;
+    try {
+      const obj = JSON.parse(input) as Record<string, unknown>;
+      const cmd = typeof obj.command === 'string' ? obj.command : typeof obj.description === 'string' ? obj.description : '';
+      if (cmd) {
+        const cat = classifyBash(cmd);
+        bashCats.set(cat, (bashCats.get(cat) || 0) + 1);
+      }
+    } catch { /* skip */ }
+  }
+  const bashCategories = [...bashCats.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
+
+  // Read parameter stats
+  let withLimit = 0, withoutLimit = 0, totalLimit = 0, limitCount = 0;
+  for (const t of tools) {
+    if (t.name !== 'Read' && t.name !== 'read_file') continue;
+    const input = t.metadata?.input;
+    if (typeof input !== 'string') continue;
+    try {
+      const obj = JSON.parse(input) as { limit?: number; offset?: number };
+      if (obj.limit != null && obj.limit > 0) { withLimit++; totalLimit += obj.limit; limitCount++; }
+      else withoutLimit++;
+    } catch { /* skip */ }
+  }
+  const readParamStats = {
+    withLimit, withoutLimit,
+    avgLimit: limitCount > 0 ? Math.round(totalLimit / limitCount) : undefined,
+  };
+
+  // Frequent tool pairs (consecutive tools)
+  const pairCount = new Map<string, number>();
+  for (let i = 1; i < tools.length; i++) {
+    const pair = `${tools[i - 1].name} → ${tools[i].name}`;
+    pairCount.set(pair, (pairCount.get(pair) || 0) + 1);
+  }
+  const frequentPairs = [...pairCount.entries()]
+    .map(([pair, count]) => ({ pair, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
+  return { bashCategories, readParamStats, frequentPairs };
+}

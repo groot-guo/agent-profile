@@ -1,6 +1,6 @@
 'use client';
 
-import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, EfficiencyScore, PerformanceMetrics, SessionDetail, Span } from '@agent-profile/core';
+import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, EfficiencyScore, PerformanceMetrics, SessionDetail, Span, ToolParamAnalysis } from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -35,6 +35,7 @@ export default function SessionPage() {
   const [score, setScore] = useState<EfficiencyScore | null>(null);
   const [commits, setCommits] = useState<{ hash: string; message: string; date: string; author: string }[]>([]);
   const [perf, setPerf] = useState<PerformanceMetrics | null>(null);
+  const [toolParams, setToolParams] = useState<ToolParamAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -53,8 +54,9 @@ export default function SessionPage() {
       fetch(`${API}/session/${id}/score`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/commits`).then((r) => (r.ok ? r.json() : Promise.resolve({ commits: [] }))),
       fetch(`${API}/session/${id}/performance`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/session/${id}/tool-params`).then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([d, c, dg, ef, ca, sc, cm, pf]) => {
+      .then(([d, c, dg, ef, ca, sc, cm, pf, tp]) => {
         setData(d);
         setCtx(c);
         setDiag(dg);
@@ -63,6 +65,7 @@ export default function SessionPage() {
         setScore(sc);
         if (cm?.commits) setCommits(cm.commits);
         setPerf(pf);
+        setToolParams(tp);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
@@ -170,6 +173,45 @@ export default function SessionPage() {
       )}
       {perf && (
         <PerformancePanel metrics={perf} />
+      )}
+      {toolParams && (
+        <Card title="工具参数模式">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, fontSize: 11 }}>
+            {/* Bash categories */}
+            {toolParams.bashCategories.length > 0 && (
+              <div>
+                <div style={{ color: C.sub, fontWeight: 600, marginBottom: 4 }}>Bash 命令分类</div>
+                {toolParams.bashCategories.map((b) => (
+                  <div key={b.category} style={{ display: 'flex', justifyContent: 'space-between', color: C.text, padding: '1px 0' }}>
+                    <span>{b.category}</span>
+                    <span style={{ color: C.sub }}>{b.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Read params */}
+            <div>
+              <div style={{ color: C.sub, fontWeight: 600, marginBottom: 4 }}>Read 参数</div>
+              <div style={{ color: C.text }}>有限制: {toolParams.readParamStats.withLimit}</div>
+              <div style={{ color: C.text }}>无限制: {toolParams.readParamStats.withoutLimit}</div>
+              {toolParams.readParamStats.avgLimit != null && (
+                <div style={{ color: C.sub }}>均 limit: {toolParams.readParamStats.avgLimit}</div>
+              )}
+            </div>
+            {/* Frequent pairs */}
+            {toolParams.frequentPairs.length > 0 && (
+              <div>
+                <div style={{ color: C.sub, fontWeight: 600, marginBottom: 4 }}>高频工具组合</div>
+                {toolParams.frequentPairs.slice(0, 5).map((p) => (
+                  <div key={p.pair} style={{ display: 'flex', justifyContent: 'space-between', color: C.text, padding: '1px 0' }}>
+                    <span>{p.pair}</span>
+                    <span style={{ color: C.sub }}>x{p.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
       )}
       <Card title={`工具调用次数${mainTools.length < allTools.length ? '（主链路，不含子 agent）' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
