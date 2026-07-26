@@ -5,9 +5,10 @@ local session data from Claude Code, Codex, Zed, and MiMo, reconstructs token,
 context, cost, duration, tool, and sub-agent activity, then turns that evidence
 into process-efficiency and reliability analysis.
 
-The current product is session-centric. The proposed evolution toward
-Task/Outcome/Configuration-aware runtime feedback is documented separately in
-`docs/agent-runtime-profile-design.md`.
+The runtime evidence is currently session-centric. The product also offers an
+ephemeral prompt-structure review, while the proposed evolution toward
+Task/Outcome/Configuration-aware experiments and validated runtime feedback is
+documented separately in `docs/agent-runtime-profile-design.md`.
 
 ## Quick start
 
@@ -40,6 +41,9 @@ depends on which agent data exists on the machine.
   model/context statistics; update pricing and recompute stored costs.
 - Compare versioned Agent process profiles across resource use, context,
   tool reliability, and sidechain behavior with sample and coverage limits.
+- Review prompt structure locally across goal, scope, acceptance, constraints,
+  context, and verification; optionally combine an Agent profile into guarded
+  iteration hypotheses without storing the prompt or calling an LLM.
 - Export session data and reports for later review.
 
 The Agent profile view is a runtime fingerprint, not a leaderboard. These
@@ -57,6 +61,11 @@ local agent data
   → SQLite
   → Fastify API (session evidence + agent-profile/v1)
   → Next.js session / profile views
+
+prompt text
+  → ephemeral deterministic checks (no database / no semantic provider)
+  → prompt-review/v1 + iteration-hints/v1
+  → Next.js prompt-review bench
 ```
 
 ## Repository

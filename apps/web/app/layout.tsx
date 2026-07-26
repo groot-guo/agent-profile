@@ -94,6 +94,16 @@ const GLOBAL_CSS = `
   /* 按钮 hover 轻浮起 */
   .ap-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-lift); }
 
+  @media (max-width: 760px) {
+    .prompt-review-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  }
+  @media (max-width: 470px) {
+    .app-header { padding-inline: 10px !important; gap: 8px !important; }
+    .app-brand-label { display: none; }
+    .app-nav-link { padding-inline: 9px !important; }
+    .prompt-review-controls { grid-template-columns: minmax(0, 1fr) !important; }
+  }
+
   /* data-tip 悬浮提示(内容区用;overflow:hidden 容器内改用原生 title) */
   [data-tip] { position: relative; }
   [data-tip]:hover::after {
@@ -126,12 +136,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
           (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
             document.documentElement.setAttribute('data-theme', theme);
           })();
-        `}} />
+        `,
+          }}
+        />
         <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
       </head>
       <body>

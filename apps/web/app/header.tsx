@@ -8,6 +8,7 @@ import { ThemeToggle } from './theme-toggle';
 const NAV = [
   { href: '/', label: '会话' },
   { href: '/profiles', label: '画像' },
+  { href: '/prompt-review', label: '迭代' },
   { href: '/stats', label: '统计' },
 ];
 
@@ -18,6 +19,7 @@ export function Header() {
   if (searchParams.get('embed') === '1') return null;
   return (
     <header
+      className="app-header"
       style={{
         height: 'var(--header-h)',
         padding: '0 20px',
@@ -41,6 +43,7 @@ export function Header() {
         }}
       >
         <span
+          className="app-brand-label"
           style={{
             width: 22,
             height: 22,
@@ -70,13 +73,14 @@ export function Header() {
           Agent Profile
         </span>
       </Link>
-      <nav style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+      <nav className="app-nav" style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
         {NAV.map((n) => {
           const active = n.href === '/' ? pathname === '/' : pathname.startsWith(n.href);
           return (
             <Link
               key={n.href}
               href={n.href}
+              className="app-nav-link"
               style={{
                 padding: '4px 12px',
                 borderRadius: R.pill,

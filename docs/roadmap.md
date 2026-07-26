@@ -596,6 +596,113 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - design decision: the page uses comparable runtime-signature rails and
     evidence coverage instead of a total score or leaderboard
 
+### T42 prompt-structure review and evidence-backed iteration hints
+
+- status: completed
+- purpose: help people and Agent Runtimes improve prompt/configuration inputs
+  without storing raw prompts by default or claiming that process correlations
+  prove a prompt caused the observed behavior
+- scope:
+  1. define a versioned, deterministic prompt-structure review contract for
+     goal, scope, acceptance, constraints, context, and verification
+  2. analyze prompt text ephemerally with bounded evidence excerpts and no
+     database persistence or semantic-provider dependency
+  3. combine optional Agent Profile evidence with prompt gaps to produce
+     prioritized iteration hints, confidence, guardrails, and evidence sources
+  4. expose one local API endpoint for prompt review and optional
+     Agent-specific iteration hints with runtime request validation and size
+     limits
+  5. add a human prompt-review page that states privacy/retention boundaries and
+     returns clauses to consider rather than silently rewriting the prompt
+  6. document which checks are deterministic heuristics, which hints are
+     correlations, and how a future Outcome closes the validation loop
+- affected:
+  - `docs/roadmap.md`
+  - `AGENTS.md`
+  - `ARCHITECTURE.md`
+  - `README.md`
+  - `docs/agent-runtime-profile-design.md`
+  - `docs/zh/OVERVIEW.md`
+  - `packages/core/src/prompt-review.ts` (new)
+  - `packages/core/src/index.ts`
+  - related core tests
+  - `apps/server/src/routes/prompt-review.ts` (new)
+  - `apps/server/src/routes/index.ts`
+  - related server tests
+  - `apps/web/app/prompt-review/page.tsx` (new)
+  - `apps/web/app/header.tsx`
+  - `apps/web/app/layout.tsx`
+- acceptance:
+  - `prompt-review/v1` returns six named checks with present/partial/missing
+    status, bounded evidence, concrete clause suggestions, and explicit limits
+  - raw prompt text and review results are not written to SQLite, logs, or
+    response echoes; the API rejects empty and over-limit input
+  - review remains deterministic and available without any LLM configuration
+  - combined hints cite prompt checks and/or Agent Profile metrics, distinguish
+    correlation from causality, and require Outcome validation before a
+    recommendation is treated as proven
+  - the UI clearly states local ephemeral processing and lets users choose
+    whether to combine an observed Agent profile
+  - core/server tests, typecheck, changed-file lint, production build, privacy
+    scan, and documentation consistency checks pass
+- risks:
+  - keyword heuristics can miss semantically valid clauses or match incidental
+    words; status and confidence must remain conservative
+  - returning long excerpts can leak prompt content into browser history or
+    logs; excerpts must be short, opt-in within the response, and never logged
+  - process metrics may reflect task complexity rather than prompt quality;
+    combined hints must retain causal and Outcome guardrails
+- documentation plan:
+  - update current architecture and user docs with the implemented ephemeral
+    review/hint flow and non-retention promise
+  - update the future design doc to mark the structural-review portion of the
+    prompt boundary as implemented without claiming experiments/Outcome exist
+  - record exact validation, privacy checks, and remaining limitations here
+    before marking T42 completed
+- verification:
+  - `pnpm test` — passed: core 140/140 tests; server 17/17 tests
+  - `pnpm build` — passed: Core and Server TypeScript plus the Next.js
+    production build; `/prompt-review` is included as a static route
+  - changed-source Biome check — passed for eight T42 Core, Server, and Web
+    files; `apps/web/app/layout.tsx` was formatted and production-built, while
+    its two pre-existing inline-theme `noDangerouslySetInnerHtml` findings
+    remain explicitly owned by T44
+  - deterministic Core tests — passed for all six checks, conservative status,
+    no default raw-text echo, opt-in secret redaction, 140-character excerpt
+    bounds, 20,000-character request limit, and combined runtime evidence
+  - API tests — passed for ephemeral/non-persistent review, whitespace and
+    oversized rejection, optional known-Agent combination, unknown-Agent 404,
+    and opt-in redacted evidence
+  - privacy source scan — no prompt-review SQL mutation or logging call found;
+    tests also confirm table names remain unchanged and the default response
+    does not echo a unique raw prompt marker
+  - browser UI verification — the production `/prompt-review` page rendered at
+    1280px with all four navigation links, privacy boundaries, evidence opt-in,
+    optional Agent selector, and no horizontal overflow
+  - responsive static verification — at 760px the two-column review bench
+    collapses to one column; at 470px the brand label is hidden, nav padding is
+    reduced, and form controls stack
+  - `git diff --check`, `CLAUDE.md -> AGENTS.md` canonical symlink check, and
+    prompt-review schema/API documentation scans — passed
+- completion:
+  - completed_at: 2026-07-26
+  - contracts: `prompt-review/v1` for six deterministic structural checks and
+    `iteration-hints/v1` for prioritized, source-labeled hypotheses
+  - retention: request text is processed only in memory, not written to the
+    current five-table SQLite model or application logs, and no semantic
+    provider is invoked
+  - evidence: omitted by default; opt-in excerpts are secret-redacted, limited
+    to two per check, and bounded to 140 characters each
+  - result: a person can use `/prompt-review`, while an Agent Runtime can call
+    `POST /api/prompt-review`, optionally selecting an observed Agent profile
+    to receive combined structural/runtime hypotheses
+  - limitation: keyword/heading checks can miss implicit meaning or match
+    incidental text, Agent comparisons do not control task complexity, and no
+    Task Outcome exists yet; every hint therefore remains an experiment to
+    validate rather than a proven optimization
+  - design decision: expose clause suggestions and evidence sources without a
+    prompt score or automatic rewrite
+
 ### T44 repository lint baseline cleanup
 
 - status: planned
@@ -615,8 +722,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ## Execution Order
 
-T5–T15 and T36–T41 are complete. T42 is next and has not started. T44 remains a
-separate lint-debt task and must not be folded into feature work.
+T5–T15 and T36–T42 are complete. T43 is next and must receive its own explicit
+plan before implementation. T44 remains a separate lint-debt task and must not
+be folded into feature work.
 
 ## Task Lifecycle
 

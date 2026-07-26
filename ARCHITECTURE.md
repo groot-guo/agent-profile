@@ -2,7 +2,9 @@
 
 This document describes the implementation that exists today. Future
 Task/Outcome/Configuration entities and runtime feedback APIs are proposals in
-`docs/agent-runtime-profile-design.md`, not current behavior.
+`docs/agent-runtime-profile-design.md`, not current behavior. The implemented
+prompt-review surface is an ephemeral deterministic aid; it does not create
+those entities or an experiment/outcome loop.
 
 Agent Profile is a local-first profiler for AI coding-agent sessions. It imports
 local Claude Code, Codex, Zed, and MiMo data, normalizes their different formats
@@ -41,7 +43,7 @@ supports manual import of a selected transcript directory.
 
 | Component | Current responsibility |
 | --- | --- |
-| `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile reports, tool categorization, pricing calculations |
+| `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile and prompt-review reports, tool categorization, pricing calculations |
 | `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
 | `apps/server/src/ingestion/session-repository.ts` | Normalized analysis and atomic session/span persistence |
@@ -49,7 +51,7 @@ supports manual import of a selected transcript directory.
 | `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
 | `apps/server/src/db.ts` | Default local database instance, pricing/model-context seed data, and current lookup wrappers |
 | `apps/server/src/routes/` | Health, sessions, aggregate analysis, diagnosis, statistics, pricing, context-window, scan, export, and comparison APIs |
-| `apps/web` | Project/session navigation, dashboards, detail analysis, comparisons, statistics, annotations, and configuration UI |
+| `apps/web` | Project/session navigation, dashboards, detail analysis, Agent profiles, ephemeral prompt review, comparisons, statistics, annotations, and configuration UI |
 
 The API is split by domain under `apps/server/src/routes/`; it is not a single
 monolithic routes file.
@@ -82,6 +84,10 @@ source: a missing field means “not captured”, not zero or failure.
 - `model_context` — per-model context-window limits.
 - `schema_migrations` — ordered, idempotent schema changes and their application
   time.
+
+Prompt-review requests and results are not part of this persistence model. The
+server processes prompt text within one request and neither inserts it into
+SQLite nor retains a review record.
 
 The database applies ordered additive migrations. Existing annotation columns
 and cost/source-provenance columns are detected safely and each migration
@@ -133,6 +139,8 @@ The current server/UI support:
 - versioned per-Agent process profiles with resource, context, reliability, and
   collaboration dimensions, metric coverage, and neutral peer-relative
   characteristics;
+- deterministic prompt-structure review with optional Agent-profile evidence
+  and guarded iteration hypotheses;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - editable pricing/model-context data and total-cost recomputation.
 
@@ -171,6 +179,30 @@ status from an observed non-error in every format, so tool-error rates count
 explicit observed errors only. The `/profiles` page presents the same contract
 as a human-readable runtime fingerprint rather than a leaderboard.
 
+### Prompt review and iteration-hint contract
+
+`POST /api/prompt-review` accepts a non-empty prompt up to 20,000 characters,
+an optional observed Agent identifier, and an opt-in evidence flag. The server
+does not persist or log the prompt body and does not call the optional semantic
+diagnosis provider.
+
+`prompt-review/v1` deterministically checks six structural dimensions: goal,
+scope, acceptance, constraints, context, and verification. Each check returns
+`present`, `partial`, or `missing`, a conservative confidence, an explanation,
+and a clause the caller may consider. It is a keyword/heading heuristic, not a
+semantic correctness judgment. Raw evidence is omitted by default. When
+explicitly requested, each check returns at most two redacted excerpts, each
+bounded to 140 characters.
+
+`iteration-hints/v1` turns structural gaps into prioritized hypotheses. If the
+caller selects an Agent with a current `agent-profile/v1` report, hints may
+combine the structural gap with peer-relative runtime metrics. Every hint names
+its source (`prompt_structure`, `runtime_profile`, or `combined`), states a
+causal guardrail, and requires validation against a comparable Task Outcome.
+No total prompt score is produced, and the server never claims that changing a
+clause caused or will cause a runtime metric to improve. The `/prompt-review`
+page exposes the same contract and privacy boundaries.
+
 ## API surface
 
 | Method | Path | Purpose |
@@ -197,6 +229,7 @@ as a human-readable runtime fingerprint rather than a leaderboard.
 | `GET` | `/api/stats` | Aggregate statistics and distributions |
 | `GET` | `/api/profiles/agents` | Versioned process profiles for all observed Agents |
 | `GET` | `/api/profiles/agents/:agent` | One observed Agent profile with peer-relative context |
+| `POST` | `/api/prompt-review` | Ephemeral deterministic prompt review and guarded iteration hints |
 | `GET/PUT` | `/api/pricing` | Model pricing |
 | `GET/PUT` | `/api/model-context` | Model context-window configuration |
 | `POST` | `/api/recompute-cost` | Recalculate stored costs by span-time pricing and refresh provenance |

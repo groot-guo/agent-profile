@@ -18,9 +18,11 @@ Keep the boundaries clear:
 - `docs/agent-runtime-profile-design.md` is a future proposal, not current
   behavior.
 
-The current application is session-centric. Do not describe proposed
-Task/Outcome/Configuration-aware runtime feedback as implemented until its
-roadmap Task has been completed and the current-state documents have changed.
+The current runtime evidence remains session-centric. A deterministic,
+ephemeral prompt-structure review can combine an optional Agent process profile
+into iteration hypotheses, but Task/Outcome/Configuration persistence,
+experiments, and outcome-validated runtime feedback remain proposed until their
+roadmap Tasks are completed and the current-state documents have changed.
 
 ## Common commands
 
@@ -87,6 +89,10 @@ These rules protect metric correctness and must not change accidentally:
 - Efficiency and score metrics describe the observed process. Without a
   verifiable Task Outcome they do not prove delivery quality or universal Agent
   superiority.
+- Raw prompts are not profiler records. Prompt review must remain ephemeral by
+  default: do not persist or log request text, do not send it to a semantic
+  provider, keep returned excerpts opt-in/redacted/bounded, and never present a
+  keyword match or runtime correlation as a causal optimization result.
 
 For formulas, API behavior, storage details, and current source adapters, use
 `ARCHITECTURE.md` and the focused documents under `docs/` instead of duplicating

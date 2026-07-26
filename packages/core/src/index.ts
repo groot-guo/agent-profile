@@ -48,6 +48,23 @@ export {
   MIN_PROFILE_METRIC_COVERAGE,
   SIMILARITY_THRESHOLD,
 } from './profile';
+export type {
+  HintSource,
+  IterationHint,
+  PromptCheckId,
+  PromptCheckStatus,
+  PromptIterationReport,
+  PromptReviewReport,
+  PromptStructureCheck,
+} from './prompt-review';
+export {
+  buildPromptIterationReport,
+  ITERATION_HINTS_SCHEMA_VERSION,
+  MAX_PROMPT_CHARACTERS,
+  MAX_PROMPT_EVIDENCE_CHARACTERS,
+  PROMPT_REVIEW_SCHEMA_VERSION,
+  reviewPromptStructure,
+} from './prompt-review';
 export {
   findTranscriptFiles,
   findTranscriptFilesSync,

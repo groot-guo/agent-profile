@@ -3,6 +3,7 @@ import { registerDiagnosisRoutes } from './diagnosis';
 import { registerHealthRoutes } from './health';
 import { registerPricingRoutes } from './pricing';
 import { registerProfileRoutes } from './profiles';
+import { registerPromptReviewRoutes } from './prompt-review';
 import { registerScanRoutes } from './scan';
 import { registerSessionRoutes } from './sessions';
 import { registerStatsRoutes } from './stats';
@@ -13,6 +14,7 @@ export function registerRoutes(app: FastifyInstance) {
   registerDiagnosisRoutes(app);
   registerPricingRoutes(app);
   registerProfileRoutes(app);
+  registerPromptReviewRoutes(app);
   registerHealthRoutes(app);
   registerStatsRoutes(app);
 }
