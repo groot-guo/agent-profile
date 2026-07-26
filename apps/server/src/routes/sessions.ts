@@ -225,4 +225,26 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .header('Content-Disposition', 'attachment; filename="session-report.md"')
       .send(lines.join('\n'));
   });
+
+  // Session 对比
+  app.get<{ Querystring: { ids: string } }>('/api/sessions/compare', async (req, reply) => {
+    const ids = (req.query.ids || '').split(',').filter(Boolean);
+    if (ids.length < 2) return reply.status(400).send({ error: 'need at least 2 ids' });
+    const sessions = ids.map((id) => {
+      const s = db.prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`).get(id) as SessionSummary | undefined;
+      if (!s) return null;
+      const rows = db.prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`).all(id) as Record<string, unknown>[];
+      const spans = rows.map(parseSpanRow);
+      const turns = spans.filter((sp) => sp.type === 'llm_turn');
+      const tools = spans.filter((sp) => sp.type === 'tool_call');
+      return {
+        ...s,
+        turnCount: turns.length,
+        toolCount: tools.length,
+        duration: s.endTime ? s.endTime - s.startTime : 0,
+        totalTokens: s.inputTokens + s.cacheCreationTokens + s.cacheReadTokens + s.outputTokens,
+      };
+    }).filter(Boolean);
+    return { sessions };
+  });
 }
