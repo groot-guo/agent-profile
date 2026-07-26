@@ -171,3 +171,37 @@ export interface ScanResult {
   updated: number;
   sessionIds: string[];
 }
+
+// ===== 效率指标 =====
+
+export interface ToolSuccessRate {
+  name: string;
+  category: string;
+  total: number;
+  errors: number;
+  successRate: number;
+}
+
+export interface ThinkingActionRatio {
+  turnIndex: number;
+  turnId: string;
+  thinkingChars: number;
+  toolCalls: number;
+  ratio: number; // chars per tool_call, 0 if no tool calls
+}
+
+export interface FileOperation {
+  path: string;
+  reads: number;
+  edits: number;
+  writes: number;
+}
+
+export interface EfficiencyMetrics {
+  toolSuccessRates: ToolSuccessRate[];
+  thinkingActionRatios: ThinkingActionRatio[];
+  contextGrowthVelocity: number; // avg tokens/turn
+  contextGrowthPerTurn: { turnIndex: number; turnId: string; contextTokens: number; delta: number }[];
+  fileOperations: FileOperation[];
+  readToEditRate: number; // files edited / files read
+}

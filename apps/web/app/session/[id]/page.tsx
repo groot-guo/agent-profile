@@ -1,6 +1,6 @@
 'use client';
 
-import type { DiagnosisResult, SessionDetail, Span } from '@agent-profile/core';
+import type { DiagnosisResult, EfficiencyMetrics, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -30,6 +30,7 @@ export default function SessionPage() {
   const [data, setData] = useState<SessionDetail | null>(null);
   const [ctx, setCtx] = useState<ContextPoint[]>([]);
   const [diag, setDiag] = useState<DiagnosisResult | null>(null);
+  const [eff, setEff] = useState<EfficiencyMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -43,11 +44,13 @@ export default function SessionPage() {
       ),
       // diagnosis 为辅助层，失败不拖垮主数据展示
       fetch(`${API}/session/${id}/diagnosis`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/session/${id}/efficiency`).then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([d, c, dg]) => {
+      .then(([d, c, dg, ef]) => {
         setData(d);
         setCtx(c);
         setDiag(dg);
+        setEff(ef);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
@@ -116,6 +119,9 @@ export default function SessionPage() {
           cost={sidechainCost}
           spans={sidechainSpans}
         />
+      )}
+      {eff && (
+        <EfficiencyPanel metrics={eff} />
       )}
       <Card title={`工具调用次数${mainTools.length < allTools.length ? '（主链路，不含子 agent）' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -805,6 +811,96 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
+  const topErrorTools = metrics.toolSuccessRates.filter((t) => t.errors > 0).slice(0, 5);
+  const highTAR = metrics.thinkingActionRatios.filter((t) => t.ratio > 500 && t.toolCalls > 0).slice(0, 5);
+  const hotFiles = metrics.fileOperations.slice(0, 10);
+
+  return (
+    <Card title={`行为效率分析 · ${metrics.toolSuccessRates.length} 种工具 · 上下文增速 ${fmtTokens(metrics.contextGrowthVelocity)}/轮 · Read→Edit ${(metrics.readToEditRate * 100).toFixed(0)}%`}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* 工具成功率 */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 8 }}>🔧 工具成功率</div>
+          {metrics.toolSuccessRates.slice(0, 8).map((t) => (
+            <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '2px 0' }}>
+              <span style={{ width: 110, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+              <div style={{ flex: 1, height: 10, background: C.borderSoft, borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: `${t.successRate * 100}%`, height: '100%', background: t.successRate > 0.9 ? C.cr : t.successRate > 0.7 ? C.medium : C.high, borderRadius: 2 }} />
+              </div>
+              <span style={{ width: 52, textAlign: 'right', color: C.sub }}>{(t.successRate * 100).toFixed(0)}%</span>
+              <span style={{ width: 44, textAlign: 'right', color: C.mute }}>{t.total}次{t.errors > 0 && <span style={{ color: C.high }}> err{t.errors}</span>}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Thinking/Action 比 */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 8 }}>🧠 Thinking / Action 比</div>
+          <div style={{ fontSize: 11, color: C.sub, marginBottom: 8 }}>
+            每轮 thinking 字符数 ÷ tool_call 次数，比率高 = "想得多做得少"
+          </div>
+          {metrics.thinkingActionRatios.length === 0 ? (
+            <div style={{ fontSize: 11, color: C.mute }}>无数据</div>
+          ) : (
+            <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+              {metrics.thinkingActionRatios.slice(-10).reverse().map((t) => (
+                <div key={t.turnId} style={{
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '2px 0',
+                  borderBottom: `1px solid ${C.borderSoft}`,
+                  background: t.ratio > 2000 ? `${C.high}0D` : t.ratio > 1000 ? `${C.medium}0D` : 'transparent',
+                }}>
+                  <span style={{ color: C.mute, width: 36 }}>T{t.turnIndex}</span>
+                  <span style={{ color: C.text, flex: 1 }}>
+                    {t.toolCalls > 0 ? `${(t.thinkingChars / 1000).toFixed(1)}k char ÷ ${t.toolCalls} call = ${t.ratio} char/call` : `${(t.thinkingChars / 1000).toFixed(1)}k char · 0 call`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 高 Thinking/Action 比告警 */}
+      {highTAR.length > 0 && (
+        <div style={{ marginTop: 12, padding: '8px 12px', background: `${C.medium}12`, border: `1px solid ${C.medium}40`, borderRadius: 6, fontSize: 11 }}>
+          <span style={{ color: C.medium, fontWeight: 600 }}>⚠ 高 Thinking/Action 比：</span>
+          <span style={{ color: C.sub }}>{highTAR.map((t) => `T${t.turnIndex}(${t.ratio}c/c)`).join(', ')}。可能思考过度，建议提示 agent 减少多余推理。</span>
+        </div>
+      )}
+
+      {/* 文件操作热度 Top 5 */}
+      {hotFiles.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 8 }}>📁 文件操作热度 Top {Math.min(5, hotFiles.length)}</div>
+          {hotFiles.slice(0, 5).map((f) => (
+            <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, padding: '2px 0' }}>
+              <span style={{ flex: 1, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path.split('/').slice(-2).join('/')}</span>
+              <span style={{ color: C.link }}>Read {f.reads}</span>
+              {f.edits > 0 && <span style={{ color: C.out }}>Edit {f.edits}</span>}
+              {f.writes > 0 && <span style={{ color: C.cr }}>Write {f.writes}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Read→Edit 转化率 */}
+      <div style={{ marginTop: 12, padding: '8px 12px', background: C.bg, borderRadius: 6, fontSize: 11, color: C.sub }}>
+        📊 Read→Edit 转化率：
+        <span style={{ fontWeight: 600, color: metrics.readToEditRate > 0.3 ? C.cr : metrics.readToEditRate > 0.1 ? C.medium : C.high }}>
+          {(metrics.readToEditRate * 100).toFixed(0)}%
+        </span>
+        <span>（{hotFiles.filter((f) => f.reads > 0).length} 个文件被读，{hotFiles.filter((f) => f.edits > 0 || f.writes > 0).length} 个被修改）</span>
+        {metrics.readToEditRate < 0.1 && hotFiles.filter((f) => f.reads > 0).length > 3 && (
+          <span style={{ color: C.high, display: 'block', marginTop: 4 }}>
+            💡 读了 {hotFiles.filter((f) => f.reads > 0).length} 个文件但几乎没改，可能存在大量冗余读取
+          </span>
+        )}
+      </div>
+    </Card>
   );
 }
 

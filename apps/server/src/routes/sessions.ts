@@ -1,4 +1,4 @@
-import type { SessionDetail, SessionSummary } from '@agent-profile/core';
+import { analyzeEfficiency, type SessionDetail, type SessionSummary } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import { db, getModelContext } from '../db';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
@@ -59,5 +59,18 @@ export function registerSessionRoutes(app: FastifyInstance) {
       model?: string;
     }[];
     return rows.map((r) => ({ ...r, contextWindow: getModelContext(r.model) ?? null }));
+  });
+
+  // 效率指标
+  app.get<{ Params: { id: string } }>('/api/session/:id/efficiency', async (req, reply) => {
+    const session = db
+      .prepare(`SELECT id FROM sessions WHERE id = ?`)
+      .get(req.params.id) as { id: string } | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    const rows = db
+      .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
+      .all(req.params.id) as Record<string, unknown>[];
+    const spans = rows.map(parseSpanRow);
+    return analyzeEfficiency(spans);
   });
 }
