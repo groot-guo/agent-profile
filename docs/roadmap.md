@@ -496,6 +496,106 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - compatibility: session IDs and existing API entry points remain unchanged;
     replacement now preserves user-authored tags and notes
 
+### T41 runtime-consumable Agent profiles and difference view
+
+- status: completed
+- purpose: turn normalized Session/Span evidence into a stable, transparent
+  process profile that a person or another Agent Runtime can use to understand
+  how one observed Agent differs from peers
+- scope:
+  1. define a versioned `AgentProfileReport` contract in core with explicit
+     sample sizes, metric distributions, coverage, comparison basis, and
+     limitations
+  2. compute resource usage, context discipline, execution reliability, and
+     collaboration dimensions without introducing a universal quality score
+  3. generate neutral relative characteristics only when minimum sample
+     requirements are met; report higher/lower/similar rather than better/worse
+  4. expose aggregate and single-Agent profile APIs from current normalized
+     sessions/spans
+  5. add a human-readable Agent profile page that emphasizes evidence,
+     coverage, and fair-comparison limits
+  6. document the current report schema, formulas, interpretation boundaries,
+     and Agent Runtime consumption path
+- affected:
+  - `docs/roadmap.md`
+  - `AGENTS.md`
+  - `ARCHITECTURE.md`
+  - `README.md`
+  - `docs/agent-runtime-profile-design.md`
+  - `docs/stats.md`
+  - `docs/zh/OVERVIEW.md`
+  - `packages/core/src/profile.ts` (new)
+  - `packages/core/src/index.ts`
+  - related core tests
+  - `apps/server/src/routes/profiles.ts` (new)
+  - `apps/server/src/routes/index.ts`
+  - related server tests
+  - `apps/web/app/profiles/page.tsx` (new)
+  - `apps/web/app/header.tsx`
+- acceptance:
+  - report schema is versioned and includes generation time, scope, sample
+    counts, units, coverage ratios, comparison method, and limitations
+  - per-Agent profiles expose distribution statistics instead of relying on
+    aggregate totals that primarily measure usage volume
+  - relative characteristics require at least three sessions and at least one
+    peer Agent; sparse data returns `insufficient_data` rather than a claim
+  - outcome quality is explicitly unavailable until Task/Outcome capture is
+    implemented; cost or token efficiency is never labeled overall quality
+  - API supports all-Agent and single-Agent consumption and returns a clear 404
+    for an unknown Agent
+  - the web page lets a user compare observed behavior and data coverage without
+    presenting a leaderboard
+  - core/server tests, typecheck, changed-file lint, production build, and
+    documentation consistency checks pass
+- risks:
+  - agents may be used for different task types; current comparison is
+    observational and cannot control for task complexity
+  - missing model, timing, cost, or tool metadata can skew naïve comparisons;
+    every affected metric must carry coverage
+  - small samples can look decisive; minimum sample and confidence must be
+    enforced in code rather than left to UI copy
+- documentation plan:
+  - update current architecture and statistics documents with the implemented
+    report contract and formulas
+  - keep `docs/agent-runtime-profile-design.md` future phases distinct from this
+    session-derived Phase 0 capability
+  - update README/Chinese overview and record exact verification here before
+    marking T41 completed
+- verification:
+  - `pnpm test` — passed: core 132/132 tests; server 13/13 tests
+  - `pnpm build` — passed: core and server TypeScript plus the Next.js
+    production build; `/profiles` is included as a static route
+  - changed-file Biome check — passed with no errors, warnings, or infos
+  - pure profile tests — passed for empty input, sparse samples, multi-Agent
+    distributions/comparisons, and sub-threshold metric coverage
+  - API tests — passed for empty report, eligible and sparse Agents,
+    single-Agent consumption, and unknown-Agent 404
+  - live API smoke test — passed against the local database: 57 sessions across
+    three Agents produced `agent-profile/v1` with ready comparison status
+  - browser UI verification — desktop layout rendered all three real profiles;
+    390px viewport retained three cards without horizontal overflow and the
+    header navigation remained single-line after the responsive correction
+  - transparency review — Outcome is `not_collected`, higher/lower has no
+    preferred direction, sparse profiles emit `insufficient_data`, and explicit
+    tool-error observation limits are visible in report/docs
+  - `git diff --check`, canonical instruction symlink check, API/doc schema
+    string scan, and current/future documentation boundary check — passed
+- completion:
+  - completed_at: 2026-07-26
+  - report contract: `agent-profile/v1`, derived on demand from normalized
+    sessions/spans with no new persistence or migration
+  - comparison contract: target and peer require three sessions, metric
+    coverage requires 50%, and ±10% from the eligible peer-Agent median is
+    `similar`
+  - result: people can use `/profiles`, and an Agent Runtime can consume
+    `/api/profiles/agents` or `/api/profiles/agents/:agent`, to distinguish
+    observed resource, context, reliability, and collaboration behavior
+  - limitation: current cohorts do not control task complexity and tool-error
+    availability is not separately captured by every source; neither a 0%
+    observed error rate nor lower resource use establishes better outcomes
+  - design decision: the page uses comparable runtime-signature rails and
+    evidence coverage instead of a total score or leaderboard
+
 ### T44 repository lint baseline cleanup
 
 - status: planned
@@ -515,7 +615,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ## Execution Order
 
-T5–T15 and T36–T40 are complete. T41 is next and has not started. T44 remains a
+T5–T15 and T36–T41 are complete. T42 is next and has not started. T44 remains a
 separate lint-debt task and must not be folded into feature work.
 
 ## Task Lifecycle

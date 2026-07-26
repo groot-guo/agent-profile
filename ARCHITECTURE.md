@@ -41,7 +41,7 @@ supports manual import of a selected transcript directory.
 
 | Component | Current responsibility |
 | --- | --- |
-| `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, tool categorization, pricing calculations |
+| `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile reports, tool categorization, pricing calculations |
 | `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
 | `apps/server/src/ingestion/session-repository.ts` | Normalized analysis and atomic session/span persistence |
@@ -130,6 +130,9 @@ The current server/UI support:
   project-relative comparison;
 - statistics by agent/project/model, distributions, trends, and multi-session
   comparison;
+- versioned per-Agent process profiles with resource, context, reliability, and
+  collaboration dimensions, metric coverage, and neutral peer-relative
+  characteristics;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - editable pricing/model-context data and total-cost recomputation.
 
@@ -141,6 +144,32 @@ LLM span and records calculator version `v1`. Pre-T39 stored costs retain
 
 LLM diagnosis is optional. Without its API configuration, deterministic
 analysis remains available and the service continues to function.
+
+### Agent Profile report contract
+
+`agent-profile/v1` is a stable derived report over the current normalized
+sessions and spans; it does not add a persistence table. Each Agent profile
+contains:
+
+- sample counts for sessions, LLM turns, and tool calls;
+- per-session distributions (observed count, total count, coverage, mean,
+  median, nearest-rank P90, minimum, and maximum) for token use, CNY cost,
+  duration, cache hit, and context;
+- tool-error, sidechain, and affected-session ratios with explicit numerators
+  and denominators;
+- known-cost, duration, model-identity, and tool-evidence coverage;
+- peer-relative characteristics only when the Agent and at least one peer each
+  have three sessions and the metric has at least 50% coverage.
+
+Relative characteristics compare an Agent metric with the median of eligible
+peer-Agent metrics. A delta within ±10% is `similar`; otherwise it is `higher`
+or `lower`. These labels are descriptive and have no preferred direction.
+Task type/complexity are not controlled and Outcome coverage is explicitly
+`not_collected`, so this report cannot establish correctness or overall Agent
+quality. Source adapters also do not yet distinguish an unavailable tool-error
+status from an observed non-error in every format, so tool-error rates count
+explicit observed errors only. The `/profiles` page presents the same contract
+as a human-readable runtime fingerprint rather than a leaderboard.
 
 ## API surface
 
@@ -166,6 +195,8 @@ analysis remains available and the service continues to function.
 | `GET` | `/api/session/:id/report` | Session report |
 | `GET` | `/api/sessions/compare` | Selected-session comparison |
 | `GET` | `/api/stats` | Aggregate statistics and distributions |
+| `GET` | `/api/profiles/agents` | Versioned process profiles for all observed Agents |
+| `GET` | `/api/profiles/agents/:agent` | One observed Agent profile with peer-relative context |
 | `GET/PUT` | `/api/pricing` | Model pricing |
 | `GET/PUT` | `/api/model-context` | Model context-window configuration |
 | `POST` | `/api/recompute-cost` | Recalculate stored costs by span-time pricing and refresh provenance |

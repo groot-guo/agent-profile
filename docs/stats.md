@@ -6,6 +6,11 @@ contract. The statistics are descriptive process telemetry; source coverage,
 missing pricing, and calculation provenance must be considered before comparing
 agents.
 
+The statistics page and the Agent Profile page serve different purposes:
+`/stats` describes aggregate volume and trends; `/profiles` describes each
+Agent's observed per-session runtime signature and makes comparison eligibility
+and coverage explicit.
+
 ## Current overview
 
 The overview contains:
@@ -60,6 +65,37 @@ Price recomputation does not mean “apply today's price to all history”. Each
 span selects the latest price whose effective time is not later than the span
 start time, then session totals are rebuilt from those span values.
 
+## Agent Profile v1
+
+`GET /api/profiles/agents` and `GET /api/profiles/agents/:agent` expose the
+versioned `agent-profile/v1` report. The current dimensions are:
+
+| Dimension | Current metrics |
+| --- | --- |
+| Resource usage | per-session token, CNY cost, duration, and cache-hit distributions |
+| Context discipline | per-session peak and average context distributions |
+| Execution reliability | tool-error rate and share of sessions containing tool errors |
+| Collaboration | sidechain-turn/tool shares and share of sessions using sidechains |
+| Coverage | known cost, duration, model identity, tool evidence, and Outcome availability |
+
+Each distribution reports observed and total sample counts, coverage, mean,
+median, nearest-rank P90, minimum, and maximum. Rates report a numerator and
+denominator; a zero denominator produces `null`, not a fabricated zero rate.
+
+Relative characteristics require:
+
+- at least three sessions for the target Agent;
+- at least one peer Agent with at least three sessions;
+- at least 50% coverage for the compared metric.
+
+The target metric is compared with the median of eligible peer-Agent metric
+values. Differences within ±10% are `similar`; larger differences are `higher`
+or `lower`. No direction is defined as preferable. Current cohorts do not
+control for task type or complexity, and Outcome is `not_collected`, so this is
+an observational process comparison rather than a quality or causality claim.
+Not every source separately records whether tool-error status was available;
+the current tool-error rate therefore counts explicit observed errors only.
+
 ## Response shape
 
 ```text
@@ -80,6 +116,16 @@ GET /api/stats
         anomalySessions[]
       },
       trends[]
+    }
+
+GET /api/profiles/agents
+  → {
+      schemaVersion: "agent-profile/v1",
+      generatedAt,
+      scope,
+      comparison,
+      profiles[],
+      limitations[]
     }
 ```
 

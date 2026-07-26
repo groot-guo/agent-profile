@@ -38,10 +38,13 @@ depends on which agent data exists on the machine.
   OpenAI-compatible LLM semantic diagnosis.
 - Calculate session efficiency, process score, cost, cache behavior, and
   model/context statistics; update pricing and recompute stored costs.
+- Compare versioned Agent process profiles across resource use, context,
+  tool reliability, and sidechain behavior with sample and coverage limits.
 - Export session data and reports for later review.
 
-These metrics describe the observed execution process. They do not by
-themselves prove outcome quality or that one agent is universally better.
+The Agent profile view is a runtime fingerprint, not a leaderboard. These
+metrics describe the observed execution process. They do not by themselves
+prove outcome quality or that one agent is universally better.
 
 ## Data flow
 
@@ -52,8 +55,8 @@ local agent data
   → shared import coordinator
   → analysis + transactional session repository
   → SQLite
-  → Fastify API
-  → Next.js UI
+  → Fastify API (session evidence + agent-profile/v1)
+  → Next.js session / profile views
 ```
 
 ## Repository

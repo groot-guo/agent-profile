@@ -80,6 +80,10 @@ These rules protect metric correctness and must not change accidentally:
   migration.
 - Missing source fields mean “not captured”, not zero, success, or failure.
   Cross-agent comparisons must expose coverage differences.
+- Agent Profile comparisons use per-Agent distributions, minimum samples, and
+  explicit metric coverage. Relative labels describe higher/lower/similar
+  observed behavior only; never turn token, cost, duration, cache, tool-error,
+  or sidechain differences into a universal quality ranking.
 - Efficiency and score metrics describe the observed process. Without a
   verifiable Task Outcome they do not prove delivery quality or universal Agent
   superiority.

@@ -29,6 +29,25 @@ export { parseMiMoSession } from './parsers/mimo';
 export type { ZedThreadInput } from './parsers/zed';
 export { parseZedThread } from './parsers/zed';
 export { COST_CALCULATOR_VERSION, COST_CURRENCY, COST_UNIT, calcCost } from './pricing';
+export type {
+  AgentProcessProfile,
+  AgentProfileReport,
+  AgentProfileSessionSample,
+  ProfileComparisonStatus,
+  ProfileCoverage,
+  ProfileDistribution,
+  ProfileRate,
+  ProfileUnit,
+  RelativeCharacteristic,
+  RelativeDirection,
+} from './profile';
+export {
+  AGENT_PROFILE_SCHEMA_VERSION,
+  buildAgentProfileReport,
+  MIN_AGENT_PROFILE_SESSIONS,
+  MIN_PROFILE_METRIC_COVERAGE,
+  SIMILARITY_THRESHOLD,
+} from './profile';
 export {
   findTranscriptFiles,
   findTranscriptFilesSync,
