@@ -102,6 +102,8 @@ export default function SessionPage() {
           <a href={`${API}/session/${id}/export`} download style={{ color: C.link, textDecoration: 'none', fontSize: 11, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 3 }}>⬇ JSON</a>
           {' '}
           <a href={`${API}/session/${id}/export?format=csv`} download style={{ color: C.link, textDecoration: 'none', fontSize: 11, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 3 }}>⬇ CSV</a>
+          {' '}
+          <a href={`${API}/session/${id}/report`} download style={{ color: C.cc, textDecoration: 'none', fontSize: 11, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 3 }}>📋 Report</a>
         </span>
       </div>
 
