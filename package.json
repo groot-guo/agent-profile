@@ -2,7 +2,7 @@
   "name": "agent-profile",
   "private": true,
   "scripts": {
-    "dev": "pnpm -r dev",
+    "dev": "pnpm --parallel --stream --filter trace-server --filter agent-profile-web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "biome check .",

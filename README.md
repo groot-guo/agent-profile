@@ -17,13 +17,21 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3001`. The Fastify API listens on port `3000`; the web
-application listens on port `3001`.
+`pnpm dev` starts the Fastify API and Next.js application concurrently; the
+API also restarts when server source changes. Open `http://localhost:3001`.
+The API listens on port `3000` and the Web application listens on port `3001`.
+Run their package-level `dev` commands separately only when debugging one
+process in isolation.
+
+The Web development server writes `apps/web/.next-dev`, while production
+builds write `apps/web/.next`. This keeps `pnpm build` from invalidating chunks
+used by a running `pnpm dev`.
 
 The server performs background imports on startup for the configured
-Claude/Codex transcript directories and the available Zed/MiMo databases. A
-manual scan can import a selected transcript directory. Source availability
-depends on which agent data exists on the machine.
+Claude/Codex transcript directories and the available Zed/MiMo databases. The
+Web “重新扫描” action imports both default transcript directories; the scan API
+can also import one selected directory. Source availability depends on which
+agent data exists on the machine.
 
 ## Current capabilities
 
@@ -33,6 +41,9 @@ depends on which agent data exists on the machine.
   context and pricing analysis.
 - Explore sessions by project and agent, search and sort them, annotate them,
   compare selected sessions, and inspect trends and distributions.
+- Read each Session from a fixed identity/KPI summary, then switch among
+  overview, context/cost, tools/chain, and normalized-evidence views instead of
+  scrolling through every analysis panel at once.
 - Inspect LLM turns, tool calls, tool parameters, context growth, performance,
   sub-agent activity, Git commits, and cost attribution.
 - Inspect every normalized Session Span in one filterable evidence timeline,

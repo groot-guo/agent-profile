@@ -844,10 +844,323 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - execution constraint:
   - do not start before T40–T43 unless the errors block one of those tasks
 
+### T45 unified development startup and Session detail information architecture
+
+- status: completed
+- purpose:
+  - make the documented `pnpm dev` command reliably start the API and Web
+    development processes together, so session data is available without two
+    terminals
+  - turn the Session detail page from one long stack of equally weighted
+    panels into a progressive, decision-oriented workspace
+- expected outcome:
+  - one root command starts both long-running applications and server source
+    changes restart the API development process
+  - the Session page keeps the always-visible identity, token fingerprint, and
+    primary KPIs, then separates analysis into clear task-based views so the
+    default view answers “how did this run and what should I inspect first?”
+- scope:
+  1. correct root workspace development-process orchestration and the server
+     development watch command
+  2. add a four-view Session navigation model: overview, context/cost,
+     tools/chain, and normalized evidence
+  3. move existing panels into those views without changing metric
+     calculations, API contracts, privacy defaults, or evidence semantics
+  4. add responsive layout rules, keyboard-visible view controls, and compact
+     overview composition while preserving the existing theme and token
+     fingerprint identity
+  5. synchronize quick-start and current UI descriptions with implemented
+     behavior
+- affected:
+  - `docs/roadmap.md`
+  - `package.json`
+  - `apps/server/package.json`
+  - `apps/web/app/session/[id]/page.tsx`
+  - `apps/web/app/layout.tsx`
+  - `README.md`
+  - `ARCHITECTURE.md`
+  - `docs/zh/OVERVIEW.md`
+- dependencies and assumptions:
+  - the Fastify API remains a separate process on port 3000 and the Next.js
+    application remains on port 3001
+  - `pnpm` recursive parallel execution is the intended local process manager;
+    no new runtime dependency is required
+  - existing Session analysis data and evidence endpoints remain authoritative
+- risks:
+  - hiding panels behind views can reduce discoverability unless view labels,
+    counts, and the default overview make the available depth explicit
+  - responsive two-column compositions must collapse before tables or charts
+    become cramped
+  - the existing Session page has historical lint debt owned by T44; this Task
+    must not silently broaden into repository-wide lint cleanup
+- acceptance:
+  - `pnpm dev` starts both `trace-server` and `agent-profile-web` concurrently,
+    and server development uses watch mode
+  - the Session identity, export actions, token fingerprint, and primary KPIs
+    stay visible above the view navigation
+  - overview prioritizes diagnosis and decision-useful summaries; context/cost,
+    tools/chain, and evidence views contain the existing specialized panels
+    with no duplicated long-form sections
+  - normalized evidence still omits stored content by default and requires the
+    existing explicit bounded-preview action
+  - the page is usable at desktop and mobile widths with no new horizontal page
+    overflow, and view controls remain keyboard accessible
+  - targeted lint/type/build checks, root development smoke checks, and visual
+    verification pass in proportion to the change
+- verification plan:
+  - smoke `pnpm dev` and confirm both ports/health endpoints
+  - run changed-file Biome checks plus server and Web production builds
+  - verify the Session page in a browser at desktop and mobile widths,
+    including view switching and evidence privacy defaults
+  - run `git diff --check` and review current-state documentation for stale
+    two-terminal or all-panels-at-once claims
+- documentation plan:
+  - clarify one-command local startup and the separate-process architecture in
+    `README.md` and `ARCHITECTURE.md`
+  - describe the Session progressive-disclosure views and retained evidence
+    limits in the English and Chinese current-state overviews
+  - record actual changed files, verification results, design decisions, and
+    remaining limitations here before marking T45 completed
+- verification:
+  - process-selection smoke:
+    `pnpm --parallel --stream --filter trace-server --filter
+    agent-profile-web exec node -e 'console.log(process.cwd())'` — passed and
+    executed once in `apps/server` and once in `apps/web`, confirming both
+    long-running package targets are selected by the root orchestration
+  - `pnpm --filter trace-server exec tsx watch --help` — passed and confirmed
+    the configured watch subcommand; `pnpm --filter trace-server build` —
+    passed
+  - final Web production build from an isolated copy of the exact source —
+    passed, including Next.js lint/type validation and the dynamic
+    `/session/[id]` route; final direct Web TypeScript check also passed
+  - browser production verification at 1280px — passed: all four view controls
+    rendered with their live counts, overview was selected by default,
+    context/cost and evidence switching worked, and the focused content
+    hierarchy matched the selected view
+  - browser responsive verification at 390px — passed: the direct Session page
+    reported document width 380px for a 380px client width, with no page-level
+    horizontal overflow; overview KPIs used two columns and context/cost,
+    efficiency, tool-parameter, and tool-summary grids collapsed to one column
+  - evidence privacy check — before entering the evidence view the bounded
+    preview control count was zero; after entering, exactly one
+    “加载脱敏内容预览” control appeared, confirming the report is mounted on
+    demand and content remains opt-in
+  - focused Biome checks — package/configuration and documentation inputs
+    passed; the new ARIA usage and stabilized chart keys passed their targeted
+    rules
+  - full checks on the two historical UI files still report the pre-existing
+    `dangerouslySetInnerHTML` and whole-file formatter findings assigned to
+    T44; this Task did not add suppressions or broaden into that cleanup
+  - `git diff --check` — passed
+- completion:
+  - completed_at: 2026-07-26
+  - changed files:
+    - `package.json`
+    - `apps/server/package.json`
+    - `apps/web/app/session/[id]/page.tsx`
+    - `apps/web/app/layout.tsx`
+    - `README.md`
+    - `ARCHITECTURE.md`
+    - `docs/zh/OVERVIEW.md`
+    - `docs/roadmap.md`
+  - result: `pnpm dev` now selects the API and Web packages in parallel and
+    server development runs in watch mode; Session detail keeps the identity,
+    exports, token fingerprint, and KPI layer fixed while specialized content
+    is split into overview, context/cost, tools/chain, and evidence views
+  - design decision: retain the current profiler palette and Token fingerprint
+    rather than restyling the product; use an instrument-like sticky view rail
+    as the single new signature element and mount the privacy-sensitive
+    evidence workspace only when selected
+  - operational note: a full root launch was not started over the user's
+    already-listening 3000/3001 processes; package selection, watch support,
+    the existing API, and an isolated production Web process were verified
+    instead. Existing separately launched development processes must be
+    stopped once before starting the new root command
+  - remaining limitation: the overall dashboard shell still preserves its
+    desktop sidebar at very narrow widths; the standalone Session route is
+    responsive, while a future dashboard-shell Task should decide whether the
+    sidebar becomes a drawer on mobile
+
+### T46 Codex import completeness and reliable Web navigation
+
+- status: completed
+- purpose:
+  - restore missing current Codex projects and sessions by aligning the manual
+    scan path and Codex thread identity with the actual rollout format
+  - eliminate mixed Next.js development/production artifacts that cause
+    missing Webpack chunks and make top-level navigation feel unresponsive
+- observed evidence:
+  - the local Codex source currently contains 13 rollout JSONL files while the
+    database contains only 4 Codex Sessions, all from July 16/21; current
+    `agent-profile` and `agent-rules` rollouts from July 26 are absent
+  - the Web “重新扫描” action submits only `~/.claude/projects`, although
+    startup configuration also knows `~/.codex/sessions`
+  - Codex top-level rollouts use matching `payload.id` and
+    `payload.session_id`, while child rollouts have a unique `payload.id`, a
+    parent `session_id`, and `parent_thread_id`; using only `session_id` makes
+    multiple files replace the same stored Session
+  - the reported `Cannot find module './58.js'` stack comes from the shared
+    `apps/web/.next` development/build output after `next dev` and `next build`
+    wrote incompatible artifacts
+- scope:
+  1. use the Codex rollout thread `id` as the stable Session identity, retain a
+     `session_id` fallback for older files, and mark child-thread Spans as
+     Sidechain evidence
+  2. add parser coverage for top-level and child-thread identity so one rollout
+     cannot overwrite another
+  3. make the Web manual scan action cover both configured transcript sources
+     and aggregate per-source results without changing Zed/MiMo database
+     ingestion behavior
+  4. isolate the Next.js development output from production `.next`, ignore the
+     generated development directory, and repair the current local runtime
+  5. provide immediate pending feedback and intent prefetching for top-level
+     route navigation so first-load compilation/fetch work is visible
+  6. synchronize current startup, scanning, Codex identity, and operational
+     documentation
+- affected:
+  - `docs/roadmap.md`
+  - `.gitignore`
+  - `apps/web/next.config.js`
+  - `apps/web/app/config.ts`
+  - `apps/web/app/page.tsx`
+  - `apps/web/app/header.tsx`
+  - `apps/web/app/layout.tsx`
+  - `packages/core/src/parsers/codex.ts`
+  - related Core tests
+  - `README.md`
+  - `ARCHITECTURE.md`
+  - `docs/multi-agent.md`
+  - `docs/zh/OVERVIEW.md`
+- dependencies and assumptions:
+  - each Codex rollout `payload.id` is its stable thread identity; legacy
+    rollouts without `id` continue to use `session_id`
+  - a child thread remains a separate imported Session in the current
+    session-centric model, with every generated Span marked Sidechain; merging
+    cross-file parent/child Sessions remains a future data-model concern
+  - the existing local API/Web processes may be restarted after implementation
+    because applying the output-directory change and repairing mixed chunks
+    requires a clean development launch
+- risks:
+  - importing child threads separately increases visible Session counts and
+    must not imply they are independent top-level Tasks
+  - changing a previously imported child Session from parent `session_id` to
+    thread `id` can leave an obsolete parent-keyed revision only when no
+    top-level rollout exists; current observed parents have top-level files
+  - route prefetching should remain bounded to the small static top navigation
+    and must not trigger API mutations
+- acceptance:
+  - all 13 currently discoverable Codex rollout files import without identity
+    collisions; current `agent-profile` and `agent-rules` project groups appear
+    in the Session list
+  - top-level Codex Sessions use their own thread ID and child Sessions use
+    their distinct thread ID with Sidechain Spans
+  - one manual “重新扫描” action scans both Claude and Codex transcript
+    directories and reports source-aware totals
+  - development uses an output directory distinct from production `.next`;
+    restarting `pnpm dev` clears the reported missing-chunk runtime error and
+    `pnpm build` no longer corrupts the active development output
+  - top navigation acknowledges a click immediately, prefetches only the known
+    static destinations, and clears pending state after route completion
+  - focused Core tests, server/Web type/build checks, runtime API/database
+    checks, navigation smoke tests, and documentation checks pass
+- verification plan:
+  - add deterministic Codex parser tests for top-level and child thread IDs,
+    cwd, and Sidechain flags
+  - scan the real local Codex directory against the local database and compare
+    discovered/imported/session/project counts
+  - restart the root development command, verify API health and Web routes,
+    then run an isolated production build while development remains active and
+    confirm both outputs continue working
+  - exercise 会话/画像/迭代/统计 navigation and confirm pending feedback,
+    final active state, and no missing-chunk runtime errors
+  - run focused Biome checks, `git diff --check`, and current-state
+    documentation consistency checks
+- documentation plan:
+  - document manual multi-source transcript scanning and Codex thread identity
+    in current architecture/source-ingestion docs
+  - document separate Next.js development/production outputs and the one-time
+    clean restart needed after this fix
+  - record actual changed files, real local import counts, verification
+    results, and remaining cross-file child-parent limitations here before
+    completion
+- implemented:
+  - Codex parsing now prefers `session_meta.id`, falls back to the legacy
+    `session_id`, and marks every generated Span from a rollout with
+    `parent_thread_id` as Sidechain evidence
+  - the parser fixture suite covers top-level, child, and legacy identity
+    behavior, including cwd and Span Sidechain flags
+  - the Web manual scan runs the Claude Code and Codex transcript sources
+    sequentially, identifies the agent explicitly, aggregates all result
+    counters, reports the source file counts, and continues with the remaining
+    source when one request fails
+  - Next.js development output now uses `apps/web/.next-dev`; production
+    output remains `apps/web/.next`, and both generated directories are ignored
+  - the four static top-level routes are prefetched after an idle delay and on
+    hover/focus; a clicked destination immediately receives pending styling and
+    a spinner until the pathname changes
+  - the old API/Web processes were stopped, only the generated `.next` and
+    `.next-dev` directories were removed, and the repaired root development
+    command was started successfully
+- actual changed files:
+  - `.gitignore`
+  - `apps/web/next.config.js`
+  - `apps/web/tsconfig.json`
+  - `apps/web/app/config.ts`
+  - `apps/web/app/page.tsx`
+  - `apps/web/app/header.tsx`
+  - `apps/web/app/layout.tsx`
+  - `packages/core/src/parsers/codex.ts`
+  - `packages/core/src/__tests__/codex-parser.test.ts`
+  - `README.md`
+  - `ARCHITECTURE.md`
+  - `docs/multi-agent.md`
+  - `docs/zh/OVERVIEW.md`
+  - `docs/roadmap.md`
+- verification:
+  - `pnpm --filter @agent-profile/core test -- codex-parser.test.ts` — passed;
+    Vitest ran all 14 Core files and 154 tests
+  - clean root `pnpm dev` — passed; API listened on `3000`, Web on `3001`,
+    server watch mode restarted after a Core parser edit, and startup scanned
+    both transcript directories
+  - real Codex startup scan — 13 files, 9 imported, 4 updated, 0 failed on the
+    first repaired launch; the database then contained 13 distinct Codex IDs
+  - real API/database check — 68 total Sessions and 13 Codex Sessions; Codex
+    project cwd values include `/Users/guogenyuan/Desktop/agent-profile` and
+    `/Users/guogenyuan/Desktop/agent-rules`
+  - real Web check — the Session list showed 9 Sessions in `agent-profile` and
+    3 in `agent-rules`; the manual action reported
+    `Claude Code 55、Codex 13 个文件` with counters totaling all 68 scanned
+    files
+  - `pnpm build` while `pnpm dev` remained active — passed for Core TypeScript,
+    Server TypeScript, and all eight Next.js routes; the active development
+    routes remained healthy afterward
+  - route smoke — `/`, `/profiles`, `/prompt-review`, and `/stats` returned
+    HTTP 200; browser clicks reached the Agent-profile and prompt-review pages,
+    set the final active route, and produced no console errors or missing-chunk
+    runtime errors
+  - focused Biome check for the new parser/test, navigation/config, Next
+    config, and tsconfig changes — passed
+  - final review hardening — a failed source request no longer prevents the
+    other transcript source from scanning; the updated Web production build and
+    Core parser suite both passed
+  - `git diff --check` and stale current-document operational-claim scan —
+    passed
+  - root `pnpm lint` still reports the pre-existing repository-wide formatting,
+    import-order, security-rule, and unused-code backlog recorded under T44;
+    T46 introduced no focused-check failure and intentionally did not absorb
+    that unrelated cleanup
+- remaining limitations:
+  - child Codex rollouts remain separately visible Sessions in the current
+    session-centric model; their parent relationship is represented by
+    Sidechain Span evidence rather than a persisted cross-file Session graph
+  - first visits in Next.js development can still pay normal route compilation
+    cost, but bounded prefetching warms the four static destinations and the UI
+    now acknowledges clicks immediately
+
 ## Execution Order
 
-T5–T15 and T36–T43 are complete. T44 remains the next separate lint-debt task
-and must not be folded into feature work.
+T5–T15 and T36–T43 plus T45–T46 are complete. T44 remains a separate planned
+lint-debt Task and must not be folded into feature work.
 
 ## Task Lifecycle
 

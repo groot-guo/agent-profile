@@ -84,12 +84,19 @@ export function parseCodexTranscript(
 
   // 1. 提取 session_meta
   const meta = sorted.find((e) => e.type === 'session_meta')?.payload;
-  if (!meta?.session_id) return null;
+  if (!meta) return null;
+  const sessionId =
+    typeof meta.id === 'string'
+      ? meta.id
+      : typeof meta.session_id === 'string'
+        ? meta.session_id
+        : undefined;
+  if (!sessionId) return null;
 
-  const sessionId = meta.session_id as string;
   const cwd = meta.cwd as string | undefined;
   const claudeVersion = meta.cli_version as string | undefined;
   const model = meta.model_provider as string | undefined;
+  const isSidechain = typeof meta.parent_thread_id === 'string' && meta.parent_thread_id.length > 0;
 
   // 2. 收集 reasoning 文本构建 session name
   const allReasoningTexts: string[] = [];
@@ -199,6 +206,7 @@ export function parseCodexTranscript(
         cacheReadTokens,
         outputTokens,
         model,
+        isSidechain,
       }),
     );
 
@@ -222,6 +230,7 @@ export function parseCodexTranscript(
               name: 'reasoning',
               startTime: turnStart,
               endTime: turnEnd,
+              isSidechain,
               metadata: { thinking: truncate(text) },
             }),
           );
@@ -243,6 +252,7 @@ export function parseCodexTranscript(
               name: 'agent_reasoning',
               startTime: turnStart,
               endTime: turnEnd,
+              isSidechain,
               metadata: { thinking: truncate(text) },
             }),
           );
@@ -271,6 +281,7 @@ export function parseCodexTranscript(
             startTime: turnStart,
             endTime: result ? toMs(result.entry.timestamp) : turnEnd,
             isError: result?.isError,
+            isSidechain,
             outputBytes,
             metadata: {
               input: input != null ? truncate(safeStringify(input)) : undefined,

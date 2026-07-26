@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
 import { getAgentIcon } from '../../icons';
-import { C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, FS, R, SEV_COLOR, SEV_LABEL, SP } from '../../theme';
+import { C, CAT_COLOR, catOf, DIAG_LABEL, FS, fmtBytes, fmtDuration, fmtTime, fmtTokens, R, SEV_COLOR, SEV_LABEL, SP } from '../../theme';
 import { BarRow, Card, Chip, Empty, Notice, SoftButton, StatCard, TokenStrip } from '../../ui';
 import { EvidencePanel } from './evidence-panel';
 
@@ -35,6 +35,8 @@ interface SessionAnalysis {
   performance: PerformanceMetrics;
   toolParams: ToolParamAnalysis;
 }
+
+type SessionView = 'overview' | 'context' | 'tools' | 'evidence';
 
 async function loadLegacyAnalysis(id: string): Promise<SessionAnalysis> {
   const [session, context, diagnosis, efficiency, costAttribution, score, commits, performance, toolParams] = await Promise.all([
@@ -75,10 +77,14 @@ export default function SessionPage() {
   const [commits, setCommits] = useState<{ hash: string; message: string; date: string; author: string }[]>([]);
   const [perf, setPerf] = useState<PerformanceMetrics | null>(null);
   const [toolParams, setToolParams] = useState<ToolParamAnalysis | null>(null);
+  const [activeView, setActiveView] = useState<SessionView>('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    setActiveView('overview');
+    setLoading(true);
+    setError('');
     fetch(`${API}/session/${id}/analysis`)
       .then((r) => {
         if (r.ok) return r.json() as Promise<SessionAnalysis>;
@@ -122,9 +128,12 @@ export default function SessionPage() {
   for (const t of mainTools) toolCounts.set(t.name, (toolCounts.get(t.name) || 0) + 1);
   const toolBars = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]);
   const maxToolCount = toolBars[0]?.[1] || 1;
+  const totalTokens = data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens + data.outputTokens;
+  const errorToolCount = mainTools.filter((tool) => tool.isError).length;
+  const diagnosisCount = diag?.findings.length ?? 0;
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: SP.xl }}>
+    <div className="session-page">
       {!isEmbed && (
         <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>← 返回列表</Link>
       )}
@@ -148,12 +157,16 @@ export default function SessionPage() {
       </div>
 
       {/* ===== 指纹条:本会话 4 类 token 构成 ===== */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginBottom: SP.lg }}>
+      <div
+        role="img"
+        aria-label="本会话 Token 构成"
+        style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginBottom: SP.lg }}
+      >
         <TokenStrip input={data.inputTokens} cc={data.cacheCreationTokens} cr={data.cacheReadTokens} out={data.outputTokens} height={8} />
       </div>
 
       {/* ===== KPI ===== */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: SP.md, marginBottom: SP.xl }}>
+      <div className="session-kpi-grid">
         <StatCard label="时长" value={fmtDuration(dur)} />
         <StatCard label="消息轮数" value={`${data.messageCount}`} />
         <StatCard
@@ -181,121 +194,228 @@ export default function SessionPage() {
         )}
       </div>
 
-      {commits.length > 0 && (
-        <Card title={`关联 Git 提交`} meta={`${commits.length} commits`} style={{ boxShadow: `inset 3px 0 0 ${C.cr}, var(--shadow-card)` }}>
-          {commits.slice(0, 5).map((c) => (
-            <div key={c.hash} className="ap-row" style={{ display: 'flex', gap: SP.sm, padding: '3px 6px', borderRadius: R.sm, fontSize: FS.sm, alignItems: 'baseline' }}>
-              <code className="tnum" style={{ color: C.link, flexShrink: 0, fontSize: FS.cap }}>{c.hash.slice(0, 7)}</code>
-              <span className="clamp1" title={c.message} style={{ flex: 1, color: C.text, minWidth: 0 }}>{c.message}</span>
-              <span className="tnum" style={{ flexShrink: 0, color: C.mute, fontSize: FS.cap }}>{c.date?.slice(0, 16)}</span>
-            </div>
-          ))}
-          {commits.length > 5 && <div style={{ fontSize: FS.cap, color: C.mute, padding: '3px 6px' }}>… 还有 {commits.length - 5} 个提交</div>}
-        </Card>
-      )}
+      <SessionViewNav
+        active={activeView}
+        embedded={isEmbed}
+        items={[
+          { id: 'overview', label: '概览', meta: diagnosisCount > 0 ? `${diagnosisCount} 项建议` : '运行结论' },
+          { id: 'context', label: '上下文与成本', meta: `峰值 ${fmtTokens(data.peakContextTokens)}` },
+          { id: 'tools', label: '工具与链路', meta: `${mainTools.length} 次调用` },
+          { id: 'evidence', label: '运行证据', meta: `${data.spans.length} 个 Span` },
+        ]}
+        onChange={setActiveView}
+      />
 
-      {sidechainTurns.length > 0 && (
-        <SidechainSummary
-          turns={sidechainTurns.length}
-          tools={sidechainTools.length}
-          tokens={sidechainTokens}
-          cost={sidechainCost}
-          spans={sidechainSpans}
-        />
-      )}
-      <EvidencePanel sessionId={id} />
-      {eff && <EfficiencyPanel metrics={eff} />}
-      {costAttr && <CostAttributionPanel attr={costAttr} />}
-      {perf && <PerformancePanel metrics={perf} />}
+      <section
+        id="session-view-panel"
+        role="tabpanel"
+        aria-labelledby={`session-view-${activeView}-tab`}
+        className="session-view-panel fade-in"
+      >
+        {activeView === 'overview' && (
+          <>
+            <ViewIntro
+              eyebrow="运行结论"
+              title="先看诊断，再决定是否下钻"
+              description="这里保留最影响判断的建议、性能信号和交付痕迹；资源构成、工具过程和完整 Span 已拆到独立视图。"
+            />
+            <Card title="诊断建议" meta={diag ? `可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : undefined}>
+              <DiagnosisList result={diag} />
+            </Card>
+            {perf && <PerformancePanel metrics={perf} />}
+            {commits.length > 0 && (
+              <Card title="关联 Git 提交" meta={`${commits.length} commits`} style={{ boxShadow: `inset 3px 0 0 ${C.cr}, var(--shadow-card)` }}>
+                {commits.slice(0, 5).map((commit) => (
+                  <div key={commit.hash} className="ap-row session-commit-row">
+                    <code className="tnum" style={{ color: C.link, flexShrink: 0, fontSize: FS.cap }}>{commit.hash.slice(0, 7)}</code>
+                    <span className="clamp1" title={commit.message} style={{ flex: 1, color: C.text, minWidth: 0 }}>{commit.message}</span>
+                    <span className="tnum" style={{ flexShrink: 0, color: C.mute, fontSize: FS.cap }}>{commit.date?.slice(0, 16)}</span>
+                  </div>
+                ))}
+                {commits.length > 5 && <div style={{ fontSize: FS.cap, color: C.mute, padding: '3px 6px' }}>… 还有 {commits.length - 5} 个提交</div>}
+              </Card>
+            )}
+          </>
+        )}
 
-      {toolParams && (
-        <Card title="工具参数模式">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: SP.lg, fontSize: FS.sm }}>
-            {toolParams.bashCategories.length > 0 && (
-              <div>
-                <SubHead>Bash 命令分类</SubHead>
-                {toolParams.bashCategories.map((b) => (
-                  <KV key={b.category} k={b.category} v={`${b.count}`} />
+        {activeView === 'context' && (
+          <>
+            <ViewIntro
+              eyebrow="资源轨迹"
+              title="上下文怎样增长，成本花在哪里"
+              description="把上下文曲线、四类 Token 和成本归因放在同一条分析路径里，避免在互不相邻的卡片之间来回对照。"
+            />
+            <Card title="上下文窗口增长曲线">
+              <ContextChart points={ctx} tools={mainTools} />
+            </Card>
+            <Card title="Token 拆解" meta={`合计 ${fmtTokens(totalTokens)}`}>
+              <TokenStrip input={data.inputTokens} cc={data.cacheCreationTokens} cr={data.cacheReadTokens} out={data.outputTokens} height={14} />
+              <div className="session-token-legend">
+                {[
+                  { v: data.inputTokens, c: C.input, l: 'input' },
+                  { v: data.cacheCreationTokens, c: C.cc, l: 'cache_create' },
+                  { v: data.cacheReadTokens, c: C.cr, l: 'cache_read' },
+                  { v: data.outputTokens, c: C.out, l: 'output' },
+                ].map((item) => (
+                  <span key={item.l} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 10, height: 10, background: item.c, borderRadius: 3, display: 'inline-block' }} />
+                    <span className="tnum" style={{ color: C.text, fontWeight: 600 }}>{fmtTokens(item.v)}</span>
+                    <span style={{ color: C.sub }}>{item.l} · <span className="tnum">{((item.v / (totalTokens || 1)) * 100).toFixed(1)}%</span></span>
+                  </span>
                 ))}
               </div>
+            </Card>
+            {costAttr && <CostAttributionPanel attr={costAttr} />}
+          </>
+        )}
+
+        {activeView === 'tools' && (
+          <>
+            <ViewIntro
+              eyebrow="执行过程"
+              title="工具、参数与子链路放在一起看"
+              description={`主链路 ${mainTools.length} 次调用，其中 ${errorToolCount} 次观察到错误；Sidechain 单独计量，不混入主链路分布。`}
+            />
+            {sidechainTurns.length > 0 && (
+              <SidechainSummary
+                turns={sidechainTurns.length}
+                tools={sidechainTools.length}
+                tokens={sidechainTokens}
+                cost={sidechainCost}
+                spans={sidechainSpans}
+              />
             )}
-            <div>
-              <SubHead>Read 参数</SubHead>
-              <KV k="带 limit 读取" v={`${toolParams.readParamStats.withLimit}`} />
-              <KV k="整文件读取" v={`${toolParams.readParamStats.withoutLimit}`} />
-              {toolParams.readParamStats.avgLimit != null && (
-                <KV k="平均 limit" v={`${toolParams.readParamStats.avgLimit}`} />
-              )}
-            </div>
-            {toolParams.frequentPairs.length > 0 && (
-              <div>
-                <SubHead>高频工具组合</SubHead>
-                {toolParams.frequentPairs.slice(0, 5).map((p) => (
-                  <KV key={p.pair} k={p.pair} v={`×${p.count}`} />
+            {eff && <EfficiencyPanel metrics={eff} />}
+            {toolParams && (
+              <Card title="工具参数模式">
+                <div className="session-tool-param-grid">
+                  {toolParams.bashCategories.length > 0 && (
+                    <div>
+                      <SubHead>Bash 命令分类</SubHead>
+                      {toolParams.bashCategories.map((item) => (
+                        <KV key={item.category} k={item.category} v={`${item.count}`} />
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    <SubHead>Read 参数</SubHead>
+                    <KV k="带 limit 读取" v={`${toolParams.readParamStats.withLimit}`} />
+                    <KV k="整文件读取" v={`${toolParams.readParamStats.withoutLimit}`} />
+                    {toolParams.readParamStats.avgLimit != null && (
+                      <KV k="平均 limit" v={`${toolParams.readParamStats.avgLimit}`} />
+                    )}
+                  </div>
+                  {toolParams.frequentPairs.length > 0 && (
+                    <div>
+                      <SubHead>高频工具组合</SubHead>
+                      {toolParams.frequentPairs.slice(0, 5).map((pair) => (
+                        <KV key={pair.pair} k={pair.pair} v={`×${pair.count}`} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+            <div className="session-card-grid">
+              <Card title="工具调用次数" meta={mainTools.length < allTools.length ? '主链路' : undefined} style={{ marginBottom: 0 }}>
+                {toolBars.length === 0 ? <Empty text="本会话没有工具调用" /> : toolBars.map(([name, count]) => (
+                  <BarRow
+                    key={name}
+                    label={name}
+                    labelWidth={120}
+                    ratio={count / maxToolCount}
+                    color={CAT_COLOR[catOf(name)] || C.mute}
+                    right={`${count} 次 · ${mainTools.length > 0 ? ((count / mainTools.length) * 100).toFixed(0) : 0}%`}
+                  />
                 ))}
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
+              </Card>
+              <Card title="工具错误" meta={`${errorToolCount} / ${mainTools.length}`} style={{ marginBottom: 0 }}>
+                <ToolErrors tools={mainTools} />
+              </Card>
+            </div>
+            <Card title="工具调用时间线" meta={`共 ${mainTools.length} 次`}>
+              <ToolTimeline tools={mainTools} />
+            </Card>
+          </>
+        )}
 
-      <Card title="工具调用次数" meta={mainTools.length < allTools.length ? '主链路,不含子 agent' : undefined}>
-        {toolBars.length === 0 ? <Empty text="本会话没有工具调用" /> : toolBars.map(([name, count]) => (
-          <BarRow
-            key={name}
-            label={name}
-            labelWidth={180}
-            ratio={count / maxToolCount}
-            color={CAT_COLOR[catOf(name)] || C.mute}
-            right={`${count} 次 · ${mainTools.length > 0 ? ((count / mainTools.length) * 100).toFixed(0) : 0}%`}
-          />
-        ))}
-      </Card>
+        {activeView === 'evidence' && (
+          <>
+            <ViewIntro
+              eyebrow="规范化证据"
+              title="需要核查时，再进入完整 Span"
+              description="默认只加载结构化事件和覆盖度；输入、输出、thinking 与 answer 内容仍需主动请求脱敏且有界的预览。"
+            />
+            <EvidencePanel sessionId={id} />
+            <Card title="每轮 LLM 调用" meta={`${turns.length} 轮`}>
+              <TurnsTable turns={turns} />
+            </Card>
+            <Card title="每次工具调用" meta={`${mainTools.length} 次`}>
+              <ToolsTable tools={mainTools} />
+            </Card>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
 
-      <Card title="工具错误率">
-        <ToolErrors tools={mainTools} />
-      </Card>
+function SessionViewNav({
+  active,
+  embedded,
+  items,
+  onChange,
+}: {
+  active: SessionView;
+  embedded: boolean;
+  items: { id: SessionView; label: string; meta: string }[];
+  onChange: (view: SessionView) => void;
+}) {
+  return (
+    <div className="session-view-nav" data-embedded={embedded ? 'true' : 'false'}>
+      <div className="session-view-nav-label">
+        <span>分析视图</span>
+        <span className="tnum">04</span>
+      </div>
+      <div className="session-view-tabs" role="tablist" aria-label="Session 分析视图">
+        {items.map((item) => {
+          const selected = active === item.id;
+          return (
+            <button
+              key={item.id}
+              id={`session-view-${item.id}-tab`}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              aria-controls="session-view-panel"
+              className="session-view-tab"
+              data-active={selected ? 'true' : 'false'}
+              onClick={() => onChange(item.id)}
+            >
+              <span>{item.label}</span>
+              <span className="tnum">{item.meta}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-      <Card title="工具调用时间线" meta={`共 ${mainTools.length} 次`}>
-        <ToolTimeline tools={mainTools} />
-      </Card>
-
-      <Card title="上下文窗口增长曲线">
-        <ContextChart points={ctx} tools={mainTools} />
-      </Card>
-
-      <Card title="Token 拆解" meta={`合计 ${fmtTokens(data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens + data.outputTokens)}`}>
-        <TokenStrip input={data.inputTokens} cc={data.cacheCreationTokens} cr={data.cacheReadTokens} out={data.outputTokens} height={14} />
-        <div style={{ display: 'flex', gap: SP.xl, fontSize: FS.sm, marginTop: SP.md, flexWrap: 'wrap' }}>
-          {[
-            { v: data.inputTokens, c: C.input, l: 'input' },
-            { v: data.cacheCreationTokens, c: C.cc, l: 'cache_create' },
-            { v: data.cacheReadTokens, c: C.cr, l: 'cache_read' },
-            { v: data.outputTokens, c: C.out, l: 'output' },
-          ].map((i) => {
-            const total = data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens + data.outputTokens || 1;
-            return (
-              <span key={i.l} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 10, height: 10, background: i.c, borderRadius: 3, display: 'inline-block' }} />
-                <span className="tnum" style={{ color: C.text, fontWeight: 600 }}>{fmtTokens(i.v)}</span>
-                <span style={{ color: C.sub }}>{i.l} · <span className="tnum">{((i.v / total) * 100).toFixed(1)}%</span></span>
-              </span>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card title="诊断建议" meta={diag ? `可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : undefined}>
-        <DiagnosisList result={diag} />
-      </Card>
-
-      <Card title="每轮 LLM 调用" meta={`${turns.length} 轮`}>
-        <TurnsTable turns={turns} />
-      </Card>
-
-      <Card title="每次工具调用" meta={`${mainTools.length} 次`}>
-        <ToolsTable tools={mainTools} />
-      </Card>
+function ViewIntro({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="session-view-intro">
+      <div>{eyebrow}</div>
+      <h3>{title}</h3>
+      <p>{description}</p>
     </div>
   );
 }
@@ -488,10 +608,10 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
           );
         })()}
         {hoverIdx !== null && points.map((p, i) => (
-          <circle key={`dot-${i}`} cx={x(i)} cy={y(p.contextTokens)} r={i === hoverIdx ? 5 : 2} fill={i === hoverIdx ? C.input : C.mute} opacity={0.6} />
+          <circle key={`dot-${p.startTime}-${p.contextTokens}`} cx={x(i)} cy={y(p.contextTokens)} r={i === hoverIdx ? 5 : 2} fill={i === hoverIdx ? C.input : C.mute} opacity={0.6} />
         ))}
-        {spikes.map((sp, idx) => (
-          <g key={`spike-${idx}`}>
+        {spikes.map((sp) => (
+          <g key={`spike-${sp.turnIdx}`}>
             <line x1={sp.cx} y1={sp.cy + 4} x2={sp.cx} y2={sp.cy - 20} stroke={C.high} strokeWidth={1} strokeDasharray="3 2" opacity={0.7} />
             <circle cx={sp.cx} cy={sp.cy} r={4} fill={C.high} fillOpacity={0.8} stroke={C.card} strokeWidth={1}>
               <title>{`+${fmtTokens(sp.delta)} tokens${sp.tools.length > 0 ? ` — ${sp.tools.map((t) => t.name).join(', ')}` : ''}`}</title>
@@ -532,8 +652,8 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
       {spikes.length > 0 && (
         <div style={{ marginTop: SP.md, paddingTop: SP.md, boxShadow: `0 1px 0 ${C.borderSoft} inset` }}>
           <SubHead>上下文波动分析</SubHead>
-          {spikes.map((sp, idx) => (
-            <div key={idx} style={{ fontSize: FS.sm, color: C.text, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {spikes.map((sp) => (
+            <div key={sp.turnIdx} style={{ fontSize: FS.sm, color: C.text, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span style={{ color: C.high, fontWeight: 600, flexShrink: 0 }}>●</span>
               <span>
                 Turn {sp.turnIdx} 增长 <span className="tnum" style={{ color: C.high, fontWeight: 600 }}>+{fmtTokens(sp.delta)}</span> tokens
@@ -838,7 +958,7 @@ function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
       title="行为效率分析"
       meta={`${metrics.toolSuccessRates.length} 种工具 · 上下文增速 ${fmtTokens(metrics.contextGrowthVelocity)}/轮 · Read→Edit ${(metrics.readToEditRate * 100).toFixed(0)}%`}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SP.xl }}>
+      <div className="session-analysis-grid">
         <div>
           <SubHead>工具成功率</SubHead>
           {metrics.toolSuccessRates.slice(0, 8).map((t) => (
@@ -923,7 +1043,7 @@ function CostAttributionPanel({ attr }: { attr: CostAttribution }) {
 
   return (
     <Card title="成本归因" meta={`¥${attr.totalCost.toFixed(4)} · 浪费比 ${(attr.wastedCostRatio * 100).toFixed(1)}%`}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SP.xl }}>
+      <div className="session-analysis-grid">
         <div>
           <SubHead>按工具类别</SubHead>
           {attr.costByCategory.map((c) => (
@@ -977,7 +1097,7 @@ function PerformancePanel({ metrics }: { metrics: PerformanceMetrics }) {
       title="性能分析"
       meta={`${slowTurns.length} 个慢轮 · 吞吐 ${(throughput / 1000).toFixed(1)}k tokens/min · 共 ${(sessionDuration / 60000).toFixed(1)}min`}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: SP.md, marginBottom: SP.md }}>
+      <div className="session-mini-stat-grid">
         <MiniStat label="Turn 平均" value={fmtDuration(turnLatency.avg)} />
         <MiniStat label="Turn P95" value={fmtDuration(turnLatency.p95)} />
         <MiniStat label="Turn 最大" value={fmtDuration(turnLatency.max)} color={turnLatency.max > 60_000 ? C.high : undefined} />

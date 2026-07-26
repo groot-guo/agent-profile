@@ -34,11 +34,16 @@ MiMo SQLite ────────┘                           分析 + 会�
 每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新
 和失败；会话仓储在同一事务中替换 Session/Span，并保留用户标签与备注。Zed 与 MiMo
 的来源版本变化后会重新导入，不再因为 Session 已存在而永久跳过。
+Codex 使用 rollout 的 `session_meta.id` 作为线程级 Session 身份；旧格式缺少 `id`
+时才回退到 `session_id`。子线程保留自己的 ID，其 Span 标记为 Sidechain，不再覆盖父
+Session。
 
 ## 当前能力
 
 - 分别保留 input、cache creation、cache read、output 四类 token。
 - 按项目和 Agent 浏览、搜索、排序和筛选 Session，并支持标签、备注和多会话对比。
+- Session 详情固定展示身份、Token 指纹和主要 KPI，再拆分为“概览”“上下文与成本”
+  “工具与链路”“运行证据”四个视图，避免把所有分析卡片一次性纵向堆叠。
 - 查看 LLM 回合、工具调用与参数、上下文增长、耗时、子 Agent、Git commit 和成本归因。
 - 通过 `session-evidence/v1` 查看全部已归一化 Span 的统一时间线、父级/Sidechain
   关系、保守结果状态和字段覆盖度，并按类型、链路、错误筛选。
@@ -124,7 +129,13 @@ Task 标记为 `completed`。
 
 ## 端口与配置
 
+- 根目录 `pnpm dev` 会并行启动 server 与 web，server 源码变化后会自动重启，不再需要
+  分别打开两个终端。
 - server 默认 `3000`，可通过 `PORT` 修改。
 - web 默认 `3001`，可通过 `NEXT_PUBLIC_API` 修改 API 地址。
+- Web 开发产物写入 `apps/web/.next-dev`，生产构建仍写入 `apps/web/.next`，因此
+  运行中的 `pnpm dev` 不会再被 `pnpm build` 替换 chunk。
+- 首页“重新扫描”会依次扫描 `~/.claude/projects` 和 `~/.codex/sessions`，并汇总
+  两个来源的新增、更新、跳过与失败数量。
 - LLM 诊断使用 `LLM_API_KEY`，以及可选的 `LLM_PROVIDER`、`LLM_MODEL` 和
   `LLM_BASE_URL`。

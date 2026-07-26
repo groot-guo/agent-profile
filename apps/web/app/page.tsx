@@ -2,10 +2,10 @@
 
 import type { SessionSummary } from '@agent-profile/core';
 import { useCallback, useEffect, useState } from 'react';
+import { API, TRANSCRIPT_SCAN_SOURCES } from './config';
 import { DashboardView } from './dashboard';
-import { API, DEFAULT_SCAN_DIR } from './config';
 import { getAgentIcon } from './icons';
-import { AGENT_COLORS, AGENT_LABELS, C, fmtAgo, FS, R, SP } from './theme';
+import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtAgo, R, SP } from './theme';
 import { Chip, Empty, Notice, SoftButton, TokenStrip } from './ui';
 
 function projectOf(filePath: string): string {
@@ -61,15 +61,41 @@ export default function HomePage() {
     setError('');
     setScanResult('');
     try {
-      const res = await fetch(`${API}/scan`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ dir: DEFAULT_SCAN_DIR }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const r = (await res.json()) as { scanned: number; imported: number; skipped: number };
-      setScanResult(`扫描 ${r.scanned} 个文件:新导入 ${r.imported},跳过未变化 ${r.skipped}`);
-      fetchSessions();
+      const total = { scanned: 0, imported: 0, updated: 0, skipped: 0, failed: 0 };
+      const sourceResults: string[] = [];
+      const sourceErrors: string[] = [];
+
+      for (const source of TRANSCRIPT_SCAN_SOURCES) {
+        try {
+          const res = await fetch(`${API}/scan`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ dir: source.dir, agent: source.agent }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+          const result = (await res.json()) as typeof total;
+          total.scanned += result.scanned;
+          total.imported += result.imported;
+          total.updated += result.updated;
+          total.skipped += result.skipped;
+          total.failed += result.failed;
+          sourceResults.push(`${source.label} ${result.scanned}`);
+        } catch (reason: unknown) {
+          total.failed++;
+          sourceResults.push(`${source.label} 扫描失败`);
+          sourceErrors.push(
+            `${source.label}：${reason instanceof Error ? reason.message : '请求失败'}`,
+          );
+        }
+      }
+
+      setScanResult(
+        `${sourceResults.join('、')} 个文件；新增 ${total.imported}，更新 ${total.updated}，未变化 ${total.skipped}` +
+          (total.failed > 0 ? `，失败 ${total.failed}` : ''),
+      );
+      await fetchSessions();
+      if (sourceErrors.length > 0) setError(sourceErrors.join('；'));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'scan failed');
     } finally {
@@ -145,7 +171,7 @@ export default function HomePage() {
             </select>
           </div>
           <div style={{ display: 'flex', gap: SP.sm }}>
-            <SoftButton variant="primary" onClick={onScan} disabled={scanning} tip="重新扫描会话目录,导入新增 transcript" tipAlign="start" style={{ flex: 1 }}>
+            <SoftButton variant="primary" onClick={onScan} disabled={scanning} tip="扫描 Claude Code 与 Codex 会话目录，导入新增或变化的 transcript" tipAlign="start" style={{ flex: 1 }}>
               {scanning ? '扫描中…' : '重新扫描'}
             </SoftButton>
             <SoftButton onClick={() => { setLoading(true); fetchSessions(); }} tip="重新加载列表(不扫描文件)" tipAlign="end" style={{ flex: 1 }}>

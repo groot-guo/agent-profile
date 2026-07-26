@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { C, FS, R } from './theme';
 import { ThemeToggle } from './theme-toggle';
 
@@ -14,7 +15,23 @@ const NAV = [
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      for (const item of NAV) {
+        if (item.href !== pathname) router.prefetch(item.href);
+      }
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [pathname, router]);
+
   // iframe 嵌入模式(?embed=1)不渲染全局 header,避免嵌套
   if (searchParams.get('embed') === '1') return null;
   return (
@@ -76,22 +93,33 @@ export function Header() {
       <nav className="app-nav" style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
         {NAV.map((n) => {
           const active = n.href === '/' ? pathname === '/' : pathname.startsWith(n.href);
+          const pending = pendingHref === n.href && !active;
           return (
             <Link
               key={n.href}
               href={n.href}
               className="app-nav-link"
+              aria-busy={pending}
+              onClick={() => {
+                if (!active) setPendingHref(n.href);
+              }}
+              onFocus={() => router.prefetch(n.href)}
+              onMouseEnter={() => router.prefetch(n.href)}
               style={{
                 padding: '4px 12px',
                 borderRadius: R.pill,
                 fontSize: FS.sm,
                 textDecoration: 'none',
-                color: active ? C.link : C.sub,
-                fontWeight: active ? 600 : 400,
-                background: active ? `${C.link}14` : 'transparent',
+                color: active || pending ? C.link : C.sub,
+                fontWeight: active || pending ? 600 : 400,
+                background: active || pending ? `${C.link}14` : 'transparent',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
+              {pending && <span className="app-nav-spinner" aria-hidden="true" />}
               {n.label}
             </Link>
           );

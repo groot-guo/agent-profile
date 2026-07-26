@@ -37,7 +37,9 @@ atomically replace changed normalized sessions. Legacy rows without a
 fingerprint refresh once on their next scan. The server starts background
 imports for configured Claude/Codex directories and available Zed/MiMo
 databases so startup is not blocked by a large local history. The scan API
-supports manual import of a selected transcript directory.
+supports manual import of a selected transcript directory. The Web manual-scan
+action calls it once for Claude Code and once for Codex, then reports combined
+source-aware totals.
 
 ## Components
 
@@ -61,7 +63,7 @@ monolithic routes file.
 | Agent | Local source | Import model |
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
-| Codex | dated rollout JSONL | file mtime/size fingerprint; session metadata, response items, events, and call IDs |
+| Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), project metadata, response items, events, and call IDs |
 | Zed | threads SQLite database with compressed payloads | `updated_at` plus payload metadata fingerprint; changed payloads are decoded lazily |
 | MiMo | `mimocode.db` SQLite database | `time_updated` plus message/part counts; changed session records are loaded lazily |
 
@@ -143,6 +145,9 @@ The current server/UI support:
   and guarded iteration hypotheses;
 - versioned normalized Session evidence timelines with relationship, lane,
   outcome, content-availability, and coverage semantics;
+- a progressive Session-detail workspace with an always-visible identity,
+  token fingerprint, and primary KPIs followed by separate overview,
+  context/cost, tools/chain, and normalized-evidence views;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - editable pricing/model-context data and total-cost recomputation.
 
@@ -187,8 +192,10 @@ the evidence endpoint when a user explicitly requests previews.
 The report is complete only for the normalized Span set. Parsers do not
 currently create first-class user-message Spans for every source, so neither
 the API nor the Session UI calls the result a complete original conversation.
-The Session detail page provides filters and progressive disclosure over this
-evidence layer.
+The Session detail page keeps this evidence layer in a dedicated view. That
+view is mounted on demand, provides filters and progressive disclosure, and
+does not request the evidence report while the user remains in the overview,
+context/cost, or tools/chain views.
 
 ### Agent Profile report contract
 
@@ -274,9 +281,15 @@ page exposes the same contract and privacy boundaries.
 
 ## Operation and configuration
 
+- Root `pnpm dev` uses parallel workspace execution to start the API and Web
+  processes together. The API development command runs in watch mode; the Web
+  process uses Next.js development reloads.
 - API: port `3000` by default, configurable through `PORT`.
 - Web: port `3001` by default; API origin is configurable through
   `NEXT_PUBLIC_API`.
+- Next.js development output is isolated in `apps/web/.next-dev`; production
+  builds continue to use `apps/web/.next`, so a build does not invalidate
+  chunks used by a running development server.
 - Semantic diagnosis uses Anthropic-native or OpenAI-compatible endpoints when
   `LLM_API_KEY` and optional `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_BASE_URL`
   are configured.

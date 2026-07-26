@@ -30,7 +30,11 @@ require deleting the local database.
 
 ### Codex
 
-- `session_meta` supplies session identity and project metadata;
+- `session_meta.id` is the stable rollout-thread Session identity, with
+  `session_id` retained only as a legacy fallback;
+- child rollouts keep their distinct thread IDs instead of replacing the
+  parent Session, and their generated Spans are marked as sidechain evidence;
+- `session_meta.cwd` supplies project metadata;
 - response messages/reasoning become LLM evidence;
 - custom tool calls pair with their outputs by call ID;
 - token-count events provide available token aggregates.
@@ -52,8 +56,10 @@ require deleting the local database.
 At startup, configured Claude/Codex transcript directories are imported in the
 background and the Zed/MiMo database adapters run when those databases exist.
 `POST /api/scan` imports a selected transcript directory, which covers the
-file-based adapter. File-based sources fingerprint file mtime and size. Zed
-fingerprints `updated_at` plus payload metadata; MiMo fingerprints
+file-based adapter. The Web “重新扫描” action invokes this endpoint for both
+`~/.claude/projects` and `~/.codex/sessions` and aggregates their results.
+File-based sources fingerprint file mtime and size. Zed fingerprints
+`updated_at` plus payload metadata; MiMo fingerprints
 `time_updated` plus message/part counts. Matching database-source revisions are
 skipped before payload decompression or row loading. A changed source session
 is re-normalized and replaces its previous generated rows so aggregates do not

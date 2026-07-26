@@ -2,7 +2,7 @@
   "name": "trace-server",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
