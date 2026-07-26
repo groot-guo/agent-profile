@@ -210,6 +210,44 @@ const CAT_LABEL: Record<string, string> = {
 
 const PHASE_NAMES = ['探索期', '实现期', '验证期'];
 
+export interface EfficiencyScore {
+  score: number; // 0-100
+  tokenEfficiency: number; // output / total, normalized
+  cacheUtilization: number; // cache_hit_rate
+  toolSuccess: number; // overall tool success rate
+  wasteAvoidance: number; // 1 - wastedCost/totalCost
+  percentile?: number; // rank among all sessions (set by caller)
+}
+
+export function calcEfficiencyScore(
+  efficiency: EfficiencyMetrics,
+  cacheHitRate: number,
+  totalTokens: number,
+  outputTokens: number,
+  totalCost: number,
+  wastedCost?: number,
+): EfficiencyScore {
+  const tokenEfficiency = totalTokens > 0 ? Math.min(1, outputTokens / totalTokens * 3) : 0;
+  const cacheUtilization = cacheHitRate;
+  const toolSuccess = efficiency.toolSuccessRates.length > 0
+    ? efficiency.toolSuccessRates.reduce((s, t) => s + t.successRate, 0) / efficiency.toolSuccessRates.length
+    : 1;
+  const wasteAvoidance = totalCost > 0 && wastedCost != null
+    ? 1 - Math.min(1, wastedCost / totalCost)
+    : 1;
+
+  const score = Math.round(
+    (tokenEfficiency * 0.2 + cacheUtilization * 0.3 + toolSuccess * 0.2 + wasteAvoidance * 0.3) * 100,
+  );
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    tokenEfficiency,
+    cacheUtilization,
+    toolSuccess,
+    wasteAvoidance,
+  };
+}
+
 export function analyzeCostAttribution(
   spans: Span[],
   wastedCost?: number,

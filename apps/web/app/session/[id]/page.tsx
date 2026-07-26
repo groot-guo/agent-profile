@@ -1,6 +1,6 @@
 'use client';
 
-import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, SessionDetail, Span } from '@agent-profile/core';
+import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, EfficiencyScore, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -32,6 +32,7 @@ export default function SessionPage() {
   const [diag, setDiag] = useState<DiagnosisResult | null>(null);
   const [eff, setEff] = useState<EfficiencyMetrics | null>(null);
   const [costAttr, setCostAttr] = useState<CostAttribution | null>(null);
+  const [score, setScore] = useState<EfficiencyScore | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -47,13 +48,15 @@ export default function SessionPage() {
       fetch(`${API}/session/${id}/diagnosis`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/efficiency`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/cost-attribution`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/session/${id}/score`).then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([d, c, dg, ef, ca]) => {
+      .then(([d, c, dg, ef, ca, sc]) => {
         setData(d);
         setCtx(c);
         setDiag(dg);
         setEff(ef);
         setCostAttr(ca);
+        setScore(sc);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
@@ -112,6 +115,13 @@ export default function SessionPage() {
           value={data.costUnknownCount > 0 ? '—' : `¥${data.totalCost.toFixed(4)}`}
           warn={data.costUnknownCount > 0}
         />
+        {score && (
+          <Metric
+            label={`效率分${score.percentile ? ` · P${score.percentile}` : ''}`}
+            value={`${score.score}`}
+            warn={score.score < 50}
+          />
+        )}
       </div>
 
       {sidechainTurns.length > 0 && (
