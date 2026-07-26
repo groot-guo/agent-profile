@@ -93,6 +93,12 @@ These rules protect metric correctness and must not change accidentally:
   default: do not persist or log request text, do not send it to a semantic
   provider, keep returned excerpts opt-in/redacted/bounded, and never present a
   keyword match or runtime correlation as a causal optimization result.
+- Session evidence reports describe normalized stored Spans, not a guaranteed
+  complete source transcript. Preserve stable event order, parent/sidechain
+  evidence, and explicit coverage. Default responses must omit stored
+  input/output/thinking/answer content; any preview must be explicitly
+  requested, secret-redacted, bounded, and labeled when the parser already
+  truncated its source.
 
 For formulas, API behavior, storage details, and current source adapters, use
 `ARCHITECTURE.md` and the focused documents under `docs/` instead of duplicating

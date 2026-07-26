@@ -35,6 +35,9 @@ depends on which agent data exists on the machine.
   compare selected sessions, and inspect trends and distributions.
 - Inspect LLM turns, tool calls, tool parameters, context growth, performance,
   sub-agent activity, Git commits, and cost attribution.
+- Inspect every normalized Session Span in one filterable evidence timeline,
+  including parent/sidechain relationships and data coverage. Stored content
+  is omitted by default; optional previews are secret-redacted and bounded.
 - Run deterministic heuristic diagnosis and optional Anthropic-native or
   OpenAI-compatible LLM semantic diagnosis.
 - Calculate session efficiency, process score, cost, cache behavior, and
@@ -49,6 +52,11 @@ depends on which agent data exists on the machine.
 The Agent profile view is a runtime fingerprint, not a leaderboard. These
 metrics describe the observed execution process. They do not by themselves
 prove outcome quality or that one agent is universally better.
+
+The Session evidence view is not a raw-chat viewer. It includes every stored
+normalized Span, but source adapters do not yet capture every user message or
+Runtime event as a first-class Span. “No error observed” is not the same as a
+verified successful result.
 
 ## Data flow
 

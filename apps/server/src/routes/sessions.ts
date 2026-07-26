@@ -61,6 +61,11 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+function withoutStoredContent(span: Span): Span {
+  const { metadata: _storedContent, ...safeSpan } = span;
+  return safeSpan;
+}
+
 export function registerSessionRoutes(app: FastifyInstance) {
   app.get('/api/sessions', async () => {
     return db
@@ -169,7 +174,7 @@ export function registerSessionRoutes(app: FastifyInstance) {
       }));
 
     return {
-      session: detail,
+      session: { ...session, spans: spans.map(withoutStoredContent) },
       context,
       diagnosis,
       efficiency,

@@ -703,6 +703,130 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - design decision: expose clause suggestions and evidence sources without a
     prompt score or automatic rewrite
 
+### T43 normalized session evidence timeline and transparency
+
+- status: completed
+- purpose: let people and Agent Runtimes inspect what the profiler actually
+  observed in one execution, including tool-call process evidence and data
+  gaps, without confusing normalized spans with a complete original
+  conversation or exposing stored content by default
+- scope:
+  1. define a versioned `session-evidence/v1` report derived on demand from one
+     normalized Session and its ordered Spans, with no schema migration
+  2. expose every normalized LLM turn, tool call, thinking block, and answer
+     block in one ordered timeline with sequence, parent relationship,
+     main/sidechain lane, timing, resource fields, and conservative outcome
+     labels
+  3. report coverage for timing, parent links, tool inputs, tool outputs,
+     model identity, and content-bearing spans; distinguish `not_captured`
+     from an observed empty/zero value
+  4. omit stored content by default and support an explicit bounded-preview
+     mode with secret redaction and truncation provenance; do not add a
+     full-raw-content API
+  5. add a Session-detail evidence panel with type/lane/status filters,
+     progressive disclosure, coverage explanations, and an explicit statement
+     that normalized evidence is not a complete source transcript
+  6. document how this evidence surface supports debugging and future Runtime
+     consumption while Task/Outcome semantics remain absent
+- affected:
+  - `docs/roadmap.md`
+  - `AGENTS.md`
+  - `ARCHITECTURE.md`
+  - `README.md`
+  - `docs/agent-runtime-profile-design.md`
+  - `docs/zh/OVERVIEW.md`
+  - `packages/core/src/session-evidence.ts` (new)
+  - `packages/core/src/index.ts`
+  - related Core tests
+  - `apps/server/src/routes/session-evidence.ts` (new)
+  - `apps/server/src/routes/index.ts`
+  - `apps/server/src/routes/sessions.ts`
+  - related Server tests
+  - `apps/web/app/session/[id]/page.tsx`
+  - `apps/web/app/session/[id]/evidence-panel.tsx` (new)
+- acceptance:
+  - `session-evidence/v1` includes every stored normalized span exactly once in
+    stable chronological order and exposes counts by event type/lane/outcome
+  - parent references are classified as root, linked, or missing parent, and
+    sidechain evidence remains visible rather than being merged into main-chain
+    totals
+  - a tool with `isError=false` is labeled `no_error_observed`, never
+    universally “successful”; missing inputs/outputs and missing end times are
+    reported as not captured
+  - default API responses contain no input/output/thinking/answer text;
+    `content=preview` returns only secret-redacted bounded previews and declares
+    whether stored source content was already truncated
+  - the UI can inspect all normalized events, filter them, and expand details
+    without presenting a raw-chat viewer or loading content previews by default
+  - Core/Server tests, typecheck, changed-file lint, production build, privacy
+    scans, UI checks, and documentation consistency checks pass
+- risks:
+  - current parsers do not create first-class user-message spans, so “all
+    events” must mean all normalized stored spans rather than the complete
+    conversation
+  - `isError=false` does not prove success for every source; outcome wording
+    must remain conservative
+  - stored parser metadata can contain sensitive local paths, commands, or
+    output; preview mode must be explicit, redacted, and bounded
+  - large sessions can contain many events; UI filtering and collapsed details
+    must avoid rendering all content bodies eagerly
+- documentation plan:
+  - add the report/API/privacy contract to current architecture and user docs
+  - update the future runtime-profile design to mark the normalized evidence
+    timeline portion as implemented while retaining raw transcript and
+    Task/Outcome layers as future/authorized surfaces
+  - record exact coverage semantics, test counts, privacy scans, UI validation,
+    and remaining source limitations here before marking T43 completed
+- verification:
+  - `pnpm test` — passed: Core 148/148 tests; Server 20/20 tests
+  - `pnpm build` — passed: Core and Server TypeScript plus the Next.js
+    production build; the dynamic `/session/[id]` route includes the evidence
+    panel
+  - changed-source Biome check — passed for seven new/modified T43 Core,
+    Server, and evidence-panel files; the existing Session page and route use
+    targeted minimal insertions and were production-built, while their
+    unrelated historical lint findings remain owned by T44
+  - pure report tests — passed for stable chronological ordering, exactly-once
+    event inclusion, parent/lane/outcome semantics, partial/not-applicable
+    coverage, default content omission, secret redaction, 500-character preview
+    bounds, and parser-truncation provenance
+  - API tests — passed for default non-content responses, explicit preview
+    disclosure, invalid `content=full` rejection, and unknown-Session 404
+  - real-database API smoke test — one 60-Span Session produced
+    `session-evidence/v1` with 30 LLM turns, 22 tool calls, 4 thinking blocks,
+    and 4 answer blocks; default mode contained no preview fields, preview mode
+    exposed 52 bounded fields and identified 5 already-truncated source fields
+  - default Session-detail privacy smoke test — `/analysis` returned all 60
+    structural Spans with zero `metadata` fields
+  - privacy source scan — no full-content enum/mode exists; default content mode
+    is `none`, raw-content declaration is always false, and the Session-detail
+    response applies `withoutStoredContent`
+  - browser production-page verification — the Session page rendered the
+    evidence-panel heading and explicit API version-skew fallback at 1280px;
+    document width was 1270px with no horizontal overflow. The already-running
+    port-3000 API was intentionally not replaced during the check
+  - `git diff --check`, canonical `CLAUDE.md -> AGENTS.md` symlink check, and
+    report/API documentation scans — passed
+- completion:
+  - completed_at: 2026-07-26
+  - report contract: `session-evidence/v1`, derived on demand with no new table,
+    migration, or retained report
+  - event contract: every normalized stored Span appears exactly once in stable
+    time/source order with parent status, main/sidechain lane, conservative
+    outcome, timing, resource fields, and content availability
+  - privacy contract: no content by default; explicit preview only, common
+    secrets redacted, 500-character per-field bound, no full-raw API, and
+    Session-detail metadata stripped from the default page payload
+  - result: people can inspect and filter the normalized execution process in a
+    Session detail page, and Agent Runtimes can consume the same evidence and
+    coverage through `GET /api/session/:id/evidence`
+  - limitation: this is complete for normalized Spans, not the original source
+    conversation; user messages and some Runtime events are not first-class
+    Spans across all adapters, and `no_error_observed` does not prove success
+  - design decision: keep complete transcript/raw-output access outside the
+    default evidence contract and use progressive disclosure for bounded local
+    previews
+
 ### T44 repository lint baseline cleanup
 
 - status: planned
@@ -722,9 +846,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ## Execution Order
 
-T5–T15 and T36–T42 are complete. T43 is next and must receive its own explicit
-plan before implementation. T44 remains a separate lint-debt task and must not
-be folded into feature work.
+T5–T15 and T36–T43 are complete. T44 remains the next separate lint-debt task
+and must not be folded into feature work.
 
 ## Task Lifecycle
 

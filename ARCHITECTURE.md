@@ -43,7 +43,7 @@ supports manual import of a selected transcript directory.
 
 | Component | Current responsibility |
 | --- | --- |
-| `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile and prompt-review reports, tool categorization, pricing calculations |
+| `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
 | `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
 | `apps/server/src/ingestion/session-repository.ts` | Normalized analysis and atomic session/span persistence |
@@ -141,6 +141,8 @@ The current server/UI support:
   characteristics;
 - deterministic prompt-structure review with optional Agent-profile evidence
   and guarded iteration hypotheses;
+- versioned normalized Session evidence timelines with relationship, lane,
+  outcome, content-availability, and coverage semantics;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - editable pricing/model-context data and total-cost recomputation.
 
@@ -152,6 +154,41 @@ LLM span and records calculator version `v1`. Pre-T39 stored costs retain
 
 LLM diagnosis is optional. Without its API configuration, deterministic
 analysis remains available and the service continues to function.
+
+### Session evidence report contract
+
+`session-evidence/v1` is derived on demand from one stored Session and all of
+its normalized Spans. It adds no table or migration. Events are sorted by
+`startTime` with source order as a stable tie-breaker, then numbered so every
+stored `llm_turn`, `tool_call`, `thinking`, and `answer` Span appears exactly
+once. Each event exposes:
+
+- root/linked/missing-parent relationship and main/sidechain lane;
+- start time, captured end time/duration, model identity, token/context,
+  output-size, and known cost fields;
+- `observed_error`, `no_error_observed`, or `not_applicable` outcome wording;
+- expected content-field names and whether each was captured.
+
+`no_error_observed` is intentionally not called “success”: several source
+formats cannot prove result correctness from a false/missing error flag.
+Report-level coverage distinguishes complete, partial, not-captured, and
+not-applicable evidence for timing, parent links, tool input/output, model
+identity, and content-bearing events.
+
+`GET /api/session/:id/evidence` defaults to `content=none`; therefore the
+response contains no stored tool input/output, thinking, or answer text.
+`content=preview` is an explicit local disclosure that returns at most 500
+characters per available field after common secret redaction. It also reports
+whether the parser had already truncated the stored source. There is no
+full-raw-content mode in this API. The aggregated Session-detail
+`/api/session/:id/analysis` response also strips Span metadata; the UI must use
+the evidence endpoint when a user explicitly requests previews.
+
+The report is complete only for the normalized Span set. Parsers do not
+currently create first-class user-message Spans for every source, so neither
+the API nor the Session UI calls the result a complete original conversation.
+The Session detail page provides filters and progressive disclosure over this
+evidence layer.
 
 ### Agent Profile report contract
 
@@ -225,6 +262,7 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/session/:id/commits` | Related Git commits when available |
 | `GET` | `/api/session/:id/export` | Session export |
 | `GET` | `/api/session/:id/report` | Session report |
+| `GET` | `/api/session/:id/evidence` | Versioned normalized event timeline; optional bounded redacted previews |
 | `GET` | `/api/sessions/compare` | Selected-session comparison |
 | `GET` | `/api/stats` | Aggregate statistics and distributions |
 | `GET` | `/api/profiles/agents` | Versioned process profiles for all observed Agents |

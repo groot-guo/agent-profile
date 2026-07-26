@@ -8,6 +8,7 @@ import { API } from '../../config';
 import { getAgentIcon } from '../../icons';
 import { C, CAT_COLOR, catOf, DIAG_LABEL, fmtBytes, fmtDuration, fmtTime, fmtTokens, FS, R, SEV_COLOR, SEV_LABEL, SP } from '../../theme';
 import { BarRow, Card, Chip, Empty, Notice, SoftButton, StatCard, TokenStrip } from '../../ui';
+import { EvidencePanel } from './evidence-panel';
 
 // 明细表分页每页行数
 const TABLE_LIMIT = 30;
@@ -202,6 +203,7 @@ export default function SessionPage() {
           spans={sidechainSpans}
         />
       )}
+      <EvidencePanel sessionId={id} />
       {eff && <EfficiencyPanel metrics={eff} />}
       {costAttr && <CostAttributionPanel attr={costAttr} />}
       {perf && <PerformancePanel metrics={perf} />}

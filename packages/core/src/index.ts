@@ -73,4 +73,21 @@ export {
 } from './scanners/claude';
 export type { ZedThreadMeta } from './scanners/zed';
 export { hasZedThreadsDb, zedThreadsDbPath } from './scanners/zed';
+export type {
+  CoverageStatus,
+  EvidenceContentField,
+  EvidenceContentMode,
+  EvidenceCoverage,
+  EvidenceFieldStatus,
+  EvidenceLane,
+  EvidenceOutcome,
+  ParentLinkStatus,
+  SessionEvidenceEvent,
+  SessionEvidenceReport,
+} from './session-evidence';
+export {
+  buildSessionEvidenceReport,
+  MAX_EVIDENCE_PREVIEW_CHARACTERS,
+  SESSION_EVIDENCE_SCHEMA_VERSION,
+} from './session-evidence';
 export type * from './types';
