@@ -518,18 +518,26 @@ function detectSameParamLoop(
   costOfTokens: CostFn,
 ): DiagnosisFinding[] {
   const findings: DiagnosisFinding[] = [];
-  let runStart = -1, runLen = 0;
-  let bestStart = -1, bestLen = 0, bestName = '';
+  let runStart = -1,
+    runLen = 0;
+  let bestStart = -1,
+    bestLen = 0,
+    bestName = '';
 
   for (let i = 0; i < tools.length; i++) {
     const prev = i > 0 ? tools[i - 1] : null;
     const curr = tools[i];
     const sameName = prev && curr.name === prev.name;
-    const sameInput = prev && JSON.stringify(curr.metadata?.input) === JSON.stringify(prev.metadata?.input);
+    const sameInput =
+      prev && JSON.stringify(curr.metadata?.input) === JSON.stringify(prev.metadata?.input);
     if (sameName && sameInput) {
       if (runLen === 0) runStart = i - 1;
       runLen++;
-      if (runLen > bestLen) { bestLen = runLen; bestStart = runStart; bestName = curr.name; }
+      if (runLen > bestLen) {
+        bestLen = runLen;
+        bestStart = runStart;
+        bestName = curr.name;
+      }
     } else {
       runLen = 0;
     }
@@ -614,8 +622,12 @@ function detectContextCompression(
 ): DiagnosisFinding[] {
   const findings: DiagnosisFinding[] = [];
   for (let i = 1; i < turns.length; i++) {
-    const prevCtx = turns[i - 1].contextTokens || (turns[i - 1].inputTokens + turns[i - 1].cacheCreationTokens + turns[i - 1].cacheReadTokens);
-    const currCtx = turns[i].contextTokens || (turns[i].inputTokens + turns[i].cacheCreationTokens + turns[i].cacheReadTokens);
+    const prevCtx =
+      turns[i - 1].contextTokens ||
+      turns[i - 1].inputTokens + turns[i - 1].cacheCreationTokens + turns[i - 1].cacheReadTokens;
+    const currCtx =
+      turns[i].contextTokens ||
+      turns[i].inputTokens + turns[i].cacheCreationTokens + turns[i].cacheReadTokens;
     if (prevCtx <= 0) continue;
     const dropRatio = (prevCtx - currCtx) / prevCtx;
     if (dropRatio < t.contextCompressionRatio) continue;

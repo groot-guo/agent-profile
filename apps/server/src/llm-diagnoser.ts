@@ -93,7 +93,7 @@ async function callAnthropic(prompt: string, key: string): Promise<LlmFinding[]>
     clearTimeout(timeout);
     if (!res.ok) return [];
 
-    const data = await res.json() as { content?: { type: string; text: string }[] };
+    const data = (await res.json()) as { content?: { type: string; text: string }[] };
     const textContent = data.content?.find((c) => c.type === 'text')?.text;
     return textContent ? parseResponse(textContent) : [];
   } catch {
@@ -108,11 +108,14 @@ async function callOpenAI(prompt: string, key: string): Promise<LlmFinding[]> {
   try {
     const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: LLM_MODEL,
         messages: [
-          { role: 'system', content: 'You are an AI agent runtime analyst. Output strict JSON only.' },
+          {
+            role: 'system',
+            content: 'You are an AI agent runtime analyst. Output strict JSON only.',
+          },
           { role: 'user', content: prompt },
         ],
         max_tokens: 1000,
@@ -124,7 +127,7 @@ async function callOpenAI(prompt: string, key: string): Promise<LlmFinding[]> {
     clearTimeout(timeout);
     if (!res.ok) return [];
 
-    const data = await res.json() as { choices?: { message?: { content?: string } }[] };
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const content = data.choices?.[0]?.message?.content;
     return content ? parseResponse(content) : [];
   } catch {

@@ -10,7 +10,11 @@ function truncate(s: string): string {
 function safeStringify(v: unknown): string {
   if (v == null) return '';
   if (typeof v === 'string') return v;
-  try { return truncate(JSON.stringify(v)); } catch { return String(v); }
+  try {
+    return truncate(JSON.stringify(v));
+  } catch {
+    return String(v);
+  }
 }
 
 function toMs(iso: string): number {
@@ -18,19 +22,40 @@ function toMs(iso: string): number {
 }
 
 function makeSpan(p: {
-  id: string; sessionId: string; parentId?: string | null; type: SpanType;
-  name: string; startTime: number; endTime?: number;
-  inputTokens?: number; outputTokens?: number; model?: string;
-  isError?: boolean; isSidechain?: boolean; outputBytes?: number;
+  id: string;
+  sessionId: string;
+  parentId?: string | null;
+  type: SpanType;
+  name: string;
+  startTime: number;
+  endTime?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  model?: string;
+  isError?: boolean;
+  isSidechain?: boolean;
+  outputBytes?: number;
   metadata?: Record<string, unknown>;
 }): Span {
   return {
-    id: p.id, sessionId: p.sessionId, parentId: p.parentId ?? null,
-    type: p.type, name: p.name, startTime: p.startTime, endTime: p.endTime,
-    inputTokens: p.inputTokens || 0, cacheCreationTokens: 0, cacheReadTokens: 0,
+    id: p.id,
+    sessionId: p.sessionId,
+    parentId: p.parentId ?? null,
+    type: p.type,
+    name: p.name,
+    startTime: p.startTime,
+    endTime: p.endTime,
+    inputTokens: p.inputTokens || 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
     outputTokens: p.outputTokens || 0,
-    contextTokens: 0, outputBytes: p.outputBytes || 0, model: p.model,
-    cost: 0, costUnknown: false, isError: !!p.isError, isSidechain: !!p.isSidechain,
+    contextTokens: 0,
+    outputBytes: p.outputBytes || 0,
+    model: p.model,
+    cost: 0,
+    costUnknown: false,
+    isError: !!p.isError,
+    isSidechain: !!p.isSidechain,
     metadata: p.metadata,
   };
 }

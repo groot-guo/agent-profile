@@ -63,7 +63,8 @@ const GLOBAL_CSS = `
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
+  html { margin: 0; padding: 0; scrollbar-gutter: stable; }
+  body { margin: 0; padding: 0; }
   body {
     font-family: var(--font-ui);
     font-size: 13px;
@@ -338,17 +339,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
+        <script>{`
           (function() {
             var theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
             document.documentElement.setAttribute('data-theme', theme);
           })();
-        `,
-          }}
-        />
-        <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
+        `}</script>
+        <style>{GLOBAL_CSS}</style>
       </head>
       <body>
         <Suspense fallback={null}>

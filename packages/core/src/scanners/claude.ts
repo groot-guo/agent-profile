@@ -20,7 +20,9 @@ export async function findTranscriptFiles(root: string): Promise<string[]> {
     const rootSt = await stat(rootDir);
     if (rootSt.ino != null) seen.add(`${rootSt.dev}:${rootSt.ino}`);
     else seen.add(rootDir);
-  } catch { /* 根目录不可访问，seen 为空，后续 readdir 也会失败 */ }
+  } catch {
+    /* 根目录不可访问，seen 为空，后续 readdir 也会失败 */
+  }
 
   while (dirs.length > 0) {
     const dir = dirs.pop()!;

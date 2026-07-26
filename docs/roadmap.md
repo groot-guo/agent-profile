@@ -829,7 +829,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T44 repository lint baseline cleanup
 
-- status: planned
+- status: completed
 - purpose: establish a green full-repository lint baseline independently from
   feature and architecture work
 - scope:
@@ -843,6 +843,36 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - behavior-affecting suppressions are documented rather than added silently
 - execution constraint:
   - do not start before T40–T43 unless the errors block one of those tasks
+- active scope and verification plan:
+  - resolve the current Biome diagnostics across server, core, web, and helper
+    scripts without changing public runtime behavior
+  - preserve the deliberate document theme bootstrap and static global CSS
+    injection while documenting any narrowly-scoped security suppression
+  - run `pnpm lint`, `pnpm test`, and `pnpm build`; inspect the final diff for
+    unintended behavioral changes before closing the Task
+- implemented:
+  - applied Biome's safe repository-wide formatting and import organization;
+    resolved its blocking accessibility and React-key findings
+  - removed unsafe non-null assumptions in production paths where needed and
+    retained non-blocking advisory diagnostics for explicitly bounded test or
+    parser cases
+  - replaced static `dangerouslySetInnerHTML` theme bootstrap/style injection
+    with static script/style child content, retaining no-flash theme behavior
+    without suppressing the security rule
+  - added a descriptive title to the embedded Session iframe
+- verification:
+  - `pnpm lint` — passed with 21 warnings and 2 informational diagnostics,
+    no errors; warnings are advisory and did not require behavior-changing
+    suppressions
+  - `pnpm test` — passed: core 14 files / 154 tests; server 6 files / 20 tests
+  - `pnpm build` — passed: core TypeScript build, server type check, and Next
+    production build
+  - `git diff --check` — passed
+- completion:
+  - changed files: Biome-formatted server, core, web, and helper-script files,
+    plus the T51 UI files and this roadmap
+  - no schema, API, metric, or source-adapter behavior was intentionally
+    changed; the inline theme bootstrap remains local static content
 
 ### T45 unified development startup and Session detail information architecture
 
@@ -1277,9 +1307,78 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - requires performance fixtures, measured UI budgets, source-revision
     compatibility, and a separate threat model before changing API exposure
 
+### T51 Agent identity clarity and theme-toggle stability
+
+- status: completed
+- purpose:
+  - make mixed-agent Session histories scannable at a glance and remove the
+    visible jitter around the light/dark theme control
+- scope:
+  1. replace undersized standalone Agent logos in the Session list, filters,
+     selected Session context, and summary views with a reusable, labelled
+     Agent mark that combines brand color, a fixed visual container, and an
+     appropriately sized icon
+  2. use stable, equal-sized SVG icons for the theme control; make the document
+     theme attribute the authority for toggle transitions and use a native
+     accessible label instead of the global top-edge tooltip
+  3. reserve scrollbar gutter space where supported so theme changes cannot
+     shift content when browser scrollbar behavior differs
+- dependencies and assumptions:
+  - Agent colors remain analytical identifiers, not quality rankings
+  - no source data, API contract, metric definition, or persisted preference
+    changes are required
+- risks:
+  - visual size changes can crowd dense rows, so all marks must have fixed
+    dimensions and the Session list must preserve text truncation behavior
+- acceptance:
+  - Codex, Claude Code, and MiMo rows and filters remain distinguishable in a
+    dense Session sidebar without relying on a 12px standalone logo
+  - theme-toggle icon geometry remains fixed across both themes, does not use
+    the global `data-tip` overlay, and exposes an accessible action label
+  - a local UI smoke test confirms the theme toggle keeps header, viewport, and
+    scroll dimensions stable
+- verification plan:
+  - run web lint and production build
+  - run a local browser smoke test with mixed-agent data and compare viewport,
+    scrollbar, header, and toggle dimensions before/after a theme change
+- documentation plan:
+  - record changed files and verification results here; user-facing product
+    documentation is unchanged because no workflow or data behavior changes
+- implemented:
+  - added a reusable fixed-size `AgentMark` that pairs each imported Agent's
+    logo with its existing analytical color, a subtle container, and an
+    accessible name; applied it to Session filters, Session rows, selected
+    Session context, dashboard lists, detail headers, statistics, comparison,
+    and process-profile summaries
+  - changed the theme control from variable emoji glyphs and a global
+    `data-tip` overlay to equal-size SVG glyphs, native accessible labels, and
+    document-theme-derived transition state
+  - added `scrollbar-gutter: stable` at the document level where browsers
+    support it, preventing scrollbar allocation from moving the app shell
+- verification:
+  - `git diff --check` — passed
+  - focused `biome check` for the new Agent mark, theme toggle, dashboard, and
+    comparison view — passed
+  - `pnpm --filter agent-profile-web build` — passed
+  - local browser smoke test with mixed Codex, Claude Code, and MiMo history —
+    filters rendered 18px labelled marks and Session rows rendered 20px
+    labelled marks; the theme control had no `data-tip` and stayed 30×30
+  - measured before/after theme change — Header height, viewport dimensions,
+    client dimensions, and scroll dimensions were unchanged
+  - repository-wide `pnpm lint` remains blocked by pre-existing T44 findings;
+    this Task corrected its own accessible-label issue and added no new lint
+    diagnostic in the focused check
+- completion:
+  - changed files: `apps/web/app/icons.tsx`, `apps/web/app/theme-toggle.tsx`,
+    `apps/web/app/layout.tsx`, `apps/web/app/page.tsx`, dashboard, Session
+    detail, statistics, comparison, and profile views, plus this roadmap
+  - remaining limitation: the fixed desktop sidebar still overflows narrow
+    mobile viewports; the responsive navigation redesign remains explicitly
+    owned by T50
+
 ## Execution Order
 
-T5–T15 and T36–T43 plus T45–T47 are complete. T48–T50 record the next product
+T5–T15 and T36–T43 plus T45–T47 and T51 are complete. T48–T50 record the next product
 capabilities. T44 remains a separate planned lint-debt Task and must not be
 folded into feature work.
 

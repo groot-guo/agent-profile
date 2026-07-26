@@ -1,12 +1,35 @@
 'use client';
 
-import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, EfficiencyScore, PerformanceMetrics, SessionDetail, Span, ToolParamAnalysis } from '@agent-profile/core';
+import type {
+  CostAttribution,
+  DiagnosisResult,
+  EfficiencyMetrics,
+  EfficiencyScore,
+  PerformanceMetrics,
+  SessionDetail,
+  Span,
+  ToolParamAnalysis,
+} from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
-import { getAgentIcon } from '../../icons';
-import { C, CAT_COLOR, catOf, DIAG_LABEL, FS, fmtBytes, fmtDuration, fmtTime, fmtTokens, R, SEV_COLOR, SEV_LABEL, SP } from '../../theme';
+import { AgentMark } from '../../icons';
+import {
+  C,
+  CAT_COLOR,
+  catOf,
+  DIAG_LABEL,
+  FS,
+  fmtBytes,
+  fmtDuration,
+  fmtTime,
+  fmtTokens,
+  R,
+  SEV_COLOR,
+  SEV_LABEL,
+  SP,
+} from '../../theme';
 import { BarRow, Card, Chip, Empty, Notice, SoftButton, StatCard, TokenStrip } from '../../ui';
 import { EvidencePanel } from './evidence-panel';
 
@@ -39,16 +62,30 @@ interface SessionAnalysis {
 type SessionView = 'overview' | 'context' | 'tools' | 'evidence';
 
 async function loadLegacyAnalysis(id: string): Promise<SessionAnalysis> {
-  const [session, context, diagnosis, efficiency, costAttribution, score, commits, performance, toolParams] = await Promise.all([
-    fetch(`${API}/session/${id}`).then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))),
-    fetch(`${API}/session/${id}/context`).then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))),
-    fetch(`${API}/session/${id}/diagnosis`).then((r) => r.ok ? r.json() : null),
-    fetch(`${API}/session/${id}/efficiency`).then((r) => r.ok ? r.json() : null),
-    fetch(`${API}/session/${id}/cost-attribution`).then((r) => r.ok ? r.json() : null),
-    fetch(`${API}/session/${id}/score`).then((r) => r.ok ? r.json() : null),
-    fetch(`${API}/session/${id}/commits`).then((r) => r.ok ? r.json() : { commits: [] }),
-    fetch(`${API}/session/${id}/performance`).then((r) => r.ok ? r.json() : null),
-    fetch(`${API}/session/${id}/tool-params`).then((r) => r.ok ? r.json() : null),
+  const [
+    session,
+    context,
+    diagnosis,
+    efficiency,
+    costAttribution,
+    score,
+    commits,
+    performance,
+    toolParams,
+  ] = await Promise.all([
+    fetch(`${API}/session/${id}`).then((r) =>
+      r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+    ),
+    fetch(`${API}/session/${id}/context`).then((r) =>
+      r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
+    ),
+    fetch(`${API}/session/${id}/diagnosis`).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/efficiency`).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/cost-attribution`).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/score`).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/commits`).then((r) => (r.ok ? r.json() : { commits: [] })),
+    fetch(`${API}/session/${id}/performance`).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/tool-params`).then((r) => (r.ok ? r.json() : null)),
   ]);
   return {
     session,
@@ -74,7 +111,9 @@ export default function SessionPage() {
   const [eff, setEff] = useState<EfficiencyMetrics | null>(null);
   const [costAttr, setCostAttr] = useState<CostAttribution | null>(null);
   const [score, setScore] = useState<EfficiencyScore | null>(null);
-  const [commits, setCommits] = useState<{ hash: string; message: string; date: string; author: string }[]>([]);
+  const [commits, setCommits] = useState<
+    { hash: string; message: string; date: string; author: string }[]
+  >([]);
   const [perf, setPerf] = useState<PerformanceMetrics | null>(null);
   const [toolParams, setToolParams] = useState<ToolParamAnalysis | null>(null);
   const [activeView, setActiveView] = useState<SessionView>('overview');
@@ -109,7 +148,12 @@ export default function SessionPage() {
   }, [id]);
 
   if (loading) return <Empty text="加载会话中…" />;
-  if (error) return <div style={{ padding: SP.xl }}><Notice kind="err">{error}</Notice></div>;
+  if (error)
+    return (
+      <div style={{ padding: SP.xl }}>
+        <Notice kind="err">{error}</Notice>
+      </div>
+    );
   if (!data) return null;
 
   const dur = data.endTime ? data.endTime - data.startTime : 0;
@@ -120,7 +164,8 @@ export default function SessionPage() {
   const sidechainTurns = sidechainSpans.filter((s) => s.type === 'llm_turn');
   const sidechainTools = sidechainSpans.filter((s) => s.type === 'tool_call');
   const sidechainTokens = sidechainTurns.reduce(
-    (acc, t) => acc + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens + t.outputTokens, 0,
+    (acc, t) => acc + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens + t.outputTokens,
+    0,
   );
   const sidechainCost = sidechainTurns.reduce((acc, t) => acc + t.cost, 0);
 
@@ -128,26 +173,53 @@ export default function SessionPage() {
   for (const t of mainTools) toolCounts.set(t.name, (toolCounts.get(t.name) || 0) + 1);
   const toolBars = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]);
   const maxToolCount = toolBars[0]?.[1] || 1;
-  const totalTokens = data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens + data.outputTokens;
+  const totalTokens =
+    data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens + data.outputTokens;
   const errorToolCount = mainTools.filter((tool) => tool.isError).length;
   const diagnosisCount = diag?.findings.length ?? 0;
 
   return (
     <div className="session-page">
       {!isEmbed && (
-        <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>← 返回列表</Link>
+        <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>
+          ← 返回列表
+        </Link>
       )}
 
       {/* ===== 头部:名称 + meta + 操作 ===== */}
-      <h2 style={{ margin: '6px 0 6px', fontSize: 20, fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: SP.sm }}>
-        {data.agent ? getAgentIcon(data.agent, 20) : null}
-        <span className="clamp1" title={data.name || data.id}>{data.name || data.id.slice(0, 8)}</span>
+      <h2
+        style={{
+          margin: '6px 0 6px',
+          fontSize: 20,
+          fontWeight: 600,
+          color: C.text,
+          display: 'flex',
+          alignItems: 'center',
+          gap: SP.sm,
+        }}
+      >
+        {data.agent ? <AgentMark agent={data.agent} size={26} /> : null}
+        <span className="clamp1" title={data.name || data.id}>
+          {data.name || data.id.slice(0, 8)}
+        </span>
       </h2>
-      <div style={{ display: 'flex', alignItems: 'center', gap: SP.sm, flexWrap: 'wrap', marginBottom: SP.md }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: SP.sm,
+          flexWrap: 'wrap',
+          marginBottom: SP.md,
+        }}
+      >
         {data.claudeVersion && <Chip color={C.mute}>v{data.claudeVersion}</Chip>}
-        <Chip color={C.mute}><span className="tnum">{data.messageCount}</span>&nbsp;条消息</Chip>
+        <Chip color={C.mute}>
+          <span className="tnum">{data.messageCount}</span>&nbsp;条消息
+        </Chip>
         {(data.gitBranch || data.cwd) && (
-          <Chip color={C.mute} tip={data.cwd || undefined}>{data.gitBranch || data.cwd}</Chip>
+          <Chip color={C.mute} tip={data.cwd || undefined}>
+            {data.gitBranch || data.cwd}
+          </Chip>
         )}
         <TagEditor id={id} initialTags={(data as SessionDetail & { tags?: string }).tags || ''} />
         <span style={{ flex: 1 }} />
@@ -162,7 +234,13 @@ export default function SessionPage() {
         aria-label="本会话 Token 构成"
         style={{ display: 'flex', alignItems: 'center', gap: SP.md, marginBottom: SP.lg }}
       >
-        <TokenStrip input={data.inputTokens} cc={data.cacheCreationTokens} cr={data.cacheReadTokens} out={data.outputTokens} height={8} />
+        <TokenStrip
+          input={data.inputTokens}
+          cc={data.cacheCreationTokens}
+          cr={data.cacheReadTokens}
+          out={data.outputTokens}
+          height={8}
+        />
       </div>
 
       {/* ===== KPI ===== */}
@@ -172,10 +250,22 @@ export default function SessionPage() {
         <StatCard
           label="工具调用"
           value={`${mainTools.length}${sidechainTools.length > 0 ? ` +${sidechainTools.length}` : ''}`}
-          tip={sidechainTools.length > 0 ? `主链路 ${mainTools.length} 次 + 子 agent ${sidechainTools.length} 次` : '主链路工具调用次数'}
+          tip={
+            sidechainTools.length > 0
+              ? `主链路 ${mainTools.length} 次 + 子 agent ${sidechainTools.length} 次`
+              : '主链路工具调用次数'
+          }
         />
-        <StatCard label="峰值上下文" value={fmtTokens(data.peakContextTokens)} tip="会话中上下文窗口的最大占用" />
-        <StatCard label="Cache 命中" value={`${(data.cacheHitRate * 100).toFixed(1)}%`} tip="cache_read ÷ (input + cache_creation + cache_read)" />
+        <StatCard
+          label="峰值上下文"
+          value={fmtTokens(data.peakContextTokens)}
+          tip="会话中上下文窗口的最大占用"
+        />
+        <StatCard
+          label="Cache 命中"
+          value={`${(data.cacheHitRate * 100).toFixed(1)}%`}
+          tip="cache_read ÷ (input + cache_creation + cache_read)"
+        />
         <StatCard
           label="成本"
           value={data.costUnknownCount > 0 ? '未定价' : `¥${data.totalCost.toFixed(4)}`}
@@ -188,7 +278,11 @@ export default function SessionPage() {
             label={`效率分${score.percentile ? ` · P${score.percentile}` : ''}`}
             value={`${score.score}`}
             warn={score.score < 50}
-            tip={score.percentile ? `超过 ${score.percentile}% 的同类会话;分数越低可优化空间越大` : '综合 cache 命中、浪费比等得出的效率评分'}
+            tip={
+              score.percentile
+                ? `超过 ${score.percentile}% 的同类会话;分数越低可优化空间越大`
+                : '综合 cache 命中、浪费比等得出的效率评分'
+            }
             tipAlign="end"
           />
         )}
@@ -198,8 +292,16 @@ export default function SessionPage() {
         active={activeView}
         embedded={isEmbed}
         items={[
-          { id: 'overview', label: '概览', meta: diagnosisCount > 0 ? `${diagnosisCount} 项建议` : '运行结论' },
-          { id: 'context', label: '上下文与成本', meta: `峰值 ${fmtTokens(data.peakContextTokens)}` },
+          {
+            id: 'overview',
+            label: '概览',
+            meta: diagnosisCount > 0 ? `${diagnosisCount} 项建议` : '运行结论',
+          },
+          {
+            id: 'context',
+            label: '上下文与成本',
+            meta: `峰值 ${fmtTokens(data.peakContextTokens)}`,
+          },
           { id: 'tools', label: '工具与链路', meta: `${mainTools.length} 次调用` },
           { id: 'evidence', label: '运行证据', meta: `${data.spans.length} 个 Span` },
         ]}
@@ -219,20 +321,47 @@ export default function SessionPage() {
               title="先看诊断，再决定是否下钻"
               description="这里保留最影响判断的建议、性能信号和交付痕迹；资源构成、工具过程和完整 Span 已拆到独立视图。"
             />
-            <Card title="诊断建议" meta={diag ? `可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : undefined}>
+            <Card
+              title="诊断建议"
+              meta={diag ? `可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : undefined}
+            >
               <DiagnosisList result={diag} />
             </Card>
             {perf && <PerformancePanel metrics={perf} />}
             {commits.length > 0 && (
-              <Card title="关联 Git 提交" meta={`${commits.length} commits`} style={{ boxShadow: `inset 3px 0 0 ${C.cr}, var(--shadow-card)` }}>
+              <Card
+                title="关联 Git 提交"
+                meta={`${commits.length} commits`}
+                style={{ boxShadow: `inset 3px 0 0 ${C.cr}, var(--shadow-card)` }}
+              >
                 {commits.slice(0, 5).map((commit) => (
                   <div key={commit.hash} className="ap-row session-commit-row">
-                    <code className="tnum" style={{ color: C.link, flexShrink: 0, fontSize: FS.cap }}>{commit.hash.slice(0, 7)}</code>
-                    <span className="clamp1" title={commit.message} style={{ flex: 1, color: C.text, minWidth: 0 }}>{commit.message}</span>
-                    <span className="tnum" style={{ flexShrink: 0, color: C.mute, fontSize: FS.cap }}>{commit.date?.slice(0, 16)}</span>
+                    <code
+                      className="tnum"
+                      style={{ color: C.link, flexShrink: 0, fontSize: FS.cap }}
+                    >
+                      {commit.hash.slice(0, 7)}
+                    </code>
+                    <span
+                      className="clamp1"
+                      title={commit.message}
+                      style={{ flex: 1, color: C.text, minWidth: 0 }}
+                    >
+                      {commit.message}
+                    </span>
+                    <span
+                      className="tnum"
+                      style={{ flexShrink: 0, color: C.mute, fontSize: FS.cap }}
+                    >
+                      {commit.date?.slice(0, 16)}
+                    </span>
                   </div>
                 ))}
-                {commits.length > 5 && <div style={{ fontSize: FS.cap, color: C.mute, padding: '3px 6px' }}>… 还有 {commits.length - 5} 个提交</div>}
+                {commits.length > 5 && (
+                  <div style={{ fontSize: FS.cap, color: C.mute, padding: '3px 6px' }}>
+                    … 还有 {commits.length - 5} 个提交
+                  </div>
+                )}
               </Card>
             )}
           </>
@@ -249,7 +378,13 @@ export default function SessionPage() {
               <ContextChart points={ctx} tools={mainTools} />
             </Card>
             <Card title="Token 拆解" meta={`合计 ${fmtTokens(totalTokens)}`}>
-              <TokenStrip input={data.inputTokens} cc={data.cacheCreationTokens} cr={data.cacheReadTokens} out={data.outputTokens} height={14} />
+              <TokenStrip
+                input={data.inputTokens}
+                cc={data.cacheCreationTokens}
+                cr={data.cacheReadTokens}
+                out={data.outputTokens}
+                height={14}
+              />
               <div className="session-token-legend">
                 {[
                   { v: data.inputTokens, c: C.input, l: 'input' },
@@ -257,10 +392,28 @@ export default function SessionPage() {
                   { v: data.cacheReadTokens, c: C.cr, l: 'cache_read' },
                   { v: data.outputTokens, c: C.out, l: 'output' },
                 ].map((item) => (
-                  <span key={item.l} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 10, height: 10, background: item.c, borderRadius: 3, display: 'inline-block' }} />
-                    <span className="tnum" style={{ color: C.text, fontWeight: 600 }}>{fmtTokens(item.v)}</span>
-                    <span style={{ color: C.sub }}>{item.l} · <span className="tnum">{((item.v / (totalTokens || 1)) * 100).toFixed(1)}%</span></span>
+                  <span
+                    key={item.l}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        background: item.c,
+                        borderRadius: 3,
+                        display: 'inline-block',
+                      }}
+                    />
+                    <span className="tnum" style={{ color: C.text, fontWeight: 600 }}>
+                      {fmtTokens(item.v)}
+                    </span>
+                    <span style={{ color: C.sub }}>
+                      {item.l} ·{' '}
+                      <span className="tnum">
+                        {((item.v / (totalTokens || 1)) * 100).toFixed(1)}%
+                      </span>
+                    </span>
                   </span>
                 ))}
               </div>
@@ -317,19 +470,31 @@ export default function SessionPage() {
               </Card>
             )}
             <div className="session-card-grid">
-              <Card title="工具调用次数" meta={mainTools.length < allTools.length ? '主链路' : undefined} style={{ marginBottom: 0 }}>
-                {toolBars.length === 0 ? <Empty text="本会话没有工具调用" /> : toolBars.map(([name, count]) => (
-                  <BarRow
-                    key={name}
-                    label={name}
-                    labelWidth={120}
-                    ratio={count / maxToolCount}
-                    color={CAT_COLOR[catOf(name)] || C.mute}
-                    right={`${count} 次 · ${mainTools.length > 0 ? ((count / mainTools.length) * 100).toFixed(0) : 0}%`}
-                  />
-                ))}
+              <Card
+                title="工具调用次数"
+                meta={mainTools.length < allTools.length ? '主链路' : undefined}
+                style={{ marginBottom: 0 }}
+              >
+                {toolBars.length === 0 ? (
+                  <Empty text="本会话没有工具调用" />
+                ) : (
+                  toolBars.map(([name, count]) => (
+                    <BarRow
+                      key={name}
+                      label={name}
+                      labelWidth={120}
+                      ratio={count / maxToolCount}
+                      color={CAT_COLOR[catOf(name)] || C.mute}
+                      right={`${count} 次 · ${mainTools.length > 0 ? ((count / mainTools.length) * 100).toFixed(0) : 0}%`}
+                    />
+                  ))
+                )}
               </Card>
-              <Card title="工具错误" meta={`${errorToolCount} / ${mainTools.length}`} style={{ marginBottom: 0 }}>
+              <Card
+                title="工具错误"
+                meta={`${errorToolCount} / ${mainTools.length}`}
+                style={{ marginBottom: 0 }}
+              >
                 <ToolErrors tools={mainTools} />
               </Card>
             </div>
@@ -421,34 +586,80 @@ function ViewIntro({
 }
 
 function SubHead({ children }: { children: React.ReactNode }) {
-  return <div style={{ color: C.sub, fontWeight: 600, fontSize: FS.sm, marginBottom: SP.xs }}>{children}</div>;
-}
-
-function KV({ k, v }: { k: string; v: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: SP.sm, padding: '2px 0', fontSize: FS.sm }}>
-      <span className="clamp1" title={k} style={{ color: C.text, minWidth: 0 }}>{k}</span>
-      <span className="tnum" style={{ color: C.sub, flexShrink: 0 }}>{v}</span>
+    <div style={{ color: C.sub, fontWeight: 600, fontSize: FS.sm, marginBottom: SP.xs }}>
+      {children}
     </div>
   );
 }
 
-function ExportLink({ href, label, color = C.link }: { href: string; label: string; color?: string }) {
+function KV({ k, v }: { k: string; v: string }) {
   return (
-    <a href={href} download className="ap-btn" style={{
-      color, textDecoration: 'none', fontSize: FS.cap, fontWeight: 500,
-      padding: '3px 10px', border: `1px solid ${C.border}`, borderRadius: R.md, background: C.card,
-      display: 'inline-flex', alignItems: 'center', gap: 4, transition: 'box-shadow .15s ease, transform .15s ease',
-    }}>⬇ {label}</a>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: SP.sm,
+        padding: '2px 0',
+        fontSize: FS.sm,
+      }}
+    >
+      <span className="clamp1" title={k} style={{ color: C.text, minWidth: 0 }}>
+        {k}
+      </span>
+      <span className="tnum" style={{ color: C.sub, flexShrink: 0 }}>
+        {v}
+      </span>
+    </div>
+  );
+}
+
+function ExportLink({
+  href,
+  label,
+  color = C.link,
+}: {
+  href: string;
+  label: string;
+  color?: string;
+}) {
+  return (
+    <a
+      href={href}
+      download
+      className="ap-btn"
+      style={{
+        color,
+        textDecoration: 'none',
+        fontSize: FS.cap,
+        fontWeight: 500,
+        padding: '3px 10px',
+        border: `1px solid ${C.border}`,
+        borderRadius: R.md,
+        background: C.card,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        transition: 'box-shadow .15s ease, transform .15s ease',
+      }}
+    >
+      ⬇ {label}
+    </a>
   );
 }
 
 function Note({ color, children }: { color: string; children: React.ReactNode }) {
   return (
-    <div style={{
-      marginTop: SP.md, padding: `${SP.sm}px ${SP.md}px`,
-      background: `${color}12`, borderRadius: R.md, fontSize: FS.sm, lineHeight: 1.6,
-    }}>
+    <div
+      style={{
+        marginTop: SP.md,
+        padding: `${SP.sm}px ${SP.md}px`,
+        background: `${color}12`,
+        borderRadius: R.md,
+        fontSize: FS.sm,
+        lineHeight: 1.6,
+      }}
+    >
       {children}
     </div>
   );
@@ -478,7 +689,10 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
     let minDist = Infinity;
     for (let i = 0; i < points.length; i++) {
       const dist = Math.abs(x(i) - mouseX);
-      if (dist < minDist) { minDist = dist; nearest = i; }
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = i;
+      }
     }
     if (mouseX >= PAD - 10 && mouseX <= W - PAD + 10) {
       setHoverIdx(nearest);
@@ -570,50 +784,96 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
         <path d={area(ccTop, crTop)} fill={C.cc} fillOpacity={0.25} />
         <path d={area(inTop, ccTop)} fill={C.input} fillOpacity={0.25} />
         <path d={linePath} fill="none" stroke={C.input} strokeWidth={1.5} />
-        {hoverIdx !== null && (() => {
-          const p = points[hoverIdx];
-          const hx = x(hoverIdx);
-          const hy = y(p.contextTokens);
-          const totalInput = p.inputTokens + p.cacheCreationTokens + p.cacheReadTokens;
-          const tooltipW = 200, tooltipH = 90;
-          const tipX = hx + 12 + tooltipW > W ? hx - tooltipW - 12 : hx + 12;
-          const tipY = Math.max(10, hy - tooltipH / 2);
-          return (
-            <g>
-              <line x1={hx} y1={PAD} x2={hx} y2={H - PAD} stroke={C.mute} strokeWidth={1} strokeDasharray="4 3" opacity={0.5} />
-              <circle cx={hx} cy={hy} r={5} fill={C.input} stroke={C.card} strokeWidth={2} />
-              <rect x={tipX} y={tipY} width={tooltipW} height={tooltipH} rx={8} fill={C.card} stroke={C.border} strokeWidth={1} opacity={0.97} />
-              <text x={tipX + 10} y={tipY + 18} fill={C.sub} fontSize={11} fontWeight={600}>
-                Turn {hoverIdx + 1} · {fmtTime(p.startTime)}
-              </text>
-              <text x={tipX + 10} y={tipY + 36} fill={C.text} fontSize={12} fontWeight={700}>
-                上下文 {fmtTokens(p.contextTokens)}
-              </text>
-              <text x={tipX + 10} y={tipY + 52} fill={C.sub} fontSize={11}>
-                <tspan fill={C.input}>input {fmtTokens(p.inputTokens)}</tspan>
-                {' + '}
-                <tspan fill={C.cc}>cc {fmtTokens(p.cacheCreationTokens)}</tspan>
-                {' + '}
-                <tspan fill={C.cr}>cr {fmtTokens(p.cacheReadTokens)}</tspan>
-              </text>
-              <text x={tipX + 10} y={tipY + 68} fill={C.sub} fontSize={11}>
-                总输入 {fmtTokens(totalInput)} · 输出 {fmtTokens(p.outputTokens ?? 0)}
-              </text>
-              {p.contextWindow && (
-                <text x={tipX + 10} y={tipY + 82} fill={C.sub} fontSize={10}>
-                  窗口利用率 {((p.contextTokens / p.contextWindow) * 100).toFixed(1)}%
+        {hoverIdx !== null &&
+          (() => {
+            const p = points[hoverIdx];
+            const hx = x(hoverIdx);
+            const hy = y(p.contextTokens);
+            const totalInput = p.inputTokens + p.cacheCreationTokens + p.cacheReadTokens;
+            const tooltipW = 200,
+              tooltipH = 90;
+            const tipX = hx + 12 + tooltipW > W ? hx - tooltipW - 12 : hx + 12;
+            const tipY = Math.max(10, hy - tooltipH / 2);
+            return (
+              <g>
+                <line
+                  x1={hx}
+                  y1={PAD}
+                  x2={hx}
+                  y2={H - PAD}
+                  stroke={C.mute}
+                  strokeWidth={1}
+                  strokeDasharray="4 3"
+                  opacity={0.5}
+                />
+                <circle cx={hx} cy={hy} r={5} fill={C.input} stroke={C.card} strokeWidth={2} />
+                <rect
+                  x={tipX}
+                  y={tipY}
+                  width={tooltipW}
+                  height={tooltipH}
+                  rx={8}
+                  fill={C.card}
+                  stroke={C.border}
+                  strokeWidth={1}
+                  opacity={0.97}
+                />
+                <text x={tipX + 10} y={tipY + 18} fill={C.sub} fontSize={11} fontWeight={600}>
+                  Turn {hoverIdx + 1} · {fmtTime(p.startTime)}
                 </text>
-              )}
-            </g>
-          );
-        })()}
-        {hoverIdx !== null && points.map((p, i) => (
-          <circle key={`dot-${p.startTime}-${p.contextTokens}`} cx={x(i)} cy={y(p.contextTokens)} r={i === hoverIdx ? 5 : 2} fill={i === hoverIdx ? C.input : C.mute} opacity={0.6} />
-        ))}
+                <text x={tipX + 10} y={tipY + 36} fill={C.text} fontSize={12} fontWeight={700}>
+                  上下文 {fmtTokens(p.contextTokens)}
+                </text>
+                <text x={tipX + 10} y={tipY + 52} fill={C.sub} fontSize={11}>
+                  <tspan fill={C.input}>input {fmtTokens(p.inputTokens)}</tspan>
+                  {' + '}
+                  <tspan fill={C.cc}>cc {fmtTokens(p.cacheCreationTokens)}</tspan>
+                  {' + '}
+                  <tspan fill={C.cr}>cr {fmtTokens(p.cacheReadTokens)}</tspan>
+                </text>
+                <text x={tipX + 10} y={tipY + 68} fill={C.sub} fontSize={11}>
+                  总输入 {fmtTokens(totalInput)} · 输出 {fmtTokens(p.outputTokens ?? 0)}
+                </text>
+                {p.contextWindow && (
+                  <text x={tipX + 10} y={tipY + 82} fill={C.sub} fontSize={10}>
+                    窗口利用率 {((p.contextTokens / p.contextWindow) * 100).toFixed(1)}%
+                  </text>
+                )}
+              </g>
+            );
+          })()}
+        {hoverIdx !== null &&
+          points.map((p, i) => (
+            <circle
+              key={`dot-${p.startTime}-${p.contextTokens}`}
+              cx={x(i)}
+              cy={y(p.contextTokens)}
+              r={i === hoverIdx ? 5 : 2}
+              fill={i === hoverIdx ? C.input : C.mute}
+              opacity={0.6}
+            />
+          ))}
         {spikes.map((sp) => (
           <g key={`spike-${sp.turnIdx}`}>
-            <line x1={sp.cx} y1={sp.cy + 4} x2={sp.cx} y2={sp.cy - 20} stroke={C.high} strokeWidth={1} strokeDasharray="3 2" opacity={0.7} />
-            <circle cx={sp.cx} cy={sp.cy} r={4} fill={C.high} fillOpacity={0.8} stroke={C.card} strokeWidth={1}>
+            <line
+              x1={sp.cx}
+              y1={sp.cy + 4}
+              x2={sp.cx}
+              y2={sp.cy - 20}
+              stroke={C.high}
+              strokeWidth={1}
+              strokeDasharray="3 2"
+              opacity={0.7}
+            />
+            <circle
+              cx={sp.cx}
+              cy={sp.cy}
+              r={4}
+              fill={C.high}
+              fillOpacity={0.8}
+              stroke={C.card}
+              strokeWidth={1}
+            >
               <title>{`+${fmtTokens(sp.delta)} tokens${sp.tools.length > 0 ? ` — ${sp.tools.map((t) => t.name).join(', ')}` : ''}`}</title>
             </circle>
           </g>
@@ -646,17 +906,44 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
         <Legend color={C.cr} label="cache_read" />
         <span>
           峰值 <span className="tnum">{fmtTokens(peak)}</span>
-          {window ? <>,利用率 <span className="tnum">{((peak / window) * 100).toFixed(1)}%</span></> : '(窗口未配置)'}
+          {window ? (
+            <>
+              ,利用率 <span className="tnum">{((peak / window) * 100).toFixed(1)}%</span>
+            </>
+          ) : (
+            '(窗口未配置)'
+          )}
         </span>
       </div>
       {spikes.length > 0 && (
-        <div style={{ marginTop: SP.md, paddingTop: SP.md, boxShadow: `0 1px 0 ${C.borderSoft} inset` }}>
+        <div
+          style={{
+            marginTop: SP.md,
+            paddingTop: SP.md,
+            boxShadow: `0 1px 0 ${C.borderSoft} inset`,
+          }}
+        >
           <SubHead>上下文波动分析</SubHead>
           {spikes.map((sp) => (
-            <div key={sp.turnIdx} style={{ fontSize: FS.sm, color: C.text, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <div
+              key={sp.turnIdx}
+              style={{
+                fontSize: FS.sm,
+                color: C.text,
+                padding: '2px 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                flexWrap: 'wrap',
+              }}
+            >
               <span style={{ color: C.high, fontWeight: 600, flexShrink: 0 }}>●</span>
               <span>
-                Turn {sp.turnIdx} 增长 <span className="tnum" style={{ color: C.high, fontWeight: 600 }}>+{fmtTokens(sp.delta)}</span> tokens
+                Turn {sp.turnIdx} 增长{' '}
+                <span className="tnum" style={{ color: C.high, fontWeight: 600 }}>
+                  +{fmtTokens(sp.delta)}
+                </span>{' '}
+                tokens
               </span>
               {sp.tools.length > 0 && (
                 <span style={{ color: C.sub }}>
@@ -711,24 +998,41 @@ function Pager({
         justifyContent: 'center',
       }}
     >
-      <SoftButton disabled={page <= 1} onClick={() => onPage(page - 1)}>上一页</SoftButton>
+      <SoftButton disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        上一页
+      </SoftButton>
       <span className="tnum">
         {page} / {totalPages} 页 · 每页 {TABLE_LIMIT} 行
       </span>
-      <SoftButton disabled={page >= totalPages} onClick={() => onPage(page + 1)}>下一页</SoftButton>
+      <SoftButton disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
+        下一页
+      </SoftButton>
     </div>
   );
 }
 
 const TH: React.CSSProperties = {
-  padding: '7px 10px', fontSize: FS.cap, fontWeight: 500, color: C.sub, textAlign: 'left',
-  boxShadow: `0 1px 0 ${C.border}`, whiteSpace: 'nowrap',
+  padding: '7px 10px',
+  fontSize: FS.cap,
+  fontWeight: 500,
+  color: C.sub,
+  textAlign: 'left',
+  boxShadow: `0 1px 0 ${C.border}`,
+  whiteSpace: 'nowrap',
 };
 const TD: React.CSSProperties = {
-  padding: '7px 10px', fontSize: FS.sm, color: C.text, whiteSpace: 'nowrap',
+  padding: '7px 10px',
+  fontSize: FS.sm,
+  color: C.text,
+  whiteSpace: 'nowrap',
   boxShadow: `0 1px 0 ${C.borderSoft}`,
 };
-const TD_NUM: React.CSSProperties = { ...TD, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' };
+const TD_NUM: React.CSSProperties = {
+  ...TD,
+  textAlign: 'right',
+  fontFamily: 'var(--font-mono)',
+  fontVariantNumeric: 'tabular-nums',
+};
 
 function TurnsTable({ turns }: { turns: Span[] }) {
   const [page, setPage] = useState(1);
@@ -757,7 +1061,12 @@ function TurnsTable({ turns }: { turns: Span[] }) {
               <tr key={t.id} className="ap-row">
                 <td style={{ ...TD, color: C.mute }}>{(page - 1) * TABLE_LIMIT + i + 1}</td>
                 <td style={TD_NUM}>{fmtTime(t.startTime)}</td>
-                <td style={{ ...TD, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.model || ''}>{t.model || '-'}</td>
+                <td
+                  style={{ ...TD, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  title={t.model || ''}
+                >
+                  {t.model || '-'}
+                </td>
                 <td style={TD_NUM}>{fmtDuration(t.endTime ? t.endTime - t.startTime : 0)}</td>
                 <td style={{ ...TD_NUM, color: C.input }}>{fmtTokens(t.inputTokens)}</td>
                 <td style={{ ...TD_NUM, color: C.cc }}>{fmtTokens(t.cacheCreationTokens)}</td>
@@ -798,7 +1107,12 @@ function ToolsTable({ tools }: { tools: Span[] }) {
             {shown.map((t, i) => (
               <tr key={t.id} className="ap-row">
                 <td style={{ ...TD, color: C.mute }}>{(page - 1) * TABLE_LIMIT + i + 1}</td>
-                <td style={{ ...TD, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.name}>{t.name}</td>
+                <td
+                  style={{ ...TD, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  title={t.name}
+                >
+                  {t.name}
+                </td>
                 <td style={TD}>
                   <Chip color={CAT_COLOR[catOf(t.name)] || C.mute}>{catOf(t.name)}</Chip>
                 </td>
@@ -807,7 +1121,9 @@ function ToolsTable({ tools }: { tools: Span[] }) {
                 <td style={TD_NUM}>{fmtBytes(t.outputBytes)}</td>
                 <td style={TD}>
                   {t.isError ? (
-                    <Chip color={C.high} tip="工具返回错误">错误</Chip>
+                    <Chip color={C.high} tip="工具返回错误">
+                      错误
+                    </Chip>
                   ) : (
                     <span style={{ color: C.cr, fontSize: FS.cap }}>✓</span>
                   )}
@@ -842,28 +1158,60 @@ function SidechainSummary({
   return (
     <Card style={{ boxShadow: `inset 3px 0 0 ${C.cc}, var(--shadow-card)` }}>
       <div
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: SP.md }}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          cursor: 'pointer',
+          gap: SP.md,
+        }}
         onClick={() => setOpen(!open)}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: FS.title, fontWeight: 600, color: C.text }}>
-            子 agent 调用链
-          </div>
+          <div style={{ fontSize: FS.title, fontWeight: 600, color: C.text }}>子 agent 调用链</div>
           <div style={{ fontSize: FS.sm, color: C.sub, marginTop: 4 }}>
-            <span className="tnum">{turns}</span> 轮推理 · <span className="tnum">{tools}</span> 次工具调用 ·{' '}
-            <span className="tnum">{fmtTokens(tokens)}</span> token · 成本 {cost > 0 ? <span className="tnum">¥{cost.toFixed(4)}</span> : '未定价'}
+            <span className="tnum">{turns}</span> 轮推理 · <span className="tnum">{tools}</span>{' '}
+            次工具调用 · <span className="tnum">{fmtTokens(tokens)}</span> token · 成本{' '}
+            {cost > 0 ? <span className="tnum">¥{cost.toFixed(4)}</span> : '未定价'}
             {taskNames.size > 0 && ` · 任务: ${[...taskNames].slice(0, 3).join(', ')}`}
           </div>
         </div>
-        <span style={{ color: C.mute, fontSize: 10, flexShrink: 0, transition: 'transform .15s ease', transform: open ? 'none' : 'rotate(-90deg)' }}>▼</span>
+        <span
+          style={{
+            color: C.mute,
+            fontSize: 10,
+            flexShrink: 0,
+            transition: 'transform .15s ease',
+            transform: open ? 'none' : 'rotate(-90deg)',
+          }}
+        >
+          ▼
+        </span>
       </div>
       {open && (
-        <div style={{ marginTop: SP.md, paddingTop: SP.md, boxShadow: `0 1px 0 ${C.borderSoft} inset` }}>
+        <div
+          style={{
+            marginTop: SP.md,
+            paddingTop: SP.md,
+            boxShadow: `0 1px 0 ${C.borderSoft} inset`,
+          }}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {tasks.slice(0, 20).map((t) => (
-              <div key={t.id} style={{ fontSize: FS.sm, color: C.sub, display: 'flex', gap: SP.sm }}>
-                <span className="tnum" style={{ minWidth: 64, flexShrink: 0, color: C.mute }}>{fmtTime(t.startTime)}</span>
-                <span className="clamp1" title={t.name || t.id} style={{ color: C.text, minWidth: 0, flex: 1 }}>{t.name || t.id.slice(0, 12)}</span>
+              <div
+                key={t.id}
+                style={{ fontSize: FS.sm, color: C.sub, display: 'flex', gap: SP.sm }}
+              >
+                <span className="tnum" style={{ minWidth: 64, flexShrink: 0, color: C.mute }}>
+                  {fmtTime(t.startTime)}
+                </span>
+                <span
+                  className="clamp1"
+                  title={t.name || t.id}
+                  style={{ color: C.text, minWidth: 0, flex: 1 }}
+                >
+                  {t.name || t.id.slice(0, 12)}
+                </span>
                 <span className="tnum" style={{ flexShrink: 0 }}>
                   in {fmtTokens(t.inputTokens)} · out {fmtTokens(t.outputTokens)}
                 </span>
@@ -887,7 +1235,9 @@ function ToolErrors({ tools }: { tools: Span[] }) {
     if (t.isError) entry.errors++;
     byName.set(t.name, entry);
   }
-  const list = [...byName.entries()].filter(([, e]) => e.errors > 0).sort((a, b) => b[1].errors - a[1].errors);
+  const list = [...byName.entries()]
+    .filter(([, e]) => e.errors > 0)
+    .sort((a, b) => b[1].errors - a[1].errors);
   if (list.length === 0) return <div style={{ fontSize: FS.sm, color: C.cr }}>✓ 无工具错误</div>;
 
   return (
@@ -899,7 +1249,11 @@ function ToolErrors({ tools }: { tools: Span[] }) {
           labelWidth={180}
           ratio={(e.total - e.errors) / e.total}
           color={C.cr}
-          right={<span style={{ color: C.high }}>{e.errors}/{e.total} 错误 ({((e.errors / e.total) * 100).toFixed(0)}%)</span>}
+          right={
+            <span style={{ color: C.high }}>
+              {e.errors}/{e.total} 错误 ({((e.errors / e.total) * 100).toFixed(0)}%)
+            </span>
+          }
         />
       ))}
     </div>
@@ -918,21 +1272,68 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
           const dur = t.endTime ? t.endTime - t.startTime : 0;
           const cat = catOf(t.name);
           return (
-            <div key={t.id} className="ap-row" style={{
-              display: 'flex', alignItems: 'center', gap: SP.sm, padding: '4px 6px',
-              borderRadius: R.sm, fontSize: FS.sm, color: C.text,
-            }}>
-              <span className="tnum" style={{ color: C.mute, width: 26, textAlign: 'right', flexShrink: 0, fontSize: FS.cap }}>
+            <div
+              key={t.id}
+              className="ap-row"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: SP.sm,
+                padding: '4px 6px',
+                borderRadius: R.sm,
+                fontSize: FS.sm,
+                color: C.text,
+              }}
+            >
+              <span
+                className="tnum"
+                style={{
+                  color: C.mute,
+                  width: 26,
+                  textAlign: 'right',
+                  flexShrink: 0,
+                  fontSize: FS.cap,
+                }}
+              >
                 {showAll || tools.length <= 50 ? i + 1 : tools.length - 50 + i + 1}
               </span>
-              <span className="tnum" style={{ width: 58, color: C.mute, flexShrink: 0, fontSize: FS.cap }}>{fmtTime(t.startTime)}</span>
-              <Chip color={CAT_COLOR[cat] || C.mute} style={{ width: 62, justifyContent: 'center', flexShrink: 0 }}>{cat}</Chip>
-              <span className="clamp1" title={t.name} style={{ flex: 1, minWidth: 0 }}>{t.name}</span>
-              <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>{fmtDuration(dur)}</span>
-              <span className="tnum" style={{ width: 56, textAlign: 'right', color: C.sub, flexShrink: 0, fontSize: FS.cap }}>{fmtBytes(t.outputBytes)}</span>
-              {t.isError
-                ? <span style={{ color: C.high, flexShrink: 0 }} title="工具返回错误">✕</span>
-                : <span style={{ color: C.cr, flexShrink: 0 }}>✓</span>}
+              <span
+                className="tnum"
+                style={{ width: 58, color: C.mute, flexShrink: 0, fontSize: FS.cap }}
+              >
+                {fmtTime(t.startTime)}
+              </span>
+              <Chip
+                color={CAT_COLOR[cat] || C.mute}
+                style={{ width: 62, justifyContent: 'center', flexShrink: 0 }}
+              >
+                {cat}
+              </Chip>
+              <span className="clamp1" title={t.name} style={{ flex: 1, minWidth: 0 }}>
+                {t.name}
+              </span>
+              <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
+                {fmtDuration(dur)}
+              </span>
+              <span
+                className="tnum"
+                style={{
+                  width: 56,
+                  textAlign: 'right',
+                  color: C.sub,
+                  flexShrink: 0,
+                  fontSize: FS.cap,
+                }}
+              >
+                {fmtBytes(t.outputBytes)}
+              </span>
+              {t.isError ? (
+                <span style={{ color: C.high, flexShrink: 0 }} title="工具返回错误">
+                  ✕
+                </span>
+              ) : (
+                <span style={{ color: C.cr, flexShrink: 0 }}>✓</span>
+              )}
             </div>
           );
         })}
@@ -940,7 +1341,16 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
       {tools.length > 50 && !showAll && (
         <div style={{ textAlign: 'center', marginTop: SP.sm, fontSize: FS.cap, color: C.sub }}>
           显示最近 50 次(共 {tools.length} 次)·{' '}
-          <button onClick={() => setShowAll(true)} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', fontSize: FS.cap }}>
+          <button
+            onClick={() => setShowAll(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.link,
+              cursor: 'pointer',
+              fontSize: FS.cap,
+            }}
+          >
             显示全部
           </button>
         </div>
@@ -950,7 +1360,9 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
 }
 
 function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
-  const highTAR = metrics.thinkingActionRatios.filter((t) => t.ratio > 500 && t.toolCalls > 0).slice(0, 5);
+  const highTAR = metrics.thinkingActionRatios
+    .filter((t) => t.ratio > 500 && t.toolCalls > 0)
+    .slice(0, 5);
   const hotFiles = metrics.fileOperations.slice(0, 10);
 
   return (
@@ -968,7 +1380,15 @@ function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
               labelWidth={110}
               ratio={t.successRate}
               color={t.successRate > 0.9 ? C.cr : t.successRate > 0.7 ? C.medium : C.high}
-              right={<>{(t.successRate * 100).toFixed(0)}% <span style={{ color: C.mute }}>{t.total}次{t.errors > 0 && <span style={{ color: C.high }}> 错{t.errors}</span>}</span></>}
+              right={
+                <>
+                  {(t.successRate * 100).toFixed(0)}%{' '}
+                  <span style={{ color: C.mute }}>
+                    {t.total}次
+                    {t.errors > 0 && <span style={{ color: C.high }}> 错{t.errors}</span>}
+                  </span>
+                </>
+              }
             />
           ))}
         </div>
@@ -982,20 +1402,40 @@ function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
             <div style={{ fontSize: FS.sm, color: C.mute }}>无数据</div>
           ) : (
             <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-              {metrics.thinkingActionRatios.slice(-10).reverse().map((t) => (
-                <div key={t.turnId} style={{
-                  display: 'flex', alignItems: 'center', gap: SP.sm, fontSize: FS.sm, padding: '3px 6px',
-                  borderRadius: R.sm,
-                  background: t.ratio > 2000 ? `${C.high}0D` : t.ratio > 1000 ? `${C.medium}0D` : 'transparent',
-                }}>
-                  <span className="tnum" style={{ color: C.mute, width: 38, flexShrink: 0, fontSize: FS.cap }}>T{t.turnIndex}</span>
-                  <span className="tnum" style={{ color: C.text, flex: 1, fontSize: FS.cap }}>
-                    {t.toolCalls > 0
-                      ? `${(t.thinkingChars / 1000).toFixed(1)}k 字符 ÷ ${t.toolCalls} 次 = ${t.ratio} 字符/次`
-                      : `${(t.thinkingChars / 1000).toFixed(1)}k 字符 · 0 次调用`}
-                  </span>
-                </div>
-              ))}
+              {metrics.thinkingActionRatios
+                .slice(-10)
+                .reverse()
+                .map((t) => (
+                  <div
+                    key={t.turnId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: SP.sm,
+                      fontSize: FS.sm,
+                      padding: '3px 6px',
+                      borderRadius: R.sm,
+                      background:
+                        t.ratio > 2000
+                          ? `${C.high}0D`
+                          : t.ratio > 1000
+                            ? `${C.medium}0D`
+                            : 'transparent',
+                    }}
+                  >
+                    <span
+                      className="tnum"
+                      style={{ color: C.mute, width: 38, flexShrink: 0, fontSize: FS.cap }}
+                    >
+                      T{t.turnIndex}
+                    </span>
+                    <span className="tnum" style={{ color: C.text, flex: 1, fontSize: FS.cap }}>
+                      {t.toolCalls > 0
+                        ? `${(t.thinkingChars / 1000).toFixed(1)}k 字符 ÷ ${t.toolCalls} 次 = ${t.ratio} 字符/次`
+                        : `${(t.thinkingChars / 1000).toFixed(1)}k 字符 · 0 次调用`}
+                    </span>
+                  </div>
+                ))}
             </div>
           )}
         </div>
@@ -1004,7 +1444,10 @@ function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
       {highTAR.length > 0 && (
         <Note color={C.medium}>
           <span style={{ color: C.medium, fontWeight: 600 }}>高 Thinking/Action 比:</span>
-          <span style={{ color: C.sub }}>{highTAR.map((t) => `T${t.turnIndex}(${t.ratio}字符/次)`).join(', ')}。可能思考过度,建议提示 agent 减少多余推理。</span>
+          <span style={{ color: C.sub }}>
+            {highTAR.map((t) => `T${t.turnIndex}(${t.ratio}字符/次)`).join(', ')}
+            。可能思考过度,建议提示 agent 减少多余推理。
+          </span>
         </Note>
       )}
 
@@ -1012,11 +1455,36 @@ function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
         <div style={{ marginTop: SP.lg }}>
           <SubHead>文件操作热度 Top {Math.min(5, hotFiles.length)}</SubHead>
           {hotFiles.slice(0, 5).map((f) => (
-            <div key={f.path} style={{ display: 'flex', alignItems: 'center', gap: SP.sm, fontSize: FS.sm, padding: '3px 0' }}>
-              <span className="clamp1" title={f.path} style={{ flex: 1, color: C.text, minWidth: 0 }}>{f.path.split('/').slice(-2).join('/')}</span>
-              <span className="tnum" style={{ color: C.input, flexShrink: 0, fontSize: FS.cap }}>Read {f.reads}</span>
-              {f.edits > 0 && <span className="tnum" style={{ color: C.out, flexShrink: 0, fontSize: FS.cap }}>Edit {f.edits}</span>}
-              {f.writes > 0 && <span className="tnum" style={{ color: C.cr, flexShrink: 0, fontSize: FS.cap }}>Write {f.writes}</span>}
+            <div
+              key={f.path}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: SP.sm,
+                fontSize: FS.sm,
+                padding: '3px 0',
+              }}
+            >
+              <span
+                className="clamp1"
+                title={f.path}
+                style={{ flex: 1, color: C.text, minWidth: 0 }}
+              >
+                {f.path.split('/').slice(-2).join('/')}
+              </span>
+              <span className="tnum" style={{ color: C.input, flexShrink: 0, fontSize: FS.cap }}>
+                Read {f.reads}
+              </span>
+              {f.edits > 0 && (
+                <span className="tnum" style={{ color: C.out, flexShrink: 0, fontSize: FS.cap }}>
+                  Edit {f.edits}
+                </span>
+              )}
+              {f.writes > 0 && (
+                <span className="tnum" style={{ color: C.cr, flexShrink: 0, fontSize: FS.cap }}>
+                  Write {f.writes}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -1024,10 +1492,25 @@ function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
 
       <Note color={C.link}>
         <span style={{ color: C.sub }}>Read→Edit 转化率:</span>
-        <span className="tnum" style={{ fontWeight: 600, color: metrics.readToEditRate > 0.3 ? C.cr : metrics.readToEditRate > 0.1 ? C.medium : C.high }}>
-          {' '}{(metrics.readToEditRate * 100).toFixed(0)}%
+        <span
+          className="tnum"
+          style={{
+            fontWeight: 600,
+            color:
+              metrics.readToEditRate > 0.3
+                ? C.cr
+                : metrics.readToEditRate > 0.1
+                  ? C.medium
+                  : C.high,
+          }}
+        >
+          {' '}
+          {(metrics.readToEditRate * 100).toFixed(0)}%
         </span>
-        <span style={{ color: C.sub }}>({hotFiles.filter((f) => f.reads > 0).length} 个文件被读,{hotFiles.filter((f) => f.edits > 0 || f.writes > 0).length} 个被修改)</span>
+        <span style={{ color: C.sub }}>
+          ({hotFiles.filter((f) => f.reads > 0).length} 个文件被读,
+          {hotFiles.filter((f) => f.edits > 0 || f.writes > 0).length} 个被修改)
+        </span>
         {metrics.readToEditRate < 0.1 && hotFiles.filter((f) => f.reads > 0).length > 3 && (
           <span style={{ color: C.high, display: 'block', marginTop: 4 }}>
             读了 {hotFiles.filter((f) => f.reads > 0).length} 个文件但几乎没改,可能存在大量冗余读取
@@ -1042,18 +1525,61 @@ function CostAttributionPanel({ attr }: { attr: CostAttribution }) {
   const phaseColors = [C.link, C.cc, C.cr];
 
   return (
-    <Card title="成本归因" meta={`¥${attr.totalCost.toFixed(4)} · 浪费比 ${(attr.wastedCostRatio * 100).toFixed(1)}%`}>
+    <Card
+      title="成本归因"
+      meta={`¥${attr.totalCost.toFixed(4)} · 浪费比 ${(attr.wastedCostRatio * 100).toFixed(1)}%`}
+    >
       <div className="session-analysis-grid">
         <div>
           <SubHead>按工具类别</SubHead>
           {attr.costByCategory.map((c) => (
-            <div key={c.category} style={{ display: 'flex', alignItems: 'center', gap: SP.sm, padding: '3px 0' }}>
-              <Chip color={CAT_COLOR[c.category] || C.mute} style={{ width: 62, justifyContent: 'center', flexShrink: 0 }}>{c.category}</Chip>
-              <div style={{ flex: 1, height: 10, background: C.borderSoft, borderRadius: R.pill, overflow: 'hidden' }}>
-                <div style={{ width: `${c.percentage * 100}%`, height: '100%', background: CAT_COLOR[c.category] || C.mute, borderRadius: R.pill, minWidth: c.percentage > 0 ? 4 : 0 }} />
+            <div
+              key={c.category}
+              style={{ display: 'flex', alignItems: 'center', gap: SP.sm, padding: '3px 0' }}
+            >
+              <Chip
+                color={CAT_COLOR[c.category] || C.mute}
+                style={{ width: 62, justifyContent: 'center', flexShrink: 0 }}
+              >
+                {c.category}
+              </Chip>
+              <div
+                style={{
+                  flex: 1,
+                  height: 10,
+                  background: C.borderSoft,
+                  borderRadius: R.pill,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${c.percentage * 100}%`,
+                    height: '100%',
+                    background: CAT_COLOR[c.category] || C.mute,
+                    borderRadius: R.pill,
+                    minWidth: c.percentage > 0 ? 4 : 0,
+                  }}
+                />
               </div>
-              <span className="tnum" style={{ width: 64, textAlign: 'right', color: C.out, fontWeight: 600, fontSize: FS.cap }}>¥{c.cost.toFixed(4)}</span>
-              <span className="tnum" style={{ width: 36, textAlign: 'right', color: C.sub, fontSize: FS.cap }}>{(c.percentage * 100).toFixed(0)}%</span>
+              <span
+                className="tnum"
+                style={{
+                  width: 64,
+                  textAlign: 'right',
+                  color: C.out,
+                  fontWeight: 600,
+                  fontSize: FS.cap,
+                }}
+              >
+                ¥{c.cost.toFixed(4)}
+              </span>
+              <span
+                className="tnum"
+                style={{ width: 36, textAlign: 'right', color: C.sub, fontSize: FS.cap }}
+              >
+                {(c.percentage * 100).toFixed(0)}%
+              </span>
             </div>
           ))}
         </div>
@@ -1061,14 +1587,64 @@ function CostAttributionPanel({ attr }: { attr: CostAttribution }) {
         <div>
           <SubHead>按阶段</SubHead>
           {attr.costByPhase.map((p, i) => (
-            <div key={p.phase} style={{ display: 'flex', alignItems: 'center', gap: SP.sm, padding: '4px 0' }}>
-              <span style={{ fontWeight: 600, color: phaseColors[i] || C.text, width: 44, flexShrink: 0, fontSize: FS.sm }}>{p.phase}</span>
-              <div style={{ flex: 1, height: 10, background: C.borderSoft, borderRadius: R.pill, overflow: 'hidden' }}>
-                <div style={{ width: `${p.percentage * 100}%`, height: '100%', background: phaseColors[i] || C.mute, borderRadius: R.pill, minWidth: p.percentage > 0 ? 4 : 0 }} />
+            <div
+              key={p.phase}
+              style={{ display: 'flex', alignItems: 'center', gap: SP.sm, padding: '4px 0' }}
+            >
+              <span
+                style={{
+                  fontWeight: 600,
+                  color: phaseColors[i] || C.text,
+                  width: 44,
+                  flexShrink: 0,
+                  fontSize: FS.sm,
+                }}
+              >
+                {p.phase}
+              </span>
+              <div
+                style={{
+                  flex: 1,
+                  height: 10,
+                  background: C.borderSoft,
+                  borderRadius: R.pill,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${p.percentage * 100}%`,
+                    height: '100%',
+                    background: phaseColors[i] || C.mute,
+                    borderRadius: R.pill,
+                    minWidth: p.percentage > 0 ? 4 : 0,
+                  }}
+                />
               </div>
-              <span className="tnum" style={{ width: 56, textAlign: 'right', color: C.out, fontWeight: 600, fontSize: FS.cap }}>¥{p.cost.toFixed(4)}</span>
-              <span className="tnum" style={{ width: 34, textAlign: 'right', color: C.sub, fontSize: FS.cap }}>{(p.percentage * 100).toFixed(0)}%</span>
-              <span className="tnum" style={{ width: 36, textAlign: 'right', color: C.mute, fontSize: FS.cap }}>{p.turnCount}轮</span>
+              <span
+                className="tnum"
+                style={{
+                  width: 56,
+                  textAlign: 'right',
+                  color: C.out,
+                  fontWeight: 600,
+                  fontSize: FS.cap,
+                }}
+              >
+                ¥{p.cost.toFixed(4)}
+              </span>
+              <span
+                className="tnum"
+                style={{ width: 34, textAlign: 'right', color: C.sub, fontSize: FS.cap }}
+              >
+                {(p.percentage * 100).toFixed(0)}%
+              </span>
+              <span
+                className="tnum"
+                style={{ width: 36, textAlign: 'right', color: C.mute, fontSize: FS.cap }}
+              >
+                {p.turnCount}轮
+              </span>
             </div>
           ))}
         </div>
@@ -1091,7 +1667,8 @@ function CostAttributionPanel({ attr }: { attr: CostAttribution }) {
 }
 
 function PerformancePanel({ metrics }: { metrics: PerformanceMetrics }) {
-  const { turnLatency, toolLatency, toolLatencyByName, slowTurns, throughput, sessionDuration } = metrics;
+  const { turnLatency, toolLatency, toolLatencyByName, slowTurns, throughput, sessionDuration } =
+    metrics;
   return (
     <Card
       title="性能分析"
@@ -1100,14 +1677,21 @@ function PerformancePanel({ metrics }: { metrics: PerformanceMetrics }) {
       <div className="session-mini-stat-grid">
         <MiniStat label="Turn 平均" value={fmtDuration(turnLatency.avg)} />
         <MiniStat label="Turn P95" value={fmtDuration(turnLatency.p95)} />
-        <MiniStat label="Turn 最大" value={fmtDuration(turnLatency.max)} color={turnLatency.max > 60_000 ? C.high : undefined} />
+        <MiniStat
+          label="Turn 最大"
+          value={fmtDuration(turnLatency.max)}
+          color={turnLatency.max > 60_000 ? C.high : undefined}
+        />
         <MiniStat label="工具平均" value={fmtDuration(toolLatency.avg)} />
       </div>
       {slowTurns.length > 0 && (
         <Note color={C.high}>
           <span style={{ color: C.high, fontWeight: 600 }}>慢轮(&gt;1.5× P95):</span>
           <span className="tnum" style={{ color: C.sub }}>
-            {slowTurns.slice(0, 8).map((t) => `T${t.turnIndex}(${fmtDuration(t.duration)})`).join(', ')}
+            {slowTurns
+              .slice(0, 8)
+              .map((t) => `T${t.turnIndex}(${fmtDuration(t.duration)})`)
+              .join(', ')}
             {slowTurns.length > 8 && ` …+${slowTurns.length - 8}`}
           </span>
         </Note>
@@ -1134,7 +1718,9 @@ function PerformancePanel({ metrics }: { metrics: PerformanceMetrics }) {
 function MiniStat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ background: C.bg, borderRadius: R.md, padding: `${SP.sm}px ${SP.md}px` }}>
-      <div className="tnum" style={{ fontSize: FS.title, fontWeight: 600, color: color || C.text }}>{value}</div>
+      <div className="tnum" style={{ fontSize: FS.title, fontWeight: 600, color: color || C.text }}>
+        {value}
+      </div>
       <div style={{ fontSize: FS.cap, color: C.sub }}>{label}</div>
     </div>
   );
@@ -1145,23 +1731,55 @@ function TagEditor({ id, initialTags }: { id: string; initialTags: string }) {
   const [editing, setEditing] = useState(false);
   const save = async () => {
     await fetch(`${API}/session/${id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ tags }),
     });
     setEditing(false);
   };
-  if (!editing) return (
-    <span onClick={() => setEditing(true)} data-tip="点击编辑标签" style={{ cursor: 'pointer' }}>
-      {tags ? tags.split(',').map((t) => (
-        <Chip key={t} color={C.link} style={{ marginRight: 3 }}>{t.trim()}</Chip>
-      )) : <Chip color={C.mute} style={{ border: `1px dashed ${C.border}`, background: 'transparent' }}>+ 标签</Chip>}
-    </span>
-  );
+  if (!editing)
+    return (
+      <span onClick={() => setEditing(true)} data-tip="点击编辑标签" style={{ cursor: 'pointer' }}>
+        {tags ? (
+          tags.split(',').map((t) => (
+            <Chip key={t} color={C.link} style={{ marginRight: 3 }}>
+              {t.trim()}
+            </Chip>
+          ))
+        ) : (
+          <Chip
+            color={C.mute}
+            style={{ border: `1px dashed ${C.border}`, background: 'transparent' }}
+          >
+            + 标签
+          </Chip>
+        )}
+      </span>
+    );
   return (
     <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-      <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="逗号分隔标签" size={15}
-        style={{ padding: '3px 8px', fontSize: FS.cap, border: `1px solid ${C.link}`, borderRadius: R.sm, background: C.card, color: C.text, outline: 'none' }} />
-      <SoftButton variant="primary" onClick={save} style={{ padding: '2px 10px', fontSize: FS.cap }}>保存</SoftButton>
+      <input
+        value={tags}
+        onChange={(e) => setTags(e.target.value)}
+        placeholder="逗号分隔标签"
+        size={15}
+        style={{
+          padding: '3px 8px',
+          fontSize: FS.cap,
+          border: `1px solid ${C.link}`,
+          borderRadius: R.sm,
+          background: C.card,
+          color: C.text,
+          outline: 'none',
+        }}
+      />
+      <SoftButton
+        variant="primary"
+        onClick={save}
+        style={{ padding: '2px 10px', fontSize: FS.cap }}
+      >
+        保存
+      </SoftButton>
     </span>
   );
 }
@@ -1191,21 +1809,54 @@ function DiagnosisList({ result }: { result: DiagnosisResult | null }) {
               gap: SP.md,
             }}
           >
-            <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: SP.sm, flexWrap: 'wrap' }}>
-              <Chip color={SEV_COLOR[f.severity]}>{SEV_LABEL[f.severity] || f.severity} · {DIAG_LABEL[f.type]}</Chip>
+            <div
+              style={{
+                minWidth: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: SP.sm,
+                flexWrap: 'wrap',
+              }}
+            >
+              <Chip color={SEV_COLOR[f.severity]}>
+                {SEV_LABEL[f.severity] || f.severity} · {DIAG_LABEL[f.type]}
+              </Chip>
               <span style={{ fontSize: FS.base, color: C.text, fontWeight: 600 }}>{f.title}</span>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div className="tnum" style={{ fontSize: FS.base, fontWeight: 600, color: C.cc }}>
                 ~{fmtTokens(f.wastedTokens)}
               </div>
-              <div className="tnum" style={{ fontSize: FS.cap, color: f.costUnknown ? C.medium : C.mute }}>
+              <div
+                className="tnum"
+                style={{ fontSize: FS.cap, color: f.costUnknown ? C.medium : C.mute }}
+              >
                 {f.costUnknown ? '未定价' : `¥${f.wastedCost.toFixed(5)}`}
               </div>
             </div>
           </div>
-          <div style={{ fontSize: FS.sm, color: C.sub, marginTop: SP.sm, lineHeight: 1.6, wordBreak: 'break-word' }}>{f.detail}</div>
-          <div style={{ fontSize: FS.sm, color: C.cr, marginTop: SP.xs, lineHeight: 1.6, wordBreak: 'break-word' }}>💡 {f.suggestion}</div>
+          <div
+            style={{
+              fontSize: FS.sm,
+              color: C.sub,
+              marginTop: SP.sm,
+              lineHeight: 1.6,
+              wordBreak: 'break-word',
+            }}
+          >
+            {f.detail}
+          </div>
+          <div
+            style={{
+              fontSize: FS.sm,
+              color: C.cr,
+              marginTop: SP.xs,
+              lineHeight: 1.6,
+              wordBreak: 'break-word',
+            }}
+          >
+            💡 {f.suggestion}
+          </div>
         </div>
       ))}
     </div>

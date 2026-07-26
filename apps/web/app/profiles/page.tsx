@@ -8,7 +8,7 @@ import type {
 } from '@agent-profile/core';
 import { useEffect, useMemo, useState } from 'react';
 import { API } from '../config';
-import { getAgentIcon } from '../icons';
+import { AgentMark } from '../icons';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtDuration, fmtTokens, R, SP } from '../theme';
 import { Card, Chip, Empty, Notice } from '../ui';
 
@@ -205,7 +205,7 @@ function ProfileCard({
             marginBottom: SP.md,
           }}
         >
-          {getAgentIcon(profile.agent, 22)}
+          <AgentMark agent={profile.agent} size={30} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ color: C.text, fontSize: 16, fontWeight: 650 }}>
               {AGENT_LABELS[profile.agent] ?? profile.agent}
