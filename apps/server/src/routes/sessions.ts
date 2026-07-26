@@ -116,4 +116,27 @@ export function registerSessionRoutes(app: FastifyInstance) {
     score.percentile = allScores.length > 1 ? Math.round((1 - betterCount / allScores.length) * 100) : undefined;
     return score;
   });
+
+  // 数据导出
+  app.get<{ Params: { id: string }; Querystring: { format?: string } }>('/api/session/:id/export', async (req, reply) => {
+    const session = db
+      .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`)
+      .get(req.params.id) as SessionSummary | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    const rows = db
+      .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
+      .all(req.params.id) as Record<string, unknown>[];
+    const spans = rows.map(parseSpanRow);
+    const format = req.query.format || 'json';
+
+    if (format === 'csv') {
+      const headers = 'id,type,name,startTime,endTime,inputTokens,ccTokens,crTokens,outputTokens,contextTokens,outputBytes,model,cost,isError,isSidechain';
+      const lines = spans.map((s) =>
+        [s.id, s.type, s.name, s.startTime, s.endTime || '', s.inputTokens, s.cacheCreationTokens, s.cacheReadTokens, s.outputTokens, s.contextTokens, s.outputBytes, s.model || '', s.cost.toFixed(6), s.isError ? '1' : '0', s.isSidechain ? '1' : '0'].join(','),
+      );
+      return reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', `attachment; filename="session-${session.id.slice(0, 8)}.csv"`).send([headers, ...lines].join('\n'));
+    }
+
+    return { session, spans };
+  });
 }

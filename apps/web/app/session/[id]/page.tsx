@@ -95,6 +95,11 @@ export default function SessionPage() {
       </h2>
       <div style={{ fontSize: 12, color: C.sub, marginBottom: 16 }}>
         {data.claudeVersion || '-'} · {data.messageCount} msgs · {data.gitBranch || data.cwd || ''}
+        <span style={{ marginLeft: 12 }}>
+          <a href={`${API}/session/${id}/export`} download style={{ color: C.link, textDecoration: 'none', fontSize: 11, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 3 }}>⬇ JSON</a>
+          {' '}
+          <a href={`${API}/session/${id}/export?format=csv`} download style={{ color: C.link, textDecoration: 'none', fontSize: 11, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 3 }}>⬇ CSV</a>
+        </span>
       </div>
 
       <div
