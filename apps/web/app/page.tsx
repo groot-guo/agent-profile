@@ -29,6 +29,8 @@ export default function HomePage() {
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [anomalyIds, setAnomalyIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<string>('time');
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -76,7 +78,18 @@ export default function HomePage() {
     }
   };
 
-  const filtered = agentFilter === 'all' ? sessions : sessions.filter((s) => s.agent === agentFilter);
+  const filtered = sessions
+    .filter((s) => agentFilter === 'all' || s.agent === agentFilter)
+    .filter((s) => !search || (s.name || '').toLowerCase().includes(search.toLowerCase()) || (s.cwd || '').toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'cost': return b.totalCost - a.totalCost;
+        case 'tokens': return (b.inputTokens + b.cacheCreationTokens + b.cacheReadTokens + b.outputTokens) - (a.inputTokens + a.cacheCreationTokens + a.cacheReadTokens + a.outputTokens);
+        case 'cache': return a.cacheHitRate - b.cacheHitRate;
+        case 'duration': return ((b.endTime || 0) - b.startTime) - ((a.endTime || 0) - a.startTime);
+        default: return b.startTime - a.startTime;
+      }
+    });
 
   // Group by project for sidebar tree
   const groups = new Map<string, SessionSummary[]>();
@@ -119,6 +132,19 @@ export default function HomePage() {
           </div>
           {scanResult && <div style={{ fontSize: 10, color: C.cr, marginTop: 4 }}>✓ {scanResult}</div>}
           {error && <div style={{ fontSize: 10, color: C.high, marginTop: 4 }}>{error}</div>}
+          {/* Search + Sort */}
+          <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+            <input placeholder="搜索 name/cwd/id…" value={search} onChange={(e) => setSearch(e.target.value)}
+              style={{ flex: 1, padding: '3px 8px', fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 4, background: C.card, color: C.text }} />
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+              style={{ padding: '3px 4px', fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 4, background: C.card, color: C.text }}>
+              <option value="time">时间</option>
+              <option value="cost">Cost</option>
+              <option value="tokens">Token</option>
+              <option value="cache">Cache</option>
+              <option value="duration">耗时</option>
+            </select>
+          </div>
         </div>
 
         {/* Agent filter tabs */}
