@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeSession } from '../analyzer';
+import { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, analyzeSession, analyzeToolParams, calcEfficiencyScore } from '../analyzer';
 import type { ParsedSession, Pricing, Span } from '../types';
 
 function makeTurn(overrides: Partial<Span> & { id: string }): Span {
@@ -188,5 +188,219 @@ describe('analyzeSession', () => {
     const fixedTime = 1700000000000;
     const { summary } = analyzeSession(parsed, pricingLookup, undefined, fixedTime);
     expect(summary.importedAt).toBe(fixedTime);
+  });
+});
+
+// ===== analyzeEfficiency =====
+describe('analyzeEfficiency', () => {
+  it('computes tool success rates', () => {
+    const spans: Span[] = [
+      makeTool({ id: 't1', name: 'Bash' }),
+      makeTool({ id: 't2', name: 'Bash', isError: true }),
+      makeTool({ id: 't3', name: 'Read' }),
+    ];
+    const result = analyzeEfficiency(spans);
+    expect(result.toolSuccessRates.length).toBe(2);
+    const bash = result.toolSuccessRates.find((t) => t.name === 'Bash')!;
+    expect(bash.total).toBe(2);
+    expect(bash.errors).toBe(1);
+    expect(bash.successRate).toBe(0.5);
+    const read = result.toolSuccessRates.find((t) => t.name === 'Read')!;
+    expect(read.successRate).toBe(1);
+  });
+
+  it('returns empty data for no tools', () => {
+    const result = analyzeEfficiency([]);
+    expect(result.toolSuccessRates).toEqual([]);
+    expect(result.thinkingActionRatios).toEqual([]);
+    expect(result.contextGrowthVelocity).toBe(0);
+    expect(result.fileOperations).toEqual([]);
+    expect(result.readToEditRate).toBe(0);
+  });
+
+  it('computes context growth velocity', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', inputTokens: 1000, startTime: 1000 }),
+      makeTurn({ id: 't2', inputTokens: 3000, startTime: 2000 }),
+      makeTurn({ id: 't3', inputTokens: 4000, startTime: 3000 }),
+    ];
+    const result = analyzeEfficiency(spans);
+    expect(result.contextGrowthVelocity).toBeGreaterThan(0);
+  });
+
+  it('identifies file operations', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'r1', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) } }),
+      makeTool({ id: 'r2', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) } }),
+      makeTool({ id: 'e1', name: 'Edit', metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) } }),
+      makeTool({ id: 'w1', name: 'Write', metadata: { input: JSON.stringify({ file_path: '/src/b.ts' }) } }),
+    ];
+    const result = analyzeEfficiency(spans);
+    expect(result.fileOperations.length).toBe(2);
+    const a = result.fileOperations.find((f) => f.path === '/src/a.ts')!;
+    expect(a.reads).toBe(2);
+    expect(a.edits).toBe(1);
+    // a.ts was read+edited, b.ts was only written (not read) → filesRead=1, filesEdited=2 → rate=2
+    expect(result.readToEditRate).toBe(2);
+  });
+});
+
+// ===== analyzeCostAttribution =====
+describe('analyzeCostAttribution', () => {
+  it('splits cost by tool category', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', cost: 0.5, startTime: 1000 }),
+      makeTool({ id: 'bash1', name: 'Bash', parentId: 't1' }),
+      makeTurn({ id: 't2', cost: 0.3, startTime: 2000 }),
+      makeTool({ id: 'read1', name: 'Read', parentId: 't2' }),
+    ];
+    const result = analyzeCostAttribution(spans);
+    expect(result.totalCost).toBeCloseTo(0.8);
+    expect(result.costByCategory.length).toBeGreaterThan(0);
+  });
+
+  it('splits by 3 phases', () => {
+    const spans: Span[] = Array.from({ length: 6 }, (_, i) =>
+      makeTurn({ id: `t${i}`, cost: 1, inputTokens: 100, outputTokens: 50, startTime: 1000 + i * 100 }),
+    );
+    const result = analyzeCostAttribution(spans);
+    expect(result.costByPhase.length).toBe(3);
+    expect(result.costByPhase.reduce((s, p) => s + p.turnCount, 0)).toBe(6);
+  });
+
+  it('computes wastedCostRatio', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', cost: 1, startTime: 1000 }),
+    ];
+    const result = analyzeCostAttribution(spans, 0.3);
+    expect(result.wastedCostRatio).toBeCloseTo(0.3);
+  });
+
+  it('caps wastedCostRatio at 1', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', cost: 0.1, startTime: 1000 }),
+    ];
+    const result = analyzeCostAttribution(spans, 0.5);
+    expect(result.wastedCostRatio).toBe(1);
+  });
+});
+
+// ===== calcEfficiencyScore =====
+describe('calcEfficiencyScore', () => {
+  it('computes score between 0-100', () => {
+    const eff = analyzeEfficiency([
+      makeTool({ id: 't1', name: 'Read' }),
+      makeTool({ id: 't2', name: 'Bash' }),
+    ]);
+    const score = calcEfficiencyScore(eff, 0.5, 10000, 3000, 0.1, 0.02);
+    expect(score.score).toBeGreaterThanOrEqual(0);
+    expect(score.score).toBeLessThanOrEqual(100);
+  });
+
+  it('gives high score for efficient session', () => {
+    const eff = analyzeEfficiency([
+      makeTool({ id: 't1', name: 'Read' }),
+    ]);
+    const score = calcEfficiencyScore(eff, 0.9, 1000, 800, 0.01, 0);
+    expect(score.score).toBeGreaterThan(70);
+  });
+
+  it('gives low score for inefficient session', () => {
+    const eff = analyzeEfficiency([
+      makeTool({ id: 't1', name: 'Bash', isError: true }),
+      makeTool({ id: 't2', name: 'Bash', isError: true }),
+      makeTool({ id: 't3', name: 'Bash', isError: true }),
+    ]);
+    const score = calcEfficiencyScore(eff, 0.1, 100000, 1000, 5, 4);
+    expect(score.score).toBeLessThan(50);
+  });
+});
+
+// ===== analyzePerformance =====
+describe('analyzePerformance', () => {
+  it('computes turn latency stats', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', startTime: 1000, endTime: 2000 }),
+      makeTurn({ id: 't2', startTime: 2000, endTime: 3500 }),
+      makeTurn({ id: 't3', startTime: 3500, endTime: 4500 }),
+    ];
+    const result = analyzePerformance(spans);
+    expect(result.turnLatency.avg).toBeGreaterThan(0);
+    expect(result.turnLatency.max).toBe(1500);
+  });
+
+  it('detects slow turns', () => {
+    // Create many fast turns so P95 is low, then one very slow turn
+    const fastTurns = Array.from({ length: 20 }, (_, i) =>
+      makeTurn({ id: `f${i}`, startTime: i * 1000, endTime: i * 1000 + 500 }),
+    );
+    const slow = makeTurn({ id: 'slow', startTime: 20000, endTime: 81000 }); // 61s > threshold
+    const result = analyzePerformance([...fastTurns, slow]);
+    expect(result.slowTurns.length).toBe(1);
+    expect(result.slowTurns[0].turnId).toBe('slow');
+  });
+
+  it('computes throughput', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', inputTokens: 5000, outputTokens: 1000, startTime: 0, endTime: 60000 }),
+      makeTurn({ id: 't2', inputTokens: 3000, outputTokens: 2000, startTime: 60000, endTime: 120000 }),
+    ];
+    const result = analyzePerformance(spans);
+    expect(result.throughput).toBeGreaterThan(0);
+    expect(result.sessionDuration).toBe(120000);
+  });
+
+  it('computes tool latency by name', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'bash1', name: 'Bash', startTime: 1000, endTime: 3000 }),
+      makeTool({ id: 'bash2', name: 'Bash', startTime: 3000, endTime: 7000 }),
+      makeTool({ id: 'read1', name: 'Read', startTime: 7000, endTime: 7500 }),
+    ];
+    const result = analyzePerformance(spans);
+    expect(result.toolLatencyByName.length).toBe(2);
+    const bash = result.toolLatencyByName.find((t) => t.name === 'Bash')!;
+    expect(bash.count).toBe(2);
+    expect(bash.avg).toBe(3000);
+  });
+});
+
+// ===== analyzeToolParams =====
+describe('analyzeToolParams', () => {
+  it('classifies Bash commands', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'b1', name: 'Bash', metadata: { input: JSON.stringify({ command: 'git status' }) } }),
+      makeTool({ id: 'b2', name: 'Bash', metadata: { input: JSON.stringify({ command: 'npm install' }) } }),
+      makeTool({ id: 'b3', name: 'Bash', metadata: { input: JSON.stringify({ command: 'ls -la' }) } }),
+      makeTool({ id: 'b4', name: 'Bash', metadata: { input: JSON.stringify({ command: 'grep -r foo' }) } }),
+    ];
+    const result = analyzeToolParams(spans);
+    expect(result.bashCategories.length).toBe(4);
+    expect(result.bashCategories.find((c) => c.category === 'git')).toBeDefined();
+    expect(result.bashCategories.find((c) => c.category === 'npm')).toBeDefined();
+  });
+
+  it('analyzes Read params', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'r1', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/a.ts' }) } }),
+      makeTool({ id: 'r2', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/b.ts', limit: 50 }) } }),
+      makeTool({ id: 'r3', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/c.ts', limit: 100 }) } }),
+    ];
+    const result = analyzeToolParams(spans);
+    expect(result.readParamStats.withLimit).toBe(2);
+    expect(result.readParamStats.withoutLimit).toBe(1);
+    expect(result.readParamStats.avgLimit).toBe(75);
+  });
+
+  it('finds frequent tool pairs', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'r1', name: 'Read', startTime: 1000 }),
+      makeTool({ id: 'e1', name: 'Edit', startTime: 1100 }),
+      makeTool({ id: 'r2', name: 'Read', startTime: 1200 }),
+      makeTool({ id: 'e2', name: 'Edit', startTime: 1300 }),
+    ];
+    const result = analyzeToolParams(spans);
+    const pair = result.frequentPairs[0];
+    expect(pair.pair).toBe('Read → Edit');
+    expect(pair.count).toBeGreaterThanOrEqual(1);
   });
 });

@@ -370,6 +370,104 @@ describe('diagnoseSessionSync', () => {
     }
   });
 
+  // ===== same_param_loop =====
+  it('detects same_param_loop', () => {
+    // sameParamLoopMin defaults to 3, needs ≥4 consecutive same-param calls
+    const spans: Span[] = [
+      makeTool({ id: 'e1', name: 'Bash', startTime: 1000, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+      makeTool({ id: 'e2', name: 'Bash', startTime: 1100, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+      makeTool({ id: 'e3', name: 'Bash', startTime: 1200, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+      makeTool({ id: 'e4', name: 'Bash', startTime: 1300, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+    ];
+    const detail = makeDetail(spans);
+    const result = diagnoseSessionSync(detail, { pricingLookup });
+    const finding = result.findings.find((f) => f.type === 'same_param_loop');
+    expect(finding).toBeDefined();
+    expect(finding!.spanIds.length).toBe(4);
+  });
+
+  it('does not flag different params as same_param_loop', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'e1', name: 'Bash', startTime: 1000, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+      makeTool({ id: 'e2', name: 'Bash', startTime: 1100, metadata: { input: JSON.stringify({ command: 'pwd' }) } }),
+      makeTool({ id: 'e3', name: 'Bash', startTime: 1200, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+    ];
+    const detail = makeDetail(spans);
+    const result = diagnoseSessionSync(detail, { pricingLookup });
+    expect(result.findings.filter((f) => f.type === 'same_param_loop')).toEqual([]);
+  });
+
+  // ===== write_then_read =====
+  it('detects write_then_read', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'w1', name: 'Write', startTime: 1000, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
+      makeTool({ id: 'r1', name: 'Read', startTime: 1100, outputBytes: 2000, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
+    ];
+    const detail = makeDetail(spans);
+    const result = diagnoseSessionSync(detail, { pricingLookup });
+    const finding = result.findings.find((f) => f.type === 'write_then_read');
+    expect(finding).toBeDefined();
+  });
+
+  it('does not flag read before write', () => {
+    const spans: Span[] = [
+      makeTool({ id: 'r1', name: 'Read', startTime: 1000, outputBytes: 100, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
+      makeTool({ id: 'w1', name: 'Write', startTime: 1100, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
+    ];
+    const detail = makeDetail(spans);
+    const result = diagnoseSessionSync(detail, { pricingLookup });
+    expect(result.findings.filter((f) => f.type === 'write_then_read')).toEqual([]);
+  });
+
+  // ===== context_compression =====
+  it('detects context_compression', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', inputTokens: 100_000, outputTokens: 500, startTime: 1000 }),
+      makeTurn({ id: 't2', inputTokens: 20_000, outputTokens: 500, startTime: 2000 }),
+    ];
+    const detail = makeDetail(spans);
+    const result = diagnoseSessionSync(detail, { pricingLookup });
+    const finding = result.findings.find((f) => f.type === 'context_compression');
+    expect(finding).toBeDefined();
+  });
+
+  it('does not flag normal context growth as compression', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', inputTokens: 10_000, outputTokens: 500, startTime: 1000 }),
+      makeTurn({ id: 't2', inputTokens: 12_000, outputTokens: 500, startTime: 2000 }),
+    ];
+    const detail = makeDetail(spans);
+    const result = diagnoseSessionSync(detail, { pricingLookup });
+    expect(result.findings.filter((f) => f.type === 'context_compression')).toEqual([]);
+  });
+
+  // ===== model_downgrade =====
+  it('detects model_downgrade', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', model: 'claude-fable-5', inputTokens: 1000, outputTokens: 100, startTime: 1000 }),
+      makeTurn({ id: 't2', model: 'deepseek-v4-flash', inputTokens: 1000, outputTokens: 100, startTime: 2000 }),
+    ];
+    const detail = makeDetail(spans);
+    const multiPricing = (model?: string) => {
+      if (model === 'claude-fable-5') return { model, inputPrice: 21, cacheCreationPrice: 26.25, cacheReadPrice: 1.5, outputPrice: 105 };
+      if (model === 'deepseek-v4-flash') return { model, inputPrice: 1, cacheCreationPrice: 1, cacheReadPrice: 0.02, outputPrice: 2 };
+      return undefined;
+    };
+    const result = diagnoseSessionSync(detail, { pricingLookup: multiPricing });
+    const finding = result.findings.find((f) => f.type === 'model_downgrade');
+    expect(finding).toBeDefined();
+  });
+
+  it('does not flag same-model as downgrade', () => {
+    const spans: Span[] = [
+      makeTurn({ id: 't1', model: 'deepseek-v4-flash', inputTokens: 1000, outputTokens: 100, startTime: 1000 }),
+      makeTurn({ id: 't2', model: 'deepseek-v4-flash', inputTokens: 1000, outputTokens: 100, startTime: 2000 }),
+    ];
+    const detail = makeDetail(spans);
+    const result = diagnoseSessionSync(detail, { pricingLookup });
+    expect(result.findings.filter((f) => f.type === 'model_downgrade')).toEqual([]);
+  });
+
   it('aggregates totalWastedTokens correctly', () => {
     const longText = 'x'.repeat(5_000);
     const spans: Span[] = [
