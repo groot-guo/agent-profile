@@ -228,6 +228,21 @@ export function registerStatsRoutes(app: FastifyInstance) {
       }
     }
 
-    return { overview, byAgent, byProject, byModel, distribution, baseline: { projects: baselineProjects, anomalySessions: [...anomalySessions] } };
+    // Time series trends: daily aggregation
+    const dailyMap = new Map<string, { tokens: number; cost: number; sessions: number; cacheHit: number }>();
+    for (const s of sessions) {
+      const day = new Date(s.startTime as number).toISOString().slice(0, 10);
+      const entry = dailyMap.get(day) || { tokens: 0, cost: 0, sessions: 0, cacheHit: 0 };
+      entry.tokens += ((s.inputTokens as number) || 0) + ((s.cacheCreationTokens as number) || 0) + ((s.cacheReadTokens as number) || 0) + ((s.outputTokens as number) || 0);
+      entry.cost += (s.totalCost as number) || 0;
+      entry.sessions++;
+      entry.cacheHit += (s.cacheHitRate as number) || 0;
+      dailyMap.set(day, entry);
+    }
+    const trends = [...dailyMap.entries()]
+      .map(([day, e]) => ({ day, tokens: e.tokens, cost: e.cost, sessions: e.sessions, avgCacheHit: e.sessions > 0 ? e.cacheHit / e.sessions : 0 }))
+      .sort((a, b) => a.day.localeCompare(b.day));
+
+    return { overview, byAgent, byProject, byModel, distribution, baseline: { projects: baselineProjects, anomalySessions: [...anomalySessions] }, trends };
   });
 }

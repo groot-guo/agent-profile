@@ -139,4 +139,31 @@ export function registerSessionRoutes(app: FastifyInstance) {
 
     return { session, spans };
   });
+
+  // Git 提交关联
+  app.get<{ Params: { id: string } }>('/api/session/:id/commits', async (req, reply) => {
+    const session = db
+      .prepare(`SELECT id, start_time as startTime, end_time as endTime, cwd FROM sessions WHERE id = ?`)
+      .get(req.params.id) as { id: string; startTime: number; endTime?: number; cwd?: string } | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    if (!session.cwd) return { commits: [], error: 'no cwd for this session' };
+
+    const { execSync } = await import('node:child_process');
+    try {
+      const after = new Date(session.startTime - 3600000).toISOString(); // 1h before session start
+      const before = new Date((session.endTime || session.startTime) + 3600000).toISOString(); // 1h after session end
+      const output = execSync(
+        `git -C "${session.cwd}" log --format="%H|%s|%ai|%an" --after="${after}" --before="${before}" --no-merges 2>/dev/null || echo ""`,
+        { encoding: 'utf-8', timeout: 5000 },
+      ).trim();
+      if (!output) return { commits: [] };
+      const commits = output.split('\n').filter(Boolean).map((line) => {
+        const [hash, message, date, author] = line.split('|');
+        return { hash, message, date, author };
+      });
+      return { commits };
+    } catch {
+      return { commits: [], error: 'git command failed (cwd may not be a git repo)' };
+    }
+  });
 }

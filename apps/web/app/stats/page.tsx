@@ -25,6 +25,7 @@ interface StatsData {
     projects: Record<string, { sessions: number; avgCost: number; medCost: number; p95Cost: number; avgTokens: number; avgCacheHit: number }>;
     anomalySessions: string[];
   };
+  trends?: { day: string; tokens: number; cost: number; sessions: number; avgCacheHit: number }[];
 }
 
 export default function StatsPage() {
@@ -65,6 +66,15 @@ export default function StatsPage() {
         <BarChart title="Cost 分布" bins={distribution.costBins} color={C.out} />
         <BarChart title="Token 分布" bins={distribution.tokenBins} color={C.link} />
       </div>
+
+      {/* Daily trends */}
+      {data.trends && data.trends.length > 1 && (
+        <div style={{ marginBottom: 24 }}>
+          <Section title="每日趋势">
+            <TrendChart trends={data.trends} />
+          </Section>
+        </div>
+      )}
 
       {/* Agent pie */}
       <Section title="按 Agent">
@@ -199,6 +209,37 @@ function PieChart({ items, size }: { items: { label: string; value: number; colo
 const MODEL_PALETTE = [C.link, C.cc, C.cr, C.out, C.medium, '#fb8f1e', '#d1572a', '#218bff'];
 const modelColorMap = new Map<string, string>();
 let modelColorIdx = 0;
+
+function TrendChart({ trends }: { trends: { day: string; tokens: number; cost: number; sessions: number; avgCacheHit: number }[] }) {
+  const W = 700, H = 200, PAD = 45;
+  const maxCost = Math.max(...trends.map((t) => t.cost), 0.01);
+  const maxTokens = Math.max(...trends.map((t) => t.tokens), 1);
+  const x = (i: number) => PAD + (i / (trends.length - 1 || 1)) * (W - PAD * 2);
+  const yCost = (v: number) => H - PAD - (v / maxCost) * (H - PAD * 2);
+  const costLine = trends.map((t, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${yCost(t.cost)}`).join(' ');
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={C.axis} />
+        <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke={C.axis} />
+        <path d={costLine} fill="none" stroke={C.out} strokeWidth={2} />
+        {trends.map((t, i) => (
+          <circle key={t.day} cx={x(i)} cy={yCost(t.cost)} r={3} fill={C.out}>
+            <title>{t.day}: ¥{t.cost.toFixed(4)}, {fmtTokens(t.tokens)}, {t.sessions}会话</title>
+          </circle>
+        ))}
+        <text x={PAD} y={PAD - 6} fill={C.sub} fontSize={10}>¥{maxCost.toFixed(2)}</text>
+        <text x={PAD} y={H - PAD + 14} fill={C.sub} fontSize={10}>{trends[0]?.day || ''}</text>
+        <text x={W - PAD} y={H - PAD + 14} fill={C.sub} fontSize={10} textAnchor="end">{trends[trends.length - 1]?.day || ''}</text>
+      </svg>
+      <div style={{ display: 'flex', gap: 16, fontSize: 11, marginTop: 6, color: C.sub }}>
+        <span><span style={{ color: C.out, fontWeight: 600 }}>━</span> Daily Cost（¥）</span>
+        <span>共 {trends.length} 天</span>
+      </div>
+    </div>
+  );
+}
 
 function modelColor(model: string): string {
   if (!modelColorMap.has(model)) {

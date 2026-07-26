@@ -33,6 +33,7 @@ export default function SessionPage() {
   const [eff, setEff] = useState<EfficiencyMetrics | null>(null);
   const [costAttr, setCostAttr] = useState<CostAttribution | null>(null);
   const [score, setScore] = useState<EfficiencyScore | null>(null);
+  const [commits, setCommits] = useState<{ hash: string; message: string; date: string; author: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -49,14 +50,16 @@ export default function SessionPage() {
       fetch(`${API}/session/${id}/efficiency`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/cost-attribution`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/score`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/session/${id}/commits`).then((r) => (r.ok ? r.json() : Promise.resolve({ commits: [] }))),
     ])
-      .then(([d, c, dg, ef, ca, sc]) => {
+      .then(([d, c, dg, ef, ca, sc, cm]) => {
         setData(d);
         setCtx(c);
         setDiag(dg);
         setEff(ef);
         setCostAttr(ca);
         setScore(sc);
+        if (cm?.commits) setCommits(cm.commits);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
@@ -129,6 +132,19 @@ export default function SessionPage() {
         )}
       </div>
 
+      {commits.length > 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.cr}`, borderLeft: `3px solid ${C.cr}`, borderRadius: 8, padding: 12, marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 6 }}>🔗 Git 提交关联 · {commits.length} commits</div>
+          {commits.slice(0, 5).map((c) => (
+            <div key={c.hash} style={{ fontSize: 11, color: C.sub, padding: '2px 0', display: 'flex', gap: 8 }}>
+              <code style={{ color: C.link, flexShrink: 0 }}>{c.hash.slice(0, 7)}</code>
+              <span style={{ flex: 1, color: C.text }}>{c.message}</span>
+              <span style={{ flexShrink: 0 }}>{c.date?.slice(0, 16)}</span>
+            </div>
+          ))}
+          {commits.length > 5 && <div style={{ fontSize: 11, color: C.mute }}>… 还有 {commits.length - 5} 个提交</div>}
+        </div>
+      )}
       {sidechainTurns.length > 0 && (
         <SidechainSummary
           turns={sidechainTurns.length}
