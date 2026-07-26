@@ -6,6 +6,7 @@ import type {
   EfficiencyMetrics,
   FileOperation,
   ParsedSession,
+  PerformanceMetrics,
   Pricing,
   SessionSummary,
   Span,
@@ -327,4 +328,65 @@ export function analyzeCostAttribution(
   const wastedCostRatio = totalCost > 0 && wastedCost != null ? Math.min(1, wastedCost / totalCost) : 0;
 
   return { totalCost, costByCategory, costByPhase, wastedCostRatio };
+}
+
+const p95 = (arr: number[]): number => { const s = [...arr].sort((a, b) => a - b); return s[Math.max(0, Math.floor(s.length * 0.95))] || 0; };
+const median = (arr: number[]): number => { const s = [...arr].sort((a, b) => a - b); return s[Math.max(0, Math.floor(s.length * 0.5))] || 0; };
+
+function latencyStats(durations: number[]): LatencyStats {
+  if (durations.length === 0) return { avg: 0, median: 0, p95: 0, max: 0 };
+  return {
+    avg: Math.round(durations.reduce((a, b) => a + b, 0) / durations.length),
+    median: median(durations),
+    p95: p95(durations),
+    max: Math.max(...durations),
+  };
+}
+
+export function analyzePerformance(spans: Span[]): PerformanceMetrics {
+  const turns = spans.filter((s) => s.type === 'llm_turn').sort((a, b) => a.startTime - b.startTime);
+  const tools = spans.filter((s) => s.type === 'tool_call');
+
+  // Turn latency
+  const turnDurations = turns.map((t) => (t.endTime ? t.endTime - t.startTime : 0)).filter((d) => d > 0);
+  const turnLatency = latencyStats(turnDurations);
+
+  // Tool latency
+  const toolDurations = tools.map((t) => (t.endTime ? t.endTime - t.startTime : 0)).filter((d) => d > 0);
+  const toolLatency = latencyStats(toolDurations);
+
+  // Tool latency by name
+  const byName = new Map<string, number[]>();
+  for (const t of tools) {
+    const dur = t.endTime ? t.endTime - t.startTime : 0;
+    if (dur <= 0) continue;
+    const arr = byName.get(t.name) || [];
+    arr.push(dur);
+    byName.set(t.name, arr);
+  }
+  const toolLatencyByName = [...byName.entries()]
+    .map(([name, durations]) => ({
+      name, count: durations.length,
+      avg: Math.round(durations.reduce((a, b) => a + b, 0) / durations.length),
+      median: median(durations), p95: p95(durations), max: Math.max(...durations),
+    }))
+    .sort((a, b) => b.avg - a.avg);
+
+  // Slow turns (> 2x P95 or > 60s)
+  const slowThreshold = Math.max(turnLatency.p95 * 1.5, 60_000);
+  const slowTurns = turns.map((turn, i) => ({
+    turnIndex: i + 1,
+    turnId: turn.id,
+    duration: turn.endTime ? turn.endTime - turn.startTime : 0,
+    isSlow: (turn.endTime ? turn.endTime - turn.startTime : 0) > slowThreshold,
+  })).filter((t) => t.isSlow);
+
+  // Throughput (tokens/min)
+  const totalTokens = turns.reduce((s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens + t.outputTokens, 0);
+  const firstTurn = turns[0];
+  const lastTurn = turns[turns.length - 1];
+  const sessionDuration = firstTurn && lastTurn ? (lastTurn.endTime || lastTurn.startTime) - firstTurn.startTime : 0;
+  const throughput = sessionDuration > 0 ? Math.round(totalTokens / (sessionDuration / 60000)) : 0;
+
+  return { turnLatency, toolLatency, toolLatencyByName, slowTurns, throughput, sessionDuration };
 }

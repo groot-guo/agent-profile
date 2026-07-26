@@ -231,3 +231,37 @@ export interface CostAttribution {
   costByPhase: CostByPhase[];
   wastedCostRatio: number; // diagnosis wastedCost / totalCost
 }
+
+// ===== 性能指标 =====
+
+export interface LatencyStats {
+  avg: number;
+  median: number;
+  p95: number;
+  max: number;
+}
+
+export interface ToolLatency {
+  name: string;
+  count: number;
+  avg: number;
+  median: number;
+  p95: number;
+  max: number;
+}
+
+export interface TurnPerformance {
+  turnIndex: number;
+  turnId: string;
+  duration: number;
+  isSlow: boolean; // > 2x P95
+}
+
+export interface PerformanceMetrics {
+  turnLatency: LatencyStats;
+  toolLatency: LatencyStats;
+  toolLatencyByName: ToolLatency[];
+  slowTurns: TurnPerformance[];
+  throughput: number; // tokens/min
+  sessionDuration: number; // ms
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, EfficiencyScore, SessionDetail, Span } from '@agent-profile/core';
+import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, EfficiencyScore, PerformanceMetrics, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -34,6 +34,7 @@ export default function SessionPage() {
   const [costAttr, setCostAttr] = useState<CostAttribution | null>(null);
   const [score, setScore] = useState<EfficiencyScore | null>(null);
   const [commits, setCommits] = useState<{ hash: string; message: string; date: string; author: string }[]>([]);
+  const [perf, setPerf] = useState<PerformanceMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -51,8 +52,9 @@ export default function SessionPage() {
       fetch(`${API}/session/${id}/cost-attribution`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/score`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/commits`).then((r) => (r.ok ? r.json() : Promise.resolve({ commits: [] }))),
+      fetch(`${API}/session/${id}/performance`).then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([d, c, dg, ef, ca, sc, cm]) => {
+      .then(([d, c, dg, ef, ca, sc, cm, pf]) => {
         setData(d);
         setCtx(c);
         setDiag(dg);
@@ -60,6 +62,7 @@ export default function SessionPage() {
         setCostAttr(ca);
         setScore(sc);
         if (cm?.commits) setCommits(cm.commits);
+        setPerf(pf);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
@@ -164,6 +167,9 @@ export default function SessionPage() {
       )}
       {costAttr && (
         <CostAttributionPanel attr={costAttr} />
+      )}
+      {perf && (
+        <PerformancePanel metrics={perf} />
       )}
       <Card title={`工具调用次数${mainTools.length < allTools.length ? '（主链路，不含子 agent）' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1006,6 +1012,55 @@ function CostAttributionPanel({ attr }: { attr: CostAttribution }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function PerformancePanel({ metrics }: { metrics: PerformanceMetrics }) {
+  const { turnLatency, toolLatency, toolLatencyByName, slowTurns, throughput, sessionDuration } = metrics;
+  return (
+    <Card title={`性能分析 · ${slowTurns.length} 慢轮 · 吞吐 ${(throughput / 1000).toFixed(1)}k tokens/min · ${(sessionDuration / 60000).toFixed(1)}min`}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+        <MiniStat label="Turn avg" value={fmtDuration(turnLatency.avg)} />
+        <MiniStat label="Turn P95" value={fmtDuration(turnLatency.p95)} />
+        <MiniStat label="Turn max" value={fmtDuration(turnLatency.max)} color={turnLatency.max > 60_000 ? C.high : undefined} />
+        <MiniStat label="Tool avg" value={fmtDuration(toolLatency.avg)} />
+      </div>
+      {/* Slow turns list */}
+      {slowTurns.length > 0 && (
+        <div style={{ marginTop: 8, padding: '6px 10px', background: `${C.high}12`, borderRadius: 6, fontSize: 11 }}>
+          <span style={{ color: C.high, fontWeight: 600 }}>🐢 慢轮（&gt;1.5x P95）：</span>
+          <span style={{ color: C.sub }}>
+            {slowTurns.slice(0, 8).map((t) => `T${t.turnIndex}(${fmtDuration(t.duration)})`).join(', ')}
+            {slowTurns.length > 8 && ` …+${slowTurns.length - 8}`}
+          </span>
+        </div>
+      )}
+      {/* Slowest tools */}
+      {toolLatencyByName.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 6 }}>🔧 最慢工具（avg延迟）</div>
+          {toolLatencyByName.slice(0, 5).map((t) => (
+            <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, padding: '2px 0' }}>
+              <span style={{ width: 120, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+              <div style={{ flex: 1, height: 8, background: C.borderSoft, borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, t.avg / (toolLatencyByName[0]?.avg || 1) * 100)}%`, height: '100%', background: t.avg > 5000 ? C.high : C.medium, borderRadius: 2 }} />
+              </div>
+              <span style={{ color: C.sub, width: 50, textAlign: 'right' }}>{fmtDuration(t.avg)}</span>
+              <span style={{ color: C.mute, width: 44, textAlign: 'right' }}>x{t.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function MiniStat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ background: C.bg, borderRadius: 6, padding: '6px 10px' }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: color || C.text }}>{value}</div>
+      <div style={{ fontSize: 10, color: C.sub }}>{label}</div>
+    </div>
   );
 }
 
