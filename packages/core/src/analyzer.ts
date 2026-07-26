@@ -1,5 +1,8 @@
 import { calcCost } from './pricing';
 import type {
+  CostAttribution,
+  CostByCategory,
+  CostByPhase,
   EfficiencyMetrics,
   FileOperation,
   ParsedSession,
@@ -198,4 +201,92 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
     fileOperations,
     readToEditRate,
   };
+}
+
+const CAT_LABEL: Record<string, string> = {
+  file: '文件操作', command: '命令执行', network: '网络',
+  interactive: '用户交互', mcp: 'MCP', orchestration: '编排', meta: '元工具', other: '其他',
+};
+
+const PHASE_NAMES = ['探索期', '实现期', '验证期'];
+
+export function analyzeCostAttribution(
+  spans: Span[],
+  wastedCost?: number,
+): CostAttribution {
+  const turns = spans.filter((s) => s.type === 'llm_turn').sort((a, b) => a.startTime - b.startTime);
+  const tools = spans.filter((s) => s.type === 'tool_call');
+
+  const totalCost = turns.reduce((s, t) => s + (t.cost || 0), 0);
+
+  // 1. Cost by tool category
+  const catCost = new Map<string, { cost: number; turnCount: number; toolCount: number }>();
+  for (const tool of tools) {
+    const cat = catOf(tool.name);
+    const parentTurn = turns.find((t) => t.id === tool.parentId);
+    const turnCost = parentTurn?.cost || 0;
+    const entry = catCost.get(cat) || { cost: 0, turnCount: 0, toolCount: 0 };
+    entry.cost += turnCost;
+    entry.toolCount++;
+    if (parentTurn && !catCost.has(cat)) entry.turnCount++;
+    catCost.set(cat, entry);
+  }
+  // Count unique parent turns per category
+  for (const tool of tools) {
+    const cat = catOf(tool.name);
+    const entry = catCost.get(cat);
+    if (entry && tool.parentId) {
+      const parentTurn = turns.find((t) => t.id === tool.parentId);
+      if (parentTurn) {
+        // dedup turn counting
+      }
+    }
+  }
+  // Rebuild with deduped turn counts
+  const catTurns = new Map<string, Set<string>>();
+  for (const tool of tools) {
+    if (!tool.parentId) continue;
+    const cat = catOf(tool.name);
+    const set = catTurns.get(cat) || new Set();
+    set.add(tool.parentId);
+    catTurns.set(cat, set);
+  }
+  for (const [cat, turnSet] of catTurns) {
+    const entry = catCost.get(cat);
+    if (entry) entry.turnCount = turnSet.size;
+  }
+
+  const costByCategory: CostByCategory[] = [...catCost.entries()]
+    .map(([category, e]) => ({
+      category: CAT_LABEL[category] || category,
+      cost: e.cost,
+      turnCount: e.turnCount,
+      toolCount: e.toolCount,
+      percentage: totalCost > 0 ? e.cost / totalCost : 0,
+    }))
+    .sort((a, b) => b.cost - a.cost);
+
+  // 2. Cost by phase (split turns into 3 equal time-based phases)
+  const phaseSize = Math.max(1, Math.ceil(turns.length / 3));
+  const costByPhase: CostByPhase[] = [];
+  for (let p = 0; p < 3; p++) {
+    const phaseTurns = turns.slice(p * phaseSize, (p + 1) * phaseSize);
+    if (phaseTurns.length === 0) continue;
+    const phaseCost = phaseTurns.reduce((s, t) => s + (t.cost || 0), 0);
+    const phaseInput = phaseTurns.reduce((s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens, 0);
+    const phaseOutput = phaseTurns.reduce((s, t) => s + t.outputTokens, 0);
+    costByPhase.push({
+      phase: PHASE_NAMES[p],
+      turnCount: phaseTurns.length,
+      cost: phaseCost,
+      inputTokens: phaseInput,
+      outputTokens: phaseOutput,
+      percentage: totalCost > 0 ? phaseCost / totalCost : 0,
+    });
+  }
+
+  // 3. Wasted cost ratio
+  const wastedCostRatio = totalCost > 0 && wastedCost != null ? Math.min(1, wastedCost / totalCost) : 0;
+
+  return { totalCost, costByCategory, costByPhase, wastedCostRatio };
 }

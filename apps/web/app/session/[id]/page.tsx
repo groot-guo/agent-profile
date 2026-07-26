@@ -1,6 +1,6 @@
 'use client';
 
-import type { DiagnosisResult, EfficiencyMetrics, SessionDetail, Span } from '@agent-profile/core';
+import type { CostAttribution, DiagnosisResult, EfficiencyMetrics, SessionDetail, Span } from '@agent-profile/core';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -31,6 +31,7 @@ export default function SessionPage() {
   const [ctx, setCtx] = useState<ContextPoint[]>([]);
   const [diag, setDiag] = useState<DiagnosisResult | null>(null);
   const [eff, setEff] = useState<EfficiencyMetrics | null>(null);
+  const [costAttr, setCostAttr] = useState<CostAttribution | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -45,12 +46,14 @@ export default function SessionPage() {
       // diagnosis 为辅助层，失败不拖垮主数据展示
       fetch(`${API}/session/${id}/diagnosis`).then((r) => (r.ok ? r.json() : null)),
       fetch(`${API}/session/${id}/efficiency`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`${API}/session/${id}/cost-attribution`).then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([d, c, dg, ef]) => {
+      .then(([d, c, dg, ef, ca]) => {
         setData(d);
         setCtx(c);
         setDiag(dg);
         setEff(ef);
+        setCostAttr(ca);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
@@ -122,6 +125,9 @@ export default function SessionPage() {
       )}
       {eff && (
         <EfficiencyPanel metrics={eff} />
+      )}
+      {costAttr && (
+        <CostAttributionPanel attr={costAttr} />
       )}
       <Card title={`工具调用次数${mainTools.length < allTools.length ? '（主链路，不含子 agent）' : ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -900,6 +906,69 @@ function EfficiencyPanel({ metrics }: { metrics: EfficiencyMetrics }) {
           </span>
         )}
       </div>
+    </Card>
+  );
+}
+
+function CostAttributionPanel({ attr }: { attr: CostAttribution }) {
+  const catColors: Record<string, string> = {
+    文件操作: '#fb8f1e', 命令执行: '#d4a72c', 网络: '#bf8700',
+    用户交互: '#218bff', MCP: '#bc4c00', 编排: '#d1572a', 元工具: '#8c959f', 其他: '#6e7681',
+  };
+  const phaseColors = [C.link, C.cc, C.cr];
+
+  return (
+    <Card title={`成本归因 · ¥${attr.totalCost.toFixed(4)} · 浪费比 ${(attr.wastedCostRatio * 100).toFixed(1)}%`}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* 按工具类别 */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 8 }}>📦 按工具类别</div>
+          {attr.costByCategory.map((c) => (
+            <div key={c.category} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '2px 0' }}>
+              <span style={{
+                padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+                background: `${catColors[c.category] || C.mute}20`, color: catColors[c.category] || C.mute,
+                width: 56, textAlign: 'center', flexShrink: 0,
+              }}>{c.category}</span>
+              <div style={{ flex: 1, height: 10, background: C.borderSoft, borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: `${c.percentage * 100}%`, height: '100%', background: catColors[c.category] || C.mute, borderRadius: 2, minWidth: c.percentage > 0 ? 3 : 0 }} />
+              </div>
+              <span style={{ width: 52, textAlign: 'right', color: C.out, fontWeight: 600 }}>¥{c.cost.toFixed(4)}</span>
+              <span style={{ width: 36, textAlign: 'right', color: C.sub }}>{(c.percentage * 100).toFixed(0)}%</span>
+            </div>
+          ))}
+        </div>
+
+        {/* 按阶段 */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 8 }}>⏱ 按阶段</div>
+          {attr.costByPhase.map((p, i) => (
+            <div key={p.phase} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, padding: '4px 0' }}>
+              <span style={{ fontWeight: 600, color: phaseColors[i] || C.text, width: 36, flexShrink: 0 }}>{p.phase}</span>
+              <div style={{ flex: 1, height: 14, background: C.borderSoft, borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${p.percentage * 100}%`, height: '100%', background: phaseColors[i] || C.mute, borderRadius: 3, minWidth: p.percentage > 0 ? 3 : 0 }} />
+              </div>
+              <span style={{ width: 48, textAlign: 'right', color: C.out, fontWeight: 600 }}>¥{p.cost.toFixed(4)}</span>
+              <span style={{ width: 36, textAlign: 'right', color: C.sub }}>{(p.percentage * 100).toFixed(0)}%</span>
+              <span style={{ width: 44, textAlign: 'right', color: C.mute }}>{p.turnCount}轮</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 浪费成本占比 */}
+      {attr.wastedCostRatio > 0 && (
+        <div style={{ marginTop: 12, padding: '8px 12px', background: `${attr.wastedCostRatio > 0.3 ? C.high : C.medium}12`, border: `1px solid ${attr.wastedCostRatio > 0.3 ? C.high : C.medium}40`, borderRadius: 6, fontSize: 11 }}>
+          <span style={{ color: attr.wastedCostRatio > 0.3 ? C.high : C.medium, fontWeight: 600 }}>
+            💸 诊断浪费占 {(attr.wastedCostRatio * 100).toFixed(1)}%
+          </span>
+          <span style={{ color: C.sub }}>
+            {attr.wastedCostRatio > 0.3
+              ? ' — 超过 30% 的成本可优化，建议重点关注诊断建议中的高严重度项'
+              : ' — 浪费占比在可接受范围内'}
+          </span>
+        </div>
+      )}
     </Card>
   );
 }

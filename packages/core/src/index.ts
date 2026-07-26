@@ -1,5 +1,5 @@
 export { AGENT_LABELS, detectAgent } from './agent';
-export { analyzeEfficiency, analyzeSession } from './analyzer';
+export { analyzeCostAttribution, analyzeEfficiency, analyzeSession } from './analyzer';
 export type {
   DiagnoseOptions,
   DiagnosisFinding,

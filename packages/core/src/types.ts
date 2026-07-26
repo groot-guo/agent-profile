@@ -205,3 +205,29 @@ export interface EfficiencyMetrics {
   fileOperations: FileOperation[];
   readToEditRate: number; // files edited / files read
 }
+
+// ===== 成本归因 =====
+
+export interface CostByCategory {
+  category: string;
+  cost: number;
+  turnCount: number;
+  toolCount: number;
+  percentage: number;
+}
+
+export interface CostByPhase {
+  phase: string;
+  turnCount: number;
+  cost: number;
+  inputTokens: number;
+  outputTokens: number;
+  percentage: number;
+}
+
+export interface CostAttribution {
+  totalCost: number;
+  costByCategory: CostByCategory[];
+  costByPhase: CostByPhase[];
+  wastedCostRatio: number; // diagnosis wastedCost / totalCost
+}

@@ -1,6 +1,6 @@
-import { analyzeEfficiency, type SessionDetail, type SessionSummary } from '@agent-profile/core';
+import { analyzeCostAttribution, analyzeEfficiency, diagnoseSessionSync, type SessionDetail, type SessionSummary } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
-import { db, getModelContext } from '../db';
+import { db, getModelContext, getPricing } from '../db';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
 export function registerSessionRoutes(app: FastifyInstance) {
@@ -72,5 +72,20 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .all(req.params.id) as Record<string, unknown>[];
     const spans = rows.map(parseSpanRow);
     return analyzeEfficiency(spans);
+  });
+
+  // 成本归因
+  app.get<{ Params: { id: string } }>('/api/session/:id/cost-attribution', async (req, reply) => {
+    const session = db
+      .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`)
+      .get(req.params.id) as SessionSummary | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    const rows = db
+      .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
+      .all(req.params.id) as Record<string, unknown>[];
+    const spans = rows.map(parseSpanRow);
+    const detail = { ...session, spans } as SessionDetail;
+    const diag = diagnoseSessionSync(detail, { pricingLookup: getPricing, contextWindowLookup: getModelContext });
+    return analyzeCostAttribution(spans, diag.totalWastedCost);
   });
 }
