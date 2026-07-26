@@ -13,9 +13,11 @@ the UI can operate without a separate metric implementation per agent.
 | Zed | `~/Library/Application Support/Zed/threads/threads.db` | SQLite + compressed thread payload | `folder_paths` |
 | MiMo | `~/.local/share/mimocode/mimocode.db` | SQLite session/message/part rows | session directory |
 
-The shared `sessions.agent` field distinguishes sources. Existing databases
-receive compatible new session columns through additive migration; normal
-upgrades do not require deleting the local database.
+The shared `sessions.agent` field distinguishes sources. The internal
+`source_kind`, `source_updated_at`, and `source_fingerprint` fields record the
+specific revision that produced each normalized session. Existing databases
+receive these columns through additive migration; normal upgrades do not
+require deleting the local database.
 
 ## Normalization
 
@@ -48,16 +50,22 @@ upgrades do not require deleting the local database.
 ## Scanning behavior
 
 At startup, configured Claude/Codex transcript directories are imported in the
-background and the Zed/MiMo database importers run when those databases exist.
+background and the Zed/MiMo database adapters run when those databases exist.
 `POST /api/scan` imports a selected transcript directory, which covers the
-file-based adapters. File-based sources use file metadata for incremental
-decisions; database-based sources use their available session/thread update
-metadata. A changed source session is re-normalized and replaces its previous
-generated rows so aggregates do not double count.
+file-based adapter. File-based sources fingerprint file mtime and size. Zed
+fingerprints `updated_at` plus payload metadata; MiMo fingerprints
+`time_updated` plus message/part counts. Matching database-source revisions are
+skipped before payload decompression or row loading. A changed source session
+is re-normalized and replaces its previous generated rows so aggregates do not
+double count. A legacy row with no fingerprint refreshes once.
 
-The startup background scan and the manual scan share the same persistence
-model. A failure to access one optional local source must not make the health
-endpoint or already imported data unavailable.
+All adapters emit lazy source items to one import coordinator. The coordinator
+reports scanned/imported/updated/skipped/failed counts and isolates an item
+failure from unrelated items. One session repository performs analysis and
+transactional session/span replacement for every source while preserving
+user-authored tags and notes. Scan routes contain no persistence SQL. A failure
+to access one optional local source must not make the health endpoint or
+already imported data unavailable.
 
 ## Coverage and comparison limits
 

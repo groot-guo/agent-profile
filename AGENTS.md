@@ -58,9 +58,11 @@ These rules protect metric correctness and must not change accidentally:
   effective time, calculation time, and calculator version.
 - Thinking and answer text are blocks inside an LLM turn; their tokens are part
   of the turn output and are not independently recoverable.
-- File-based sessions are incrementally identified by source metadata. When a
-  source session changes, replace its generated session/spans so aggregates do
-  not double count.
+- Every import source must implement the source-adapter contract and provide a
+  stable revision fingerprint. Routes and adapters must not write session/span
+  SQL; the import coordinator owns revision decisions and the session
+  repository owns atomic replacement. When a source session changes, replace
+  its generated session/spans so aggregates do not double count.
 - The primary scanner path is asynchronous. Keep synchronous helpers only for
   compatibility or focused use; do not move blocking scans into request/startup
   paths without an explicit design Task.

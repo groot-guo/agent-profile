@@ -183,6 +183,7 @@ export interface ScanResult {
   imported: number;
   skipped: number;
   updated: number;
+  failed: number;
   sessionIds: string[];
 }
 

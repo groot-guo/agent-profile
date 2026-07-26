@@ -47,9 +47,10 @@ themselves prove outcome quality or that one agent is universally better.
 
 ```text
 local agent data
-  → source scanner/parser
+  → source adapter (revision + parser)
   → normalized sessions and spans
-  → analysis and diagnosis
+  → shared import coordinator
+  → analysis + transactional session repository
   → SQLite
   → Fastify API
   → Next.js UI
@@ -61,7 +62,8 @@ This is a pnpm TypeScript workspace:
 
 - `packages/core` — parsers, analysis logic, diagnosis, pricing, and shared
   types.
-- `apps/server` — Fastify API and SQLite persistence.
+- `apps/server` — source adapters/import coordination, Fastify API, and SQLite
+  persistence.
 - `apps/web` — Next.js App Router UI.
 
 ## Documentation

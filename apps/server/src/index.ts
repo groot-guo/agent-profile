@@ -17,14 +17,17 @@ try {
 
   // 启动自动扫描（多源）
   if (config.autoScanDir) {
-    const dirs = config.autoScanDir === '~/.claude/projects'
-      ? config.autoScanDirs
-      : [config.autoScanDir];
+    const dirs =
+      config.autoScanDir === '~/.claude/projects' ? config.autoScanDirs : [config.autoScanDir];
     for (const dir of dirs) {
       console.log(`Auto-scanning ${dir}...`);
       autoScan(dir)
         .then((r) => {
-          if (r.scanned > 0) console.log(`Auto-scan ${dir}: ${r.scanned} files, ${r.imported} imported`);
+          if (r.scanned > 0) {
+            console.log(
+              `Auto-scan ${dir}: ${r.scanned} files, ${r.imported} imported, ${r.updated} updated, ${r.failed} failed`,
+            );
+          }
         })
         .catch((err) => {
           console.warn(`Auto-scan ${dir} failed: ${err instanceof Error ? err.message : err}`);
@@ -35,7 +38,11 @@ try {
   // 扫描 Zed threads
   scanZedThreads()
     .then((r) => {
-      if (r.scanned > 0) console.log(`Zed scan done: ${r.scanned} threads, ${r.imported} imported`);
+      if (r.scanned > 0) {
+        console.log(
+          `Zed scan done: ${r.scanned} threads, ${r.imported} imported, ${r.updated} updated, ${r.failed} failed`,
+        );
+      }
     })
     .catch((err) => {
       console.warn(`Zed scan failed: ${err instanceof Error ? err.message : err}`);
@@ -44,7 +51,11 @@ try {
   // 扫描 MiMo Code
   scanMiMoSessions()
     .then((r) => {
-      if (r.scanned > 0) console.log(`MiMo scan done: ${r.scanned} sessions, ${r.imported} imported`);
+      if (r.scanned > 0) {
+        console.log(
+          `MiMo scan done: ${r.scanned} sessions, ${r.imported} imported, ${r.updated} updated, ${r.failed} failed`,
+        );
+      }
     })
     .catch((err) => {
       console.warn(`MiMo scan failed: ${err instanceof Error ? err.message : err}`);

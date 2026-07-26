@@ -13,29 +13,39 @@ results through a local API and web application.
 
 ```text
 Claude Code JSONL ─┐
-Codex rollout JSONL ├─→ source adapters ─→ normalized session/spans
-Zed SQLite + zstd ──┤                         │
-MiMo SQLite ────────┘                         ▼
-                                      analyzer/diagnosis
-                                               │
-                                               ▼
-                                      SQLite persistence
-                                               │
-                                               ▼
+Codex rollout JSONL ├─→ source adapters ─→ import coordinator
+Zed SQLite + zstd ──┤                              │
+MiMo SQLite ────────┘                              ▼
+                                      normalized session/spans
+                                                   │
+                                                   ▼
+                                      analyzer → session repository
+                                                   │
+                                                   ▼
+                                                SQLite
+                                                   │
+                                                   ▼
                                       Fastify API → Next.js UI
 ```
 
-Scanning is incremental where source metadata permits it. The server starts
-background imports for configured Claude/Codex directories and available
-Zed/MiMo databases so startup is not blocked by a large local history. The scan
-API supports manual import of a selected transcript directory.
+Scanning is revision-based. Each source item provides a source kind, source
+update time, and stable fingerprint. The coordinator skips matching revisions,
+reports additions/updates/failures separately, and asks the repository to
+atomically replace changed normalized sessions. Legacy rows without a
+fingerprint refresh once on their next scan. The server starts background
+imports for configured Claude/Codex directories and available Zed/MiMo
+databases so startup is not blocked by a large local history. The scan API
+supports manual import of a selected transcript directory.
 
 ## Components
 
 | Component | Current responsibility |
 | --- | --- |
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, tool categorization, pricing calculations |
-| `apps/server/src/routes/scan.ts` | Source discovery/import for Claude Code, Codex, Zed, and MiMo; normalization and persistence |
+| `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
+| `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
+| `apps/server/src/ingestion/session-repository.ts` | Normalized analysis and atomic session/span persistence |
+| `apps/server/src/routes/scan.ts` | Thin manual/startup scan entry points; contains no import persistence SQL |
 | `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
 | `apps/server/src/db.ts` | Default local database instance, pricing/model-context seed data, and current lookup wrappers |
 | `apps/server/src/routes/` | Health, sessions, aggregate analysis, diagnosis, statistics, pricing, context-window, scan, export, and comparison APIs |
@@ -48,10 +58,10 @@ monolithic routes file.
 
 | Agent | Local source | Import model |
 | --- | --- | --- |
-| Claude Code | project transcript JSONL | message/tool blocks and parent chains |
-| Codex | dated rollout JSONL | session metadata, response items, events, and call IDs |
-| Zed | threads SQLite database with compressed payloads | thread records decoded into normalized spans |
-| MiMo | `mimocode.db` SQLite database | session, message, and part records |
+| Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
+| Codex | dated rollout JSONL | file mtime/size fingerprint; session metadata, response items, events, and call IDs |
+| Zed | threads SQLite database with compressed payloads | `updated_at` plus payload metadata fingerprint; changed payloads are decoded lazily |
+| MiMo | `mimocode.db` SQLite database | `time_updated` plus message/part counts; changed session records are loaded lazily |
 
 All adapters emit the same session/span shape so downstream metrics and UI do
 not need agent-specific logic for basic analysis. Coverage can still vary by
@@ -61,9 +71,9 @@ source: a missing field means “not captured”, not zero or failure.
 
 `apps/server/src/database.ts` owns five current internal tables:
 
-- `sessions` — source identity and incremental metadata; agent/model/project
-  fields; four token totals; context, cache, cost, duration, annotation tags,
-  and notes.
+- `sessions` — source identity and revision metadata (`source_kind`,
+  `source_updated_at`, `source_fingerprint`); agent/model/project fields; four
+  token totals; context, cache, cost, duration, annotation tags, and notes.
 - `spans` — normalized `llm_turn` and `tool_call` evidence, token/context/cost
   fields, timing, parent/sidechain links, tool input/output metadata, and
   truncation-safe content.
@@ -74,9 +84,13 @@ source: a missing field means “not captured”, not zero or failure.
   time.
 
 The database applies ordered additive migrations. Existing annotation columns
-and T39 cost-provenance columns are detected safely and each migration version
-is recorded once. Schema changes must include an explicit migration/backfill
-plan and integration test in their Task; deleting `trace.db` is not the normal
+and cost/source-provenance columns are detected safely and each migration
+version is recorded once. Source migration version 3 leaves legacy
+fingerprints empty so the next scan refreshes rather than incorrectly treating
+old data as current. Session replacement uses an upsert that preserves
+user-authored tags and notes, followed by span replacement in the same
+transaction. Schema changes must include an explicit migration/backfill plan
+and integration test in their Task; deleting `trace.db` is not the normal
 upgrade strategy. The SQLite file is generated local state and can be rebuilt
 from available source histories when recovery is necessary.
 

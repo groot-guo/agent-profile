@@ -52,12 +52,14 @@ describe('database migrations', () => {
     expect(migrations).toEqual([
       { version: 1, name: 'session_annotations' },
       { version: 2, name: 'cost_provenance' },
+      { version: 3, name: 'source_revision' },
     ]);
 
     const legacySession = database
       .prepare(
         `SELECT id, tags, notes, cost_currency as costCurrency,
-          cost_calculator_version as costCalculatorVersion
+          cost_calculator_version as costCalculatorVersion,
+          source_kind as sourceKind, source_fingerprint as sourceFingerprint
          FROM sessions WHERE id = 'legacy-session'`,
       )
       .get();
@@ -67,6 +69,8 @@ describe('database migrations', () => {
       notes: '',
       costCurrency: 'CNY',
       costCalculatorVersion: 'legacy',
+      sourceKind: null,
+      sourceFingerprint: null,
     });
 
     const legacyPricing = lookupPricing(database, 'legacy-model', 1000);
@@ -82,7 +86,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(2);
+    expect(count.count).toBe(3);
     database.close();
   });
 

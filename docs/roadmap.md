@@ -405,6 +405,97 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - implementation impact: additive schema migration and stricter mutable API
     validation; no destructive database reset or silent historical repricing
 
+### T40 source adapters and session repository boundary
+
+- status: completed
+- purpose: separate source discovery/parsing from normalized analysis and
+  persistence so additional Agent Runtime event sources can be added without
+  duplicating route logic or SQL
+- scope:
+  1. define a source-adapter contract that exposes discoverable session items,
+     source revision metadata, and lazy normalized-session loading
+  2. introduce a session repository that owns revision lookup and atomic
+     replacement of a normalized session plus all spans
+  3. introduce one import coordinator shared by manual file scans, startup
+     scans, Zed, and MiMo
+  4. move Claude/Codex transcript, Zed, and MiMo source-specific reading into
+     adapters while keeping normalization in `@agent-profile/core`
+  5. add ordered migration fields for source kind, update time, and stable
+     fingerprint so unchanged records are skipped and changed Zed/MiMo sessions
+     are refreshed
+  6. add integration tests for repository replacement and source revision
+     decisions, including database-backed source updates
+- affected:
+  - `docs/roadmap.md`
+  - `ARCHITECTURE.md`
+  - `AGENTS.md`
+  - `README.md`
+  - `docs/multi-agent.md`
+  - `docs/zh/OVERVIEW.md`
+  - `apps/server/src/database.ts`
+  - `apps/server/src/routes/scan.ts`
+  - `apps/server/src/index.ts`
+  - new modules under `apps/server/src/ingestion/`
+  - related server tests
+  - parser input types/exports under `packages/core` only if required to remove
+    unsafe adapter casts
+- acceptance:
+  - scan routes and source adapters contain no session/span persistence SQL
+  - one repository transaction persists every normalized source consistently
+  - the same source revision is skipped; a changed revision replaces the
+    session and spans and is reported as `updated`
+  - Zed and MiMo no longer permanently skip an existing session after its
+    source `updated_at`/`time_updated` changes
+  - one malformed source item does not abort unrelated imports and is counted
+    explicitly
+  - server/core tests, server typecheck, changed-file lint, production build,
+    migration compatibility, and documentation consistency checks pass
+- risks:
+  - legacy sessions have no source fingerprint; their first post-migration scan
+    must refresh safely rather than be treated as permanently current
+  - SQLite source timestamps may use different units; adapters must preserve
+    their raw value consistently and compare fingerprints, not infer duration
+  - database connections and compressed payloads must close on error paths
+- documentation plan:
+  - update `ARCHITECTURE.md` with the implemented adapter/coordinator/repository
+    boundaries and incremental revision semantics
+  - update `AGENTS.md` with the invariant that routes do not own import SQL and
+    source changes require adapter contract tests
+  - record exact migration behavior, tests, compatibility, and known gaps here
+    before marking T40 completed
+- verification:
+  - `pnpm test` — passed: core 124/124 tests; server 10/10 tests
+  - `pnpm build` — passed: core and server TypeScript plus the Next.js
+    production build
+  - focused server build/test rerun — passed after final formatting:
+    TypeScript clean and 10/10 tests
+  - changed-file Biome check — passed with no errors, warnings, or infos
+  - migration compatibility test — passed: migration 3 adds nullable source
+    revision fields to a legacy database, preserves existing values, records
+    once, and remains idempotent
+  - repository integration test — passed: changed spans replace atomically
+    while user tags/notes and source provenance remain correct
+  - coordinator tests — passed: imported, skipped, updated, and failed outcomes
+    are counted independently and a failure does not abort unrelated work
+  - source tests — passed: transcript, Zed, and MiMo revisions skip when
+    unchanged and refresh after file/source update metadata changes
+  - persistence-boundary scan — no session/span write SQL remains in scan routes
+    or source adapters; writes are isolated in `SessionRepository`
+  - `git diff --check`, `CLAUDE.md` canonical symlink check, and current-state
+    documentation consistency checks — passed
+- completion:
+  - completed_at: 2026-07-26
+  - migration behavior: legacy sessions keep null source revision fields and
+    therefore refresh once on their next source scan; no backfill guesses a
+    fingerprint that was never observed
+  - incremental behavior: file sources use mtime/size; Zed uses `updated_at`
+    plus payload metadata; MiMo uses `time_updated` plus message/part counts
+  - result: every source now flows through adapter → coordinator → analyzer/
+    repository, Zed/MiMo updates are no longer permanently skipped, and scan
+    results expose failures as well as imported/updated/skipped counts
+  - compatibility: session IDs and existing API entry points remain unchanged;
+    replacement now preserves user-authored tags and notes
+
 ### T44 repository lint baseline cleanup
 
 - status: planned
@@ -424,7 +515,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ## Execution Order
 
-T5–T15 and T36–T39 are complete. T40 is next and has not started. T44 remains a
+T5–T15 and T36–T40 are complete. T41 is next and has not started. T44 remains a
 separate lint-debt task and must not be folded into feature work.
 
 ## Task Lifecycle

@@ -22,8 +22,9 @@ export type {
 export { DEFAULT_THRESHOLDS, diagnoseSession, diagnoseSessionSync } from './diagnosis';
 export type { ParseOptions } from './parsers/claude';
 export { parseTranscript } from './parsers/claude';
-export type { CodexParseOptions } from './parsers/codex';
+export type { CodexEntry, CodexParseOptions } from './parsers/codex';
 export { parseCodexTranscript } from './parsers/codex';
+export type { MiMoMessage, MiMoPart, MiMoSessionMeta } from './parsers/mimo';
 export { parseMiMoSession } from './parsers/mimo';
 export type { ZedThreadInput } from './parsers/zed';
 export { parseZedThread } from './parsers/zed';

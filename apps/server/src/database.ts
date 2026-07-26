@@ -50,6 +50,16 @@ const MIGRATIONS: Migration[] = [
       addColumn(database, 'spans', 'cost_calculator_version', "TEXT NOT NULL DEFAULT 'legacy'");
     },
   },
+  {
+    version: 3,
+    name: 'source_revision',
+    up(database) {
+      addColumn(database, 'sessions', 'source_kind', 'TEXT');
+      addColumn(database, 'sessions', 'source_updated_at', 'INTEGER');
+      addColumn(database, 'sessions', 'source_fingerprint', 'TEXT');
+      database.exec('CREATE INDEX IF NOT EXISTS idx_sessions_source_kind ON sessions(source_kind)');
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -62,6 +72,9 @@ function createBaseSchema(database: DatabaseConnection): void {
       file_mtime              INTEGER,
       file_size               INTEGER,
       file_lines              INTEGER,
+      source_kind             TEXT,
+      source_updated_at       INTEGER,
+      source_fingerprint      TEXT,
       start_time              INTEGER NOT NULL,
       end_time                INTEGER,
       cwd                     TEXT,

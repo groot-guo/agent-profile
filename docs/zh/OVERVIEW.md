@@ -20,16 +20,19 @@ Task 与 Outcome 数据，它目前不能仅凭过程指标判断最终交付是
 
 ```text
 Claude Code JSONL ─┐
-Codex rollout JSONL ├→ 各来源解析器 → 统一 Session/Span
-Zed SQLite + zstd ──┤                         ↓
-MiMo SQLite ────────┘                   分析与诊断
-                                               ↓
-                                            SQLite
-                                               ↓
-                                      Fastify API → Next.js UI
+Codex rollout JSONL ├→ 来源适配器 → 导入协调器 → 统一 Session/Span
+Zed SQLite + zstd ──┤                                   ↓
+MiMo SQLite ────────┘                           分析 + 会话仓储
+                                                        ↓
+                                                     SQLite
+                                                        ↓
+                                               Fastify API → Next.js UI
 ```
 
 各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
+每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新
+和失败；会话仓储在同一事务中替换 Session/Span，并保留用户标签与备注。Zed 与 MiMo
+的来源版本变化后会重新导入，不再因为 Session 已存在而永久跳过。
 
 ## 当前能力
 
@@ -49,8 +52,8 @@ MiMo SQLite ────────┘                   分析与诊断
 
 当前 SQLite 由 `apps/server/src/database.ts` 管理五张内部表：
 
-- `sessions`：来源与增量扫描信息、Agent/模型/项目、四类 token 聚合、上下文、缓存、
-  成本、耗时、标签和备注。
+- `sessions`：来源类型、更新时间与版本指纹、Agent/模型/项目、四类 token 聚合、
+  上下文、缓存、成本、耗时、标签和备注。
 - `spans`：`llm_turn` 与 `tool_call` 的 token、上下文、成本、耗时、父子链、
   sidechain 和工具输入输出证据。
 - `pricing`：模型四类 token 的人民币/百万 token 单价、单位与生效时间。
@@ -59,6 +62,8 @@ MiMo SQLite ────────┘                   分析与诊断
 
 兼容的新字段通过有序、幂等的 migration 补充；正常升级不应依赖删除 `trace.db`。
 任何 schema 修改都必须在对应 Task 中写明 migration/backfill 与验证方案。
+历史 Session 的来源指纹保持为空，并会在下一次扫描时安全刷新一次，而不是被错误地
+当作最新数据。
 
 ## 指标边界
 

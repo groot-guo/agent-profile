@@ -1,6 +1,6 @@
 import type { ParsedSession, Span, SpanType } from '../types';
 
-interface CodexEntry {
+export interface CodexEntry {
   timestamp: string;
   type: string;
   payload: Record<string, unknown>;
@@ -16,7 +16,11 @@ function truncate(s: string): string {
 function safeStringify(v: unknown): string {
   if (v == null) return '';
   if (typeof v === 'string') return v;
-  try { return truncate(JSON.stringify(v)); } catch { return String(v); }
+  try {
+    return truncate(JSON.stringify(v));
+  } catch {
+    return String(v);
+  }
 }
 
 function toMs(iso: string): number {
@@ -25,19 +29,42 @@ function toMs(iso: string): number {
 }
 
 function makeSpan(p: {
-  id: string; sessionId: string; parentId?: string | null; type: SpanType;
-  name: string; startTime: number; endTime?: number;
-  inputTokens?: number; cacheCreationTokens?: number; cacheReadTokens?: number;
-  outputTokens?: number; model?: string; isError?: boolean; isSidechain?: boolean;
-  outputBytes?: number; metadata?: Record<string, unknown>;
+  id: string;
+  sessionId: string;
+  parentId?: string | null;
+  type: SpanType;
+  name: string;
+  startTime: number;
+  endTime?: number;
+  inputTokens?: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  outputTokens?: number;
+  model?: string;
+  isError?: boolean;
+  isSidechain?: boolean;
+  outputBytes?: number;
+  metadata?: Record<string, unknown>;
 }): Span {
   return {
-    id: p.id, sessionId: p.sessionId, parentId: p.parentId ?? null,
-    type: p.type, name: p.name, startTime: p.startTime, endTime: p.endTime,
-    inputTokens: p.inputTokens || 0, cacheCreationTokens: p.cacheCreationTokens || 0,
-    cacheReadTokens: p.cacheReadTokens || 0, outputTokens: p.outputTokens || 0,
-    contextTokens: 0, outputBytes: p.outputBytes || 0, model: p.model,
-    cost: 0, costUnknown: false, isError: !!p.isError, isSidechain: !!p.isSidechain,
+    id: p.id,
+    sessionId: p.sessionId,
+    parentId: p.parentId ?? null,
+    type: p.type,
+    name: p.name,
+    startTime: p.startTime,
+    endTime: p.endTime,
+    inputTokens: p.inputTokens || 0,
+    cacheCreationTokens: p.cacheCreationTokens || 0,
+    cacheReadTokens: p.cacheReadTokens || 0,
+    outputTokens: p.outputTokens || 0,
+    contextTokens: 0,
+    outputBytes: p.outputBytes || 0,
+    model: p.model,
+    cost: 0,
+    costUnknown: false,
+    isError: !!p.isError,
+    isSidechain: !!p.isSidechain,
     metadata: p.metadata,
   };
 }
@@ -53,9 +80,7 @@ export function parseCodexTranscript(
 ): ParsedSession | null {
   if (entries.length === 0) return null;
 
-  const sorted = [...entries].sort((a, b) =>
-    (a.timestamp || '').localeCompare(b.timestamp || ''),
-  );
+  const sorted = [...entries].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
 
   // 1. 提取 session_meta
   const meta = sorted.find((e) => e.type === 'session_meta')?.payload;
@@ -74,9 +99,10 @@ export function parseCodexTranscript(
       if (t) allReasoningTexts.push(t);
     }
   }
-  const name = allReasoningTexts.length > 0
-    ? allReasoningTexts[0].replace(/^\*\*/, '').replace(/\*\*$/, '').slice(0, 80)
-    : undefined;
+  const name =
+    allReasoningTexts.length > 0
+      ? allReasoningTexts[0].replace(/^\*\*/, '').replace(/\*\*$/, '').slice(0, 80)
+      : undefined;
 
   // 3. 构建 call_id → tool_call_output 映射
   const toolOutputs = new Map<string, { entry: CodexEntry; output: unknown; isError: boolean }>();
@@ -94,12 +120,18 @@ export function parseCodexTranscript(
   let currentTurn: CodexEntry[] = [];
 
   for (const e of sorted) {
-    if ((e.type === 'turn_context' || (e.type === 'event_msg' && e.payload && e.payload.type === 'task_started')) && currentTurn.length > 0) {
+    if (
+      (e.type === 'turn_context' ||
+        (e.type === 'event_msg' && e.payload && e.payload.type === 'task_started')) &&
+      currentTurn.length > 0
+    ) {
       // 新的 turn 开始前，保存当前 turn
       // 仅当有实际内容时才保存（排除孤立的 turn_context）
       const hasContent = currentTurn.some(
         (x) =>
-          (x.type === 'response_item' && x.payload && (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
+          (x.type === 'response_item' &&
+            x.payload &&
+            (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
           (x.type === 'event_msg' && x.payload && x.payload.type === 'token_count'),
       );
       if (hasContent) turns.push(currentTurn);
@@ -111,7 +143,9 @@ export function parseCodexTranscript(
   if (currentTurn.length > 0) {
     const hasContent = currentTurn.some(
       (x) =>
-        (x.type === 'response_item' && x.payload && (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
+        (x.type === 'response_item' &&
+          x.payload &&
+          (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
         (x.type === 'event_msg' && x.payload && x.payload.type === 'token_count'),
     );
     if (hasContent) turns.push(currentTurn);
@@ -130,13 +164,13 @@ export function parseCodexTranscript(
     const turnEnd = lastTs ? toMs(lastTs) : undefined;
 
     // 找到 turn_id
-    const turnContext = turnEntries.find(
-      (e) => e.type === 'turn_context',
-    );
+    const turnContext = turnEntries.find((e) => e.type === 'turn_context');
     const turnId = (turnContext?.payload.turn_id as string) || `turn-${turnStart}`;
 
     // token 取该 turn 内最后一个 token_count 的 last_token_usage
-    let inputTokens = 0, cacheReadTokens = 0, outputTokens = 0;
+    let inputTokens = 0,
+      cacheReadTokens = 0,
+      outputTokens = 0;
     for (let i = turnEntries.length - 1; i >= 0; i--) {
       const e = turnEntries[i];
       if (e.type === 'event_msg' && e.payload && e.payload.type === 'token_count') {
@@ -224,7 +258,8 @@ export function parseCodexTranscript(
         const input = e.payload.input;
         const result = toolOutputs.get(callId);
         const outputRaw = result?.output;
-        const outputBytes = outputRaw != null ? Buffer.byteLength(safeStringify(outputRaw), 'utf8') : 0;
+        const outputBytes =
+          outputRaw != null ? Buffer.byteLength(safeStringify(outputRaw), 'utf8') : 0;
 
         spans.push(
           makeSpan({
