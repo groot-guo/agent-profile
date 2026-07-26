@@ -53,7 +53,9 @@ These rules protect metric correctness and must not change accidentally:
   differ from ordinary input.
 - Source transcripts do not provide a trustworthy universal cost field. Compute
   cost from model, four token classes, and the pricing table. Unknown pricing
-  must remain visibly unknown rather than becoming a trusted estimate.
+  must remain visibly unknown rather than becoming a trusted estimate. Select
+  the price effective at the LLM span time and preserve currency, price
+  effective time, calculation time, and calculator version.
 - Thinking and answer text are blocks inside an LLM turn; their tokens are part
   of the turn output and are not independently recoverable.
 - File-based sessions are incrementally identified by source metadata. When a
@@ -70,9 +72,10 @@ These rules protect metric correctness and must not change accidentally:
 - Deterministic diagnosis remains available without an LLM provider. Semantic
   diagnosis is optional, inferential, bounded, and must fail back to heuristic
   results.
-- Schema changes require a migration/backfill plan. Additive migration is the
-  normal upgrade strategy; deleting generated `trace.db` is a recovery option,
-  not the default migration.
+- Schema changes require a migration/backfill plan and an ordered
+  `schema_migrations` entry. Additive migration is the normal upgrade strategy;
+  deleting generated `trace.db` is a recovery option, not the default
+  migration.
 - Missing source fields mean “not captured”, not zero, success, or failure.
   Cross-agent comparisons must expose coverage differences.
 - Efficiency and score metrics describe the observed process. Without a

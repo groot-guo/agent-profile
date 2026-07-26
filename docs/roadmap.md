@@ -315,9 +315,117 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - implementation impact: instructions and repository file layout only; no
     application behavior, API, schema, or generated data changed
 
+## Batch 8 · Runtime Profile Architecture Foundation
+
+### T39 correctness contracts, migrations, and server verification
+
+- status: completed
+- purpose: establish reproducible cost semantics and a verifiable server
+  foundation before changing ingestion or adding Task/Outcome entities
+- scope:
+  1. define one explicit pricing currency/unit contract across core, database,
+     API, and documentation
+  2. select effective pricing by LLM span time instead of analysis/recompute
+     wall-clock time
+  3. record the pricing/calculator provenance used for derived span and session
+     costs
+  4. replace ad-hoc column try/catch upgrades with ordered, idempotent
+     `schema_migrations`
+  5. add server build/typecheck and focused database/pricing integration tests
+     to the root verification path
+  6. add runtime request validation to mutable pricing/model-context endpoints
+- affected:
+  - `docs/roadmap.md`
+  - `AGENTS.md`
+  - `ARCHITECTURE.md`
+  - `docs/stats.md`
+  - `docs/zh/OVERVIEW.md`
+  - `packages/core/src/types.ts`
+  - `packages/core/src/analyzer.ts`
+  - `packages/core/src/pricing.ts`
+  - related core tests
+  - `package.json`
+  - `pnpm-lock.yaml`
+  - `apps/server/package.json`
+  - `apps/server/src/database.ts` (new)
+  - `apps/server/src/db.ts`
+  - `apps/server/src/routes/scan.ts`
+  - `apps/server/src/routes/pricing.ts`
+  - `apps/server/src/routes/shared.ts`
+  - related server tests/config
+- acceptance:
+  - cost currency is explicit and consistent; no USD/CNY contradiction remains
+  - importing and recomputing use the price effective at each LLM span's
+    timestamp
+  - derived cost exposes pricing/calculator provenance and unknown-price status
+  - migrations run once, are recorded, and upgrade an existing pre-T39 database
+  - invalid pricing/context write requests return validation errors
+  - core tests, server tests/typecheck, changed-file lint, and production build
+    pass; any unrelated pre-existing full-repository lint failures are isolated
+    and recorded rather than folded into T39
+- risks:
+  - existing user-edited pricing rows must retain their numeric values and be
+    assigned the documented legacy currency without destructive replacement
+  - historical rows may lack exact provenance until recomputed; migration must
+    represent that state honestly
+  - root lint/build may reveal unrelated pre-existing failures; record rather
+    than silently broadening scope
+- documentation plan:
+  - update `ARCHITECTURE.md` with migration ownership and versioned cost
+    semantics
+  - update `docs/stats.md` with currency/provenance and recomputation meaning
+  - record actual migration, compatibility, commands, and results here before
+    marking T39 completed
+- verification:
+  - `pnpm test` — passed: core 124/124 tests; server 6/6 tests
+  - `pnpm build` — passed: core and server TypeScript checks plus the Next.js
+    production build
+  - changed-file Biome check — passed with 18 existing warnings in touched
+    legacy files; no new changed-file lint errors
+  - migration integration test — passed: a pre-T39 schema is upgraded without
+    losing values, ordered migration records are written, and re-running the
+    migration is idempotent
+  - pricing integration test — passed: the effective price is selected by span
+    timestamp and a real imported Claude fixture persists cost provenance
+  - request validation tests — passed for invalid pricing/model-context payloads
+    and the supported CNY-per-million contract
+  - `git diff --check`, canonical instruction symlink check, and stale
+    currency/table documentation scan — passed
+  - full `pnpm lint` baseline — still red with 48 errors, 24 warnings, and 3
+    infos in pre-existing repository files; isolated as T44 rather than
+    broadening this correctness task
+- completion:
+  - completed_at: 2026-07-26
+  - compatibility: existing pricing values are preserved and marked as legacy
+    CNY per million tokens; historical costs retain honest `legacy` provenance
+    until a new import or explicit recomputation records calculator `v1`
+  - result: import and recomputation use span-time pricing, derived cost carries
+    currency/effective-time/calculator provenance, and database evolution is
+    owned by ordered `schema_migrations`
+  - implementation impact: additive schema migration and stricter mutable API
+    validation; no destructive database reset or silent historical repricing
+
+### T44 repository lint baseline cleanup
+
+- status: planned
+- purpose: establish a green full-repository lint baseline independently from
+  feature and architecture work
+- scope:
+  1. classify and fix the 48 existing lint errors without changing runtime
+     behavior
+  2. review security-sensitive findings such as raw HTML rendering separately
+     from mechanical formatting
+  3. run the full lint, test, and production build paths before completion
+- acceptance:
+  - `pnpm lint`, `pnpm test`, and `pnpm build` pass
+  - behavior-affecting suppressions are documented rather than added silently
+- execution constraint:
+  - do not start before T40–T43 unless the errors block one of those tasks
+
 ## Execution Order
 
-T5–T15 and T36–T38 are complete. Future work must be added as a new task before implementation begins.
+T5–T15 and T36–T39 are complete. T40 is next and has not started. T44 remains a
+separate lint-debt task and must not be folded into feature work.
 
 ## Task Lifecycle
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, analyzeSession, analyzeToolParams, calcEfficiencyScore } from '../analyzer';
+import {
+  analyzeCostAttribution,
+  analyzeEfficiency,
+  analyzePerformance,
+  analyzeSession,
+  analyzeToolParams,
+  calcEfficiencyScore,
+} from '../analyzer';
 import type { ParsedSession, Pricing, Span } from '../types';
 
 function makeTurn(overrides: Partial<Span> & { id: string }): Span {
@@ -48,6 +55,9 @@ const FLASH_PRICING: Pricing = {
   cacheCreationPrice: 1,
   cacheReadPrice: 0.02,
   outputPrice: 2,
+  currency: 'CNY',
+  unit: 'per_million_tokens',
+  effectiveFrom: 500,
 };
 
 function pricingLookup(model?: string): Pricing | undefined {
@@ -58,7 +68,13 @@ function pricingLookup(model?: string): Pricing | undefined {
 describe('analyzeSession', () => {
   it('computes contextTokens as input + cc + cr', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', inputTokens: 1000, cacheCreationTokens: 500, cacheReadTokens: 300, outputTokens: 200 }),
+      makeTurn({
+        id: 't1',
+        inputTokens: 1000,
+        cacheCreationTokens: 500,
+        cacheReadTokens: 300,
+        outputTokens: 200,
+      }),
     ];
     const parsed: ParsedSession = {
       sessionId: 'sess-1',
@@ -73,8 +89,22 @@ describe('analyzeSession', () => {
 
   it('aggregates session-level token totals', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', inputTokens: 1000, cacheCreationTokens: 200, cacheReadTokens: 100, outputTokens: 300, startTime: 1000 }),
-      makeTurn({ id: 't2', inputTokens: 2000, cacheCreationTokens: 400, cacheReadTokens: 200, outputTokens: 600, startTime: 2000 }),
+      makeTurn({
+        id: 't1',
+        inputTokens: 1000,
+        cacheCreationTokens: 200,
+        cacheReadTokens: 100,
+        outputTokens: 300,
+        startTime: 1000,
+      }),
+      makeTurn({
+        id: 't2',
+        inputTokens: 2000,
+        cacheCreationTokens: 400,
+        cacheReadTokens: 200,
+        outputTokens: 600,
+        startTime: 2000,
+      }),
     ];
     const parsed: ParsedSession = {
       sessionId: 'sess-1',
@@ -90,7 +120,14 @@ describe('analyzeSession', () => {
 
   it('calculates cacheHitRate correctly', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', inputTokens: 500, cacheCreationTokens: 500, cacheReadTokens: 2000, outputTokens: 200, startTime: 1000 }),
+      makeTurn({
+        id: 't1',
+        inputTokens: 500,
+        cacheCreationTokens: 500,
+        cacheReadTokens: 2000,
+        outputTokens: 200,
+        startTime: 1000,
+      }),
     ];
     const parsed: ParsedSession = {
       sessionId: 'sess-1',
@@ -103,9 +140,7 @@ describe('analyzeSession', () => {
   });
 
   it('returns cacheHitRate 0 when total input is 0', () => {
-    const spans: Span[] = [
-      makeTurn({ id: 't1', outputTokens: 200, startTime: 1000 }),
-    ];
+    const spans: Span[] = [makeTurn({ id: 't1', outputTokens: 200, startTime: 1000 })];
     const parsed: ParsedSession = {
       sessionId: 'sess-1',
       meta: { filePath: '/tmp/test.jsonl', startTime: 1000, messageCount: 1, agent: 'claude-code' },
@@ -117,9 +152,27 @@ describe('analyzeSession', () => {
 
   it('calculates peak and avg context correctly', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', inputTokens: 1000, cacheReadTokens: 500, outputTokens: 100, startTime: 1000 }),
-      makeTurn({ id: 't2', inputTokens: 3000, cacheReadTokens: 2000, outputTokens: 100, startTime: 2000 }),
-      makeTurn({ id: 't3', inputTokens: 1000, cacheReadTokens: 500, outputTokens: 100, startTime: 3000 }),
+      makeTurn({
+        id: 't1',
+        inputTokens: 1000,
+        cacheReadTokens: 500,
+        outputTokens: 100,
+        startTime: 1000,
+      }),
+      makeTurn({
+        id: 't2',
+        inputTokens: 3000,
+        cacheReadTokens: 2000,
+        outputTokens: 100,
+        startTime: 2000,
+      }),
+      makeTurn({
+        id: 't3',
+        inputTokens: 1000,
+        cacheReadTokens: 500,
+        outputTokens: 100,
+        startTime: 3000,
+      }),
     ];
     const parsed: ParsedSession = {
       sessionId: 'sess-1',
@@ -134,7 +187,13 @@ describe('analyzeSession', () => {
 
   it('sets costUnknownCount for unpriced models', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', model: 'unknown-model', inputTokens: 1000, outputTokens: 100, startTime: 1000 }),
+      makeTurn({
+        id: 't1',
+        model: 'unknown-model',
+        inputTokens: 1000,
+        outputTokens: 100,
+        startTime: 1000,
+      }),
     ];
     const parsed: ParsedSession = {
       sessionId: 'sess-1',
@@ -148,7 +207,13 @@ describe('analyzeSession', () => {
 
   it('sets cost for priced models', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', model: 'deepseek-v4-flash', inputTokens: 1_000_000, outputTokens: 0, startTime: 1000 }),
+      makeTurn({
+        id: 't1',
+        model: 'deepseek-v4-flash',
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        startTime: 1000,
+      }),
     ];
     const parsed: ParsedSession = {
       sessionId: 'sess-1',
@@ -158,6 +223,41 @@ describe('analyzeSession', () => {
     const { summary } = analyzeSession(parsed, pricingLookup);
     expect(summary.costUnknownCount).toBe(0);
     expect(summary.totalCost).toBeCloseTo(1, 5); // 1M input * 1 per 1M
+  });
+
+  it('selects pricing at each span time and records cost provenance', () => {
+    const lookupCalls: { model?: string; at?: number }[] = [];
+    const spans: Span[] = [
+      makeTurn({ id: 't1', model: 'deepseek-v4-flash', inputTokens: 1_000_000, startTime: 1234 }),
+    ];
+    const parsed: ParsedSession = {
+      sessionId: 'sess-1',
+      meta: { filePath: '/tmp/test.jsonl', startTime: 1000, messageCount: 1, agent: 'claude-code' },
+      spans,
+    };
+
+    const { summary, spans: analyzed } = analyzeSession(
+      parsed,
+      (model, at) => {
+        lookupCalls.push({ model, at });
+        return FLASH_PRICING;
+      },
+      undefined,
+      9999,
+    );
+
+    expect(lookupCalls).toEqual([{ model: 'deepseek-v4-flash', at: 1234 }]);
+    expect(analyzed[0]).toMatchObject({
+      costCurrency: 'CNY',
+      pricingEffectiveFrom: 500,
+      costCalculatedAt: 9999,
+      costCalculatorVersion: 'v1',
+    });
+    expect(summary).toMatchObject({
+      costCurrency: 'CNY',
+      costCalculatedAt: 9999,
+      costCalculatorVersion: 'v1',
+    });
   });
 
   it('skips non-llm_turn spans for context and cost', () => {
@@ -230,10 +330,26 @@ describe('analyzeEfficiency', () => {
 
   it('identifies file operations', () => {
     const spans: Span[] = [
-      makeTool({ id: 'r1', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) } }),
-      makeTool({ id: 'r2', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) } }),
-      makeTool({ id: 'e1', name: 'Edit', metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) } }),
-      makeTool({ id: 'w1', name: 'Write', metadata: { input: JSON.stringify({ file_path: '/src/b.ts' }) } }),
+      makeTool({
+        id: 'r1',
+        name: 'Read',
+        metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) },
+      }),
+      makeTool({
+        id: 'r2',
+        name: 'Read',
+        metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) },
+      }),
+      makeTool({
+        id: 'e1',
+        name: 'Edit',
+        metadata: { input: JSON.stringify({ file_path: '/src/a.ts' }) },
+      }),
+      makeTool({
+        id: 'w1',
+        name: 'Write',
+        metadata: { input: JSON.stringify({ file_path: '/src/b.ts' }) },
+      }),
     ];
     const result = analyzeEfficiency(spans);
     expect(result.fileOperations.length).toBe(2);
@@ -259,18 +375,30 @@ describe('analyzeCostAttribution', () => {
     expect(result.totalCost).toBeCloseTo(0.8);
     expect(result.costByCategory.reduce((sum, item) => sum + item.cost, 0)).toBeCloseTo(0.8);
     expect(result.costByCategory.reduce((sum, item) => sum + item.percentage, 0)).toBeCloseTo(1);
-    expect(result.costByCategory.find((item) => item.category === '命令执行')?.cost).toBeCloseTo(0.25);
-    expect(result.costByCategory.find((item) => item.category === '文件操作')?.cost).toBeCloseTo(0.55);
+    expect(result.costByCategory.find((item) => item.category === '命令执行')?.cost).toBeCloseTo(
+      0.25,
+    );
+    expect(result.costByCategory.find((item) => item.category === '文件操作')?.cost).toBeCloseTo(
+      0.55,
+    );
   });
 
   it('attributes tool-free turns explicitly instead of dropping their cost', () => {
     const result = analyzeCostAttribution([makeTurn({ id: 't1', cost: 0.5 })]);
-    expect(result.costByCategory).toEqual([expect.objectContaining({ category: '无工具调用', cost: 0.5 })]);
+    expect(result.costByCategory).toEqual([
+      expect.objectContaining({ category: '无工具调用', cost: 0.5 }),
+    ]);
   });
 
   it('splits by 3 phases', () => {
     const spans: Span[] = Array.from({ length: 6 }, (_, i) =>
-      makeTurn({ id: `t${i}`, cost: 1, inputTokens: 100, outputTokens: 50, startTime: 1000 + i * 100 }),
+      makeTurn({
+        id: `t${i}`,
+        cost: 1,
+        inputTokens: 100,
+        outputTokens: 50,
+        startTime: 1000 + i * 100,
+      }),
     );
     const result = analyzeCostAttribution(spans);
     expect(result.costByPhase.length).toBe(3);
@@ -278,17 +406,13 @@ describe('analyzeCostAttribution', () => {
   });
 
   it('computes wastedCostRatio', () => {
-    const spans: Span[] = [
-      makeTurn({ id: 't1', cost: 1, startTime: 1000 }),
-    ];
+    const spans: Span[] = [makeTurn({ id: 't1', cost: 1, startTime: 1000 })];
     const result = analyzeCostAttribution(spans, 0.3);
     expect(result.wastedCostRatio).toBeCloseTo(0.3);
   });
 
   it('caps wastedCostRatio at 1', () => {
-    const spans: Span[] = [
-      makeTurn({ id: 't1', cost: 0.1, startTime: 1000 }),
-    ];
+    const spans: Span[] = [makeTurn({ id: 't1', cost: 0.1, startTime: 1000 })];
     const result = analyzeCostAttribution(spans, 0.5);
     expect(result.wastedCostRatio).toBe(1);
   });
@@ -307,9 +431,7 @@ describe('calcEfficiencyScore', () => {
   });
 
   it('gives high score for efficient session', () => {
-    const eff = analyzeEfficiency([
-      makeTool({ id: 't1', name: 'Read' }),
-    ]);
+    const eff = analyzeEfficiency([makeTool({ id: 't1', name: 'Read' })]);
     const score = calcEfficiencyScore(eff, 0.9, 1000, 800, 0.01, 0);
     expect(score.score).toBeGreaterThan(70);
   });
@@ -352,7 +474,13 @@ describe('analyzePerformance', () => {
   it('computes throughput', () => {
     const spans: Span[] = [
       makeTurn({ id: 't1', inputTokens: 5000, outputTokens: 1000, startTime: 0, endTime: 60000 }),
-      makeTurn({ id: 't2', inputTokens: 3000, outputTokens: 2000, startTime: 60000, endTime: 120000 }),
+      makeTurn({
+        id: 't2',
+        inputTokens: 3000,
+        outputTokens: 2000,
+        startTime: 60000,
+        endTime: 120000,
+      }),
     ];
     const result = analyzePerformance(spans);
     expect(result.throughput).toBeGreaterThan(0);
@@ -377,10 +505,26 @@ describe('analyzePerformance', () => {
 describe('analyzeToolParams', () => {
   it('classifies Bash commands', () => {
     const spans: Span[] = [
-      makeTool({ id: 'b1', name: 'Bash', metadata: { input: JSON.stringify({ command: 'git status' }) } }),
-      makeTool({ id: 'b2', name: 'Bash', metadata: { input: JSON.stringify({ command: 'npm install' }) } }),
-      makeTool({ id: 'b3', name: 'Bash', metadata: { input: JSON.stringify({ command: 'ls -la' }) } }),
-      makeTool({ id: 'b4', name: 'Bash', metadata: { input: JSON.stringify({ command: 'grep -r foo' }) } }),
+      makeTool({
+        id: 'b1',
+        name: 'Bash',
+        metadata: { input: JSON.stringify({ command: 'git status' }) },
+      }),
+      makeTool({
+        id: 'b2',
+        name: 'Bash',
+        metadata: { input: JSON.stringify({ command: 'npm install' }) },
+      }),
+      makeTool({
+        id: 'b3',
+        name: 'Bash',
+        metadata: { input: JSON.stringify({ command: 'ls -la' }) },
+      }),
+      makeTool({
+        id: 'b4',
+        name: 'Bash',
+        metadata: { input: JSON.stringify({ command: 'grep -r foo' }) },
+      }),
     ];
     const result = analyzeToolParams(spans);
     expect(result.bashCategories.length).toBe(4);
@@ -390,9 +534,21 @@ describe('analyzeToolParams', () => {
 
   it('analyzes Read params', () => {
     const spans: Span[] = [
-      makeTool({ id: 'r1', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/a.ts' }) } }),
-      makeTool({ id: 'r2', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/b.ts', limit: 50 }) } }),
-      makeTool({ id: 'r3', name: 'Read', metadata: { input: JSON.stringify({ file_path: '/c.ts', limit: 100 }) } }),
+      makeTool({
+        id: 'r1',
+        name: 'Read',
+        metadata: { input: JSON.stringify({ file_path: '/a.ts' }) },
+      }),
+      makeTool({
+        id: 'r2',
+        name: 'Read',
+        metadata: { input: JSON.stringify({ file_path: '/b.ts', limit: 50 }) },
+      }),
+      makeTool({
+        id: 'r3',
+        name: 'Read',
+        metadata: { input: JSON.stringify({ file_path: '/c.ts', limit: 100 }) },
+      }),
     ];
     const result = analyzeToolParams(spans);
     expect(result.readParamStats.withLimit).toBe(2);

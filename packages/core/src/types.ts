@@ -98,6 +98,10 @@ export interface Span {
   model?: string;
   cost: number;
   costUnknown: boolean; // 模型无定价
+  costCurrency?: PricingCurrency;
+  pricingEffectiveFrom?: number;
+  costCalculatedAt?: number;
+  costCalculatorVersion?: string;
   stopReason?: string | null;
   isError: boolean;
   isSidechain: boolean;
@@ -139,6 +143,9 @@ export interface SessionSummary {
   outputTokens: number;
   totalCost: number;
   costUnknownCount: number;
+  costCurrency?: PricingCurrency;
+  costCalculatedAt?: number;
+  costCalculatorVersion?: string;
   peakContextTokens: number;
   avgContextTokens: number;
   cacheHitRate: number;
@@ -156,12 +163,17 @@ export interface SessionDetail extends SessionSummary {
 }
 
 // ===== pricing =====
+export type PricingCurrency = 'CNY';
+export type PricingUnit = 'per_million_tokens';
+
 export interface Pricing {
   model: string;
-  inputPrice: number; // USD / 1M tokens
+  inputPrice: number; // CNY / 1M tokens
   cacheCreationPrice: number;
   cacheReadPrice: number;
   outputPrice: number;
+  currency: PricingCurrency;
+  unit: PricingUnit;
   effectiveFrom?: number;
 }
 

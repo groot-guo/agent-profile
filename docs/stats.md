@@ -1,8 +1,10 @@
 # Cost and Consumption Statistics — Current State
 
 The implemented `/stats` page and `GET /api/stats` endpoint aggregate the local
-session database. The statistics are descriptive process telemetry; source
-coverage and missing pricing must be considered before comparing agents.
+session database. Monetary values use the current `CNY per million tokens`
+contract. The statistics are descriptive process telemetry; source coverage,
+missing pricing, and calculation provenance must be considered before comparing
+agents.
 
 ## Current overview
 
@@ -12,6 +14,11 @@ The overview contains:
 - total input/output tokens;
 - average cache-hit rate and peak context;
 - number of sessions containing unknown model cost.
+
+Each stored session cost also carries `costCurrency`, `costCalculatedAt`, and
+`costCalculatorVersion`. Span rows additionally carry the price's
+`pricingEffectiveFrom`. Pre-T39 values are labelled `legacy`; importing again or
+calling `/api/recompute-cost` recalculates them with calculator `v1`.
 
 ## Grouped statistics
 
@@ -48,6 +55,10 @@ times the project median (with a non-trivial median).
 Daily trends aggregate tokens, cost, session count, and average cache hit.
 These are correlations over observed sessions; they do not establish that a
 configuration caused the change.
+
+Price recomputation does not mean “apply today's price to all history”. Each LLM
+span selects the latest price whose effective time is not later than the span
+start time, then session totals are rebuilt from those span values.
 
 ## Response shape
 

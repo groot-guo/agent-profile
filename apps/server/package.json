@@ -2,7 +2,9 @@
   "name": "trace-server",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@agent-profile/core": "workspace:*",
@@ -14,6 +16,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.10"
   }
 }

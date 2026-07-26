@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "pnpm -r dev",
     "build": "pnpm -r build",
+    "test": "pnpm -r test",
     "lint": "biome check .",
     "format": "biome format --write .",
     "lint:fix": "biome check --write ."

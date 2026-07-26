@@ -29,6 +29,8 @@ const DEEPSEEK_FLASH: Pricing = {
   cacheCreationPrice: 1,
   cacheReadPrice: 0.02,
   outputPrice: 2,
+  currency: 'CNY',
+  unit: 'per_million_tokens',
 };
 
 describe('calcCost', () => {

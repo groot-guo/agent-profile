@@ -28,67 +28,107 @@ function createUpsert() {
   const insertSession = db.prepare(`
     INSERT INTO sessions (id, name, file_path, agent, file_mtime, file_size, file_lines, start_time, end_time,
       cwd, git_branch, claude_version, input_tokens, cache_creation_tokens, cache_read_tokens,
-      output_tokens, total_cost, cost_unknown_count, peak_context_tokens, avg_context_tokens,
+      output_tokens, total_cost, cost_unknown_count, cost_currency, cost_calculated_at,
+      cost_calculator_version, peak_context_tokens, avg_context_tokens,
       cache_hit_rate, message_count, imported_at)
     VALUES (@id, @name, @filePath, @agent, @fileMtime, @fileSize, @fileLines, @startTime, @endTime,
       @cwd, @gitBranch, @claudeVersion, @inputTokens, @cacheCreationTokens, @cacheReadTokens,
-      @outputTokens, @totalCost, @costUnknownCount, @peakContextTokens, @avgContextTokens,
+      @outputTokens, @totalCost, @costUnknownCount, @costCurrency, @costCalculatedAt,
+      @costCalculatorVersion, @peakContextTokens, @avgContextTokens,
       @cacheHitRate, @messageCount, @importedAt)
   `);
   const insertSpan = db.prepare(`
     INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
       input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
-      output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
+      output_bytes, model, cost, cost_unknown, cost_currency, pricing_effective_from,
+      cost_calculated_at, cost_calculator_version, stop_reason, is_error, is_sidechain, metadata)
     VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
       @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @contextTokens,
-      @outputBytes, @model, @cost, @costUnknown, @stopReason, @isError, @isSidechain, @metadata)
+      @outputBytes, @model, @cost, @costUnknown, @costCurrency, @pricingEffectiveFrom,
+      @costCalculatedAt, @costCalculatorVersion, @stopReason, @isError, @isSidechain, @metadata)
   `);
   const delSpans = db.prepare('DELETE FROM spans WHERE session_id = ?');
   const delSession = db.prepare('DELETE FROM sessions WHERE id = ?');
 
-  return db.transaction(
-    (parsed: ParsedSession, mtime: number, size: number, lines: number) => {
-      const existing = db.prepare('SELECT file_mtime, file_size FROM sessions WHERE id = ?').get(parsed.sessionId) as
-        | { file_mtime: number; file_size: number }
-        | undefined;
-      if (existing) {
-        delSpans.run(parsed.sessionId);
-        delSession.run(parsed.sessionId);
-      }
-      const { summary, spans } = analyzeSession(parsed, getPricing, { mtime, size, lines }, Date.now());
-      insertSession.run({
-        id: summary.id, name: summary.name ?? null, filePath: summary.filePath, agent: summary.agent,
-        fileMtime: mtime, fileSize: size, fileLines: lines,
-        startTime: summary.startTime, endTime: summary.endTime ?? null,
-        cwd: summary.cwd ?? null, gitBranch: summary.gitBranch ?? null, claudeVersion: summary.claudeVersion ?? null,
-        inputTokens: summary.inputTokens, cacheCreationTokens: summary.cacheCreationTokens,
-        cacheReadTokens: summary.cacheReadTokens, outputTokens: summary.outputTokens,
-        totalCost: summary.totalCost, costUnknownCount: summary.costUnknownCount,
-        peakContextTokens: summary.peakContextTokens, avgContextTokens: summary.avgContextTokens,
-        cacheHitRate: summary.cacheHitRate, messageCount: summary.messageCount, importedAt: summary.importedAt,
+  return db.transaction((parsed: ParsedSession, mtime: number, size: number, lines: number) => {
+    const existing = db
+      .prepare('SELECT file_mtime, file_size FROM sessions WHERE id = ?')
+      .get(parsed.sessionId) as { file_mtime: number; file_size: number } | undefined;
+    if (existing) {
+      delSpans.run(parsed.sessionId);
+      delSession.run(parsed.sessionId);
+    }
+    const { summary, spans } = analyzeSession(
+      parsed,
+      getPricing,
+      { mtime, size, lines },
+      Date.now(),
+    );
+    insertSession.run({
+      id: summary.id,
+      name: summary.name ?? null,
+      filePath: summary.filePath,
+      agent: summary.agent,
+      fileMtime: mtime,
+      fileSize: size,
+      fileLines: lines,
+      startTime: summary.startTime,
+      endTime: summary.endTime ?? null,
+      cwd: summary.cwd ?? null,
+      gitBranch: summary.gitBranch ?? null,
+      claudeVersion: summary.claudeVersion ?? null,
+      inputTokens: summary.inputTokens,
+      cacheCreationTokens: summary.cacheCreationTokens,
+      cacheReadTokens: summary.cacheReadTokens,
+      outputTokens: summary.outputTokens,
+      totalCost: summary.totalCost,
+      costUnknownCount: summary.costUnknownCount,
+      costCurrency: summary.costCurrency,
+      costCalculatedAt: summary.costCalculatedAt,
+      costCalculatorVersion: summary.costCalculatorVersion,
+      peakContextTokens: summary.peakContextTokens,
+      avgContextTokens: summary.avgContextTokens,
+      cacheHitRate: summary.cacheHitRate,
+      messageCount: summary.messageCount,
+      importedAt: summary.importedAt,
+    });
+    for (const s of spans)
+      insertSpan.run({
+        id: s.id,
+        sessionId: s.sessionId,
+        parentId: s.parentId ?? null,
+        type: s.type,
+        name: s.name,
+        startTime: s.startTime,
+        endTime: s.endTime ?? null,
+        inputTokens: s.inputTokens,
+        cacheCreationTokens: s.cacheCreationTokens,
+        cacheReadTokens: s.cacheReadTokens,
+        outputTokens: s.outputTokens,
+        contextTokens: s.contextTokens,
+        outputBytes: s.outputBytes,
+        model: s.model ?? null,
+        cost: s.cost,
+        costUnknown: s.costUnknown ? 1 : 0,
+        costCurrency: s.costCurrency,
+        pricingEffectiveFrom: s.pricingEffectiveFrom ?? null,
+        costCalculatedAt: s.costCalculatedAt ?? null,
+        costCalculatorVersion: s.costCalculatorVersion,
+        stopReason: s.stopReason ?? null,
+        isError: s.isError ? 1 : 0,
+        isSidechain: s.isSidechain ? 1 : 0,
+        metadata: s.metadata ? JSON.stringify(s.metadata) : null,
       });
-      for (const s of spans)
-        insertSpan.run({
-          id: s.id, sessionId: s.sessionId, parentId: s.parentId ?? null,
-          type: s.type, name: s.name, startTime: s.startTime, endTime: s.endTime ?? null,
-          inputTokens: s.inputTokens, cacheCreationTokens: s.cacheCreationTokens,
-          cacheReadTokens: s.cacheReadTokens, outputTokens: s.outputTokens,
-          contextTokens: s.contextTokens, outputBytes: s.outputBytes,
-          model: s.model ?? null, cost: s.cost, costUnknown: s.costUnknown ? 1 : 0,
-          stopReason: s.stopReason ?? null, isError: s.isError ? 1 : 0,
-          isSidechain: s.isSidechain ? 1 : 0,
-          metadata: s.metadata ? JSON.stringify(s.metadata) : null,
-        });
-    },
-  );
+  });
 }
 
 async function parseFile(file: string): Promise<{ parsed: ParsedSession; lines: number } | null> {
   const entries = await readTranscript(file);
   const agent = detectAgent(file);
-  const parsed = agent === 'codex'
-    ? parseCodexTranscript(entries as any, { filePath: file })
-    : parseTranscript(entries, { filePath: file, agent });
+  const parsed =
+    agent === 'codex'
+      ? parseCodexTranscript(entries as any, { filePath: file })
+      : parseTranscript(entries, { filePath: file, agent });
   return parsed ? { parsed, lines: entries.length } : null;
 }
 
@@ -97,7 +137,9 @@ export function registerScanRoutes(app: FastifyInstance) {
     const { dir } = req.body;
     if (!dir) return reply.status(400).send({ error: 'dir required' });
     const files = await findTranscriptFiles(dir);
-    let imported = 0, skipped = 0, updated = 0;
+    let imported = 0,
+      skipped = 0,
+      updated = 0;
     const sessionIds: string[] = [];
 
     const upsertFile = createUpsert();
@@ -106,15 +148,24 @@ export function registerScanRoutes(app: FastifyInstance) {
     for (const file of files) {
       try {
         const st = statSync(file);
-        const mtime = st.mtimeMs, size = st.size;
+        const mtime = st.mtimeMs,
+          size = st.size;
         const result = await parseFile(file);
-        if (!result) { skipped++; continue; }
+        if (!result) {
+          skipped++;
+          continue;
+        }
         const { parsed, lines } = result;
 
         const existing = getExisting.get(parsed.sessionId) as
-          | { file_mtime: number; file_size: number } | undefined;
-        if (existing && existing.file_mtime === mtime && existing.file_size === size) { skipped++; continue; }
-        if (existing) updated++; else imported++;
+          | { file_mtime: number; file_size: number }
+          | undefined;
+        if (existing && existing.file_mtime === mtime && existing.file_size === size) {
+          skipped++;
+          continue;
+        }
+        if (existing) updated++;
+        else imported++;
 
         upsertFile(parsed, mtime, size, lines);
         sessionIds.push(parsed.sessionId);
@@ -139,13 +190,15 @@ export async function autoScan(dir: string) {
   for (const file of files) {
     try {
       const st = statSync(file);
-      const mtime = st.mtimeMs, size = st.size;
+      const mtime = st.mtimeMs,
+        size = st.size;
       const result = await parseFile(file);
       if (!result) continue;
       const { parsed, lines } = result;
 
       const existing = getExisting.get(parsed.sessionId) as
-        | { file_mtime: number; file_size: number } | undefined;
+        | { file_mtime: number; file_size: number }
+        | undefined;
       if (existing && existing.file_mtime === mtime && existing.file_size === size) continue;
 
       upsertFile(parsed, mtime, size, lines);
@@ -162,9 +215,13 @@ export async function autoScan(dir: string) {
 export async function scanZedThreads(): Promise<{ scanned: number; imported: number }> {
   if (!hasZedThreadsDb()) return { scanned: 0, imported: 0 };
 
-  const zedDb = new (await import('better-sqlite3')).default(zedThreadsDbPath(), { readonly: true });
+  const zedDb = new (await import('better-sqlite3')).default(zedThreadsDbPath(), {
+    readonly: true,
+  });
   const threads = zedDb
-    .prepare('SELECT id, summary, folder_paths as folderPaths, updated_at as updatedAt, created_at as createdAt FROM threads')
+    .prepare(
+      'SELECT id, summary, folder_paths as folderPaths, updated_at as updatedAt, created_at as createdAt FROM threads',
+    )
     .all() as ZedThreadMeta[];
   zedDb.close();
 
@@ -175,16 +232,24 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
 
   const getExisting = db.prepare('SELECT id FROM sessions WHERE id = ?');
   const insertSession = db.prepare(`
-    INSERT INTO sessions (id, name, file_path, agent, start_time, end_time, cwd, imported_at)
-    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @importedAt)
+    INSERT INTO sessions (id, name, file_path, agent, start_time, end_time, cwd,
+      input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, total_cost,
+      cost_unknown_count, cost_currency, cost_calculated_at, cost_calculator_version,
+      peak_context_tokens, avg_context_tokens, cache_hit_rate, message_count, imported_at)
+    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd,
+      @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @totalCost,
+      @costUnknownCount, @costCurrency, @costCalculatedAt, @costCalculatorVersion,
+      @peakContextTokens, @avgContextTokens, @cacheHitRate, @messageCount, @importedAt)
   `);
   const insertSpan = db.prepare(`
     INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
       input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
-      output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
+      output_bytes, model, cost, cost_unknown, cost_currency, pricing_effective_from,
+      cost_calculated_at, cost_calculator_version, stop_reason, is_error, is_sidechain, metadata)
     VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
       @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @contextTokens,
-      @outputBytes, @model, @cost, @costUnknown, @stopReason, @isError, @isSidechain, @metadata)
+      @outputBytes, @model, @cost, @costUnknown, @costCurrency, @pricingEffectiveFrom,
+      @costCalculatedAt, @costCalculatorVersion, @stopReason, @isError, @isSidechain, @metadata)
   `);
   const delSpans = db.prepare('DELETE FROM spans WHERE session_id = ?');
   const delSession = db.prepare('DELETE FROM sessions WHERE id = ?');
@@ -200,7 +265,9 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
       }
 
       // 读取并解压 data BLOB
-      const zedDb2 = new (await import('better-sqlite3')).default(zedThreadsDbPath(), { readonly: true });
+      const zedDb2 = new (await import('better-sqlite3')).default(zedThreadsDbPath(), {
+        readonly: true,
+      });
       const row = zedDb2.prepare('SELECT data_type, data FROM threads WHERE id = ?').get(t.id) as
         | { data_type: string; data: Buffer }
         | undefined;
@@ -233,17 +300,45 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
           startTime: summary.startTime,
           endTime: summary.endTime ?? null,
           cwd: summary.cwd ?? null,
+          inputTokens: summary.inputTokens,
+          cacheCreationTokens: summary.cacheCreationTokens,
+          cacheReadTokens: summary.cacheReadTokens,
+          outputTokens: summary.outputTokens,
+          totalCost: summary.totalCost,
+          costUnknownCount: summary.costUnknownCount,
+          costCurrency: summary.costCurrency,
+          costCalculatedAt: summary.costCalculatedAt,
+          costCalculatorVersion: summary.costCalculatorVersion,
+          peakContextTokens: summary.peakContextTokens,
+          avgContextTokens: summary.avgContextTokens,
+          cacheHitRate: summary.cacheHitRate,
+          messageCount: summary.messageCount,
           importedAt: now,
         });
         for (const s of spans) {
           insertSpan.run({
-            id: s.id, sessionId: s.sessionId, parentId: s.parentId ?? null,
-            type: s.type, name: s.name, startTime: s.startTime, endTime: s.endTime ?? null,
-            inputTokens: s.inputTokens, cacheCreationTokens: s.cacheCreationTokens,
-            cacheReadTokens: s.cacheReadTokens, outputTokens: s.outputTokens,
-            contextTokens: s.contextTokens, outputBytes: s.outputBytes,
-            model: s.model ?? null, cost: s.cost, costUnknown: s.costUnknown ? 1 : 0,
-            stopReason: s.stopReason ?? null, isError: s.isError ? 1 : 0,
+            id: s.id,
+            sessionId: s.sessionId,
+            parentId: s.parentId ?? null,
+            type: s.type,
+            name: s.name,
+            startTime: s.startTime,
+            endTime: s.endTime ?? null,
+            inputTokens: s.inputTokens,
+            cacheCreationTokens: s.cacheCreationTokens,
+            cacheReadTokens: s.cacheReadTokens,
+            outputTokens: s.outputTokens,
+            contextTokens: s.contextTokens,
+            outputBytes: s.outputBytes,
+            model: s.model ?? null,
+            cost: s.cost,
+            costUnknown: s.costUnknown ? 1 : 0,
+            costCurrency: s.costCurrency,
+            pricingEffectiveFrom: s.pricingEffectiveFrom ?? null,
+            costCalculatedAt: s.costCalculatedAt ?? null,
+            costCalculatorVersion: s.costCalculatorVersion,
+            stopReason: s.stopReason ?? null,
+            isError: s.isError ? 1 : 0,
             isSidechain: s.isSidechain ? 1 : 0,
             metadata: s.metadata ? JSON.stringify(s.metadata) : null,
           });
@@ -264,37 +359,69 @@ const MIMO_DB_PATH = `${homedir()}/.local/share/mimocode/mimocode.db`;
 
 export async function scanMiMoSessions(): Promise<{ scanned: number; imported: number }> {
   let exists: boolean;
-  try { const s = statSync(MIMO_DB_PATH); exists = !!s; } catch { exists = false; }
+  try {
+    const s = statSync(MIMO_DB_PATH);
+    exists = !!s;
+  } catch {
+    exists = false;
+  }
   if (!exists) return { scanned: 0, imported: 0 };
 
   const mimoDb = new (await import('better-sqlite3')).default(MIMO_DB_PATH, { readonly: true });
-  const sessions = mimoDb.prepare('SELECT id, title, directory, time_created, time_updated FROM session ORDER BY time_created DESC').all() as {
-    id: string; title: string; directory: string; time_created: number; time_updated: number;
+  const sessions = mimoDb
+    .prepare(
+      'SELECT id, title, directory, time_created, time_updated FROM session ORDER BY time_created DESC',
+    )
+    .all() as {
+    id: string;
+    title: string;
+    directory: string;
+    time_created: number;
+    time_updated: number;
   }[];
-  if (sessions.length === 0) { mimoDb.close(); return { scanned: 0, imported: 0 }; }
+  if (sessions.length === 0) {
+    mimoDb.close();
+    return { scanned: 0, imported: 0 };
+  }
 
   const getExisting = db.prepare('SELECT id FROM sessions WHERE id = ?');
   const insertSession = db.prepare(`
-    INSERT OR REPLACE INTO sessions (id, name, file_path, agent, start_time, end_time, cwd, input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, total_cost, cost_unknown_count, peak_context_tokens, avg_context_tokens, cache_hit_rate, message_count, imported_at)
-    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd, @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @totalCost, @costUnknownCount, @peakContextTokens, @avgContextTokens, @cacheHitRate, @messageCount, @importedAt)
+    INSERT OR REPLACE INTO sessions (id, name, file_path, agent, start_time, end_time, cwd,
+      input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, total_cost,
+      cost_unknown_count, cost_currency, cost_calculated_at, cost_calculator_version,
+      peak_context_tokens, avg_context_tokens, cache_hit_rate, message_count, imported_at)
+    VALUES (@id, @name, @filePath, @agent, @startTime, @endTime, @cwd,
+      @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @totalCost,
+      @costUnknownCount, @costCurrency, @costCalculatedAt, @costCalculatorVersion,
+      @peakContextTokens, @avgContextTokens, @cacheHitRate, @messageCount, @importedAt)
   `);
   const insertSpan = db.prepare(`
     INSERT OR REPLACE INTO spans (id, session_id, parent_id, type, name, start_time, end_time,
       input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens, context_tokens,
-      output_bytes, model, cost, cost_unknown, stop_reason, is_error, is_sidechain, metadata)
+      output_bytes, model, cost, cost_unknown, cost_currency, pricing_effective_from,
+      cost_calculated_at, cost_calculator_version, stop_reason, is_error, is_sidechain, metadata)
     VALUES (@id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
       @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens, @contextTokens,
-      @outputBytes, @model, @cost, @costUnknown, @stopReason, @isError, @isSidechain, @metadata)
+      @outputBytes, @model, @cost, @costUnknown, @costCurrency, @pricingEffectiveFrom,
+      @costCalculatedAt, @costCalculatorVersion, @stopReason, @isError, @isSidechain, @metadata)
   `);
   const delSpans = db.prepare('DELETE FROM spans WHERE session_id = ?');
   const delSession = db.prepare('DELETE FROM sessions WHERE id = ?');
 
   // 预加载所有 messages + parts
-  const allMessages = mimoDb.prepare('SELECT id, session_id, agent_id, data FROM message ORDER BY time_created').all() as {
-    id: string; session_id: string; agent_id: string; data: string;
+  const allMessages = mimoDb
+    .prepare('SELECT id, session_id, agent_id, data FROM message ORDER BY time_created')
+    .all() as {
+    id: string;
+    session_id: string;
+    agent_id: string;
+    data: string;
   }[];
   const allParts = mimoDb.prepare('SELECT id, message_id, session_id, data FROM part').all() as {
-    id: string; message_id: string; session_id: string; data: string;
+    id: string;
+    message_id: string;
+    session_id: string;
+    data: string;
   }[];
   mimoDb.close();
 
@@ -325,8 +452,11 @@ export async function scanMiMoSessions(): Promise<{ scanned: number; imported: n
         try {
           const data = JSON.parse(m.data);
           const parts = (partByMsg.get(m.id) || []).map((p) => {
-            try { return { id: p.id, data: JSON.parse(p.data) }; }
-            catch { return { id: p.id, data: { type: 'text', text: '' } }; }
+            try {
+              return { id: p.id, data: JSON.parse(p.data) };
+            } catch {
+              return { id: p.id, data: { type: 'text', text: '' } };
+            }
           });
           messages.push({ id: m.id, agent_id: m.agent_id, data, parts });
         } catch {
@@ -342,24 +472,52 @@ export async function scanMiMoSessions(): Promise<{ scanned: number; imported: n
         delSpans.run(s.id);
         delSession.run(s.id);
         insertSession.run({
-          id: summary.id, name: summary.name ?? null, filePath: summary.filePath,
-          agent: 'mimo-code', startTime: summary.startTime, endTime: summary.endTime ?? null,
+          id: summary.id,
+          name: summary.name ?? null,
+          filePath: summary.filePath,
+          agent: 'mimo-code',
+          startTime: summary.startTime,
+          endTime: summary.endTime ?? null,
           cwd: summary.cwd ?? null,
-          inputTokens: summary.inputTokens, cacheCreationTokens: summary.cacheCreationTokens,
-          cacheReadTokens: summary.cacheReadTokens, outputTokens: summary.outputTokens,
-          totalCost: summary.totalCost, costUnknownCount: summary.costUnknownCount,
-          peakContextTokens: summary.peakContextTokens, avgContextTokens: summary.avgContextTokens,
-          cacheHitRate: summary.cacheHitRate, messageCount: summary.messageCount, importedAt: now,
+          inputTokens: summary.inputTokens,
+          cacheCreationTokens: summary.cacheCreationTokens,
+          cacheReadTokens: summary.cacheReadTokens,
+          outputTokens: summary.outputTokens,
+          totalCost: summary.totalCost,
+          costUnknownCount: summary.costUnknownCount,
+          costCurrency: summary.costCurrency,
+          costCalculatedAt: summary.costCalculatedAt,
+          costCalculatorVersion: summary.costCalculatorVersion,
+          peakContextTokens: summary.peakContextTokens,
+          avgContextTokens: summary.avgContextTokens,
+          cacheHitRate: summary.cacheHitRate,
+          messageCount: summary.messageCount,
+          importedAt: now,
         });
         for (const sp of spans) {
           insertSpan.run({
-            id: sp.id, sessionId: sp.sessionId, parentId: sp.parentId ?? null,
-            type: sp.type, name: sp.name, startTime: sp.startTime, endTime: sp.endTime ?? null,
-            inputTokens: sp.inputTokens, cacheCreationTokens: sp.cacheCreationTokens,
-            cacheReadTokens: sp.cacheReadTokens, outputTokens: sp.outputTokens,
-            contextTokens: sp.contextTokens, outputBytes: sp.outputBytes,
-            model: sp.model ?? null, cost: sp.cost, costUnknown: sp.costUnknown ? 1 : 0,
-            stopReason: sp.stopReason ?? null, isError: sp.isError ? 1 : 0,
+            id: sp.id,
+            sessionId: sp.sessionId,
+            parentId: sp.parentId ?? null,
+            type: sp.type,
+            name: sp.name,
+            startTime: sp.startTime,
+            endTime: sp.endTime ?? null,
+            inputTokens: sp.inputTokens,
+            cacheCreationTokens: sp.cacheCreationTokens,
+            cacheReadTokens: sp.cacheReadTokens,
+            outputTokens: sp.outputTokens,
+            contextTokens: sp.contextTokens,
+            outputBytes: sp.outputBytes,
+            model: sp.model ?? null,
+            cost: sp.cost,
+            costUnknown: sp.costUnknown ? 1 : 0,
+            costCurrency: sp.costCurrency,
+            pricingEffectiveFrom: sp.pricingEffectiveFrom ?? null,
+            costCalculatedAt: sp.costCalculatedAt ?? null,
+            costCalculatorVersion: sp.costCalculatorVersion,
+            stopReason: sp.stopReason ?? null,
+            isError: sp.isError ? 1 : 0,
             isSidechain: sp.isSidechain ? 1 : 0,
             metadata: sp.metadata ? JSON.stringify(sp.metadata) : null,
           });
@@ -368,7 +526,9 @@ export async function scanMiMoSessions(): Promise<{ scanned: number; imported: n
       upsertMiMo();
       imported++;
     } catch (err) {
-      console.warn(`MiMo session ${s.id} parse failed: ${err instanceof Error ? err.message : err}`);
+      console.warn(
+        `MiMo session ${s.id} parse failed: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
   return { scanned: sessions.length, imported };

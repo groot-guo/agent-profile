@@ -47,23 +47,25 @@ MiMo SQLite ────────┘                   分析与诊断
 
 ## 数据模型
 
-当前 SQLite 由 `apps/server/src/db.ts` 管理四张表：
+当前 SQLite 由 `apps/server/src/database.ts` 管理五张内部表：
 
 - `sessions`：来源与增量扫描信息、Agent/模型/项目、四类 token 聚合、上下文、缓存、
   成本、耗时、标签和备注。
 - `spans`：`llm_turn` 与 `tool_call` 的 token、上下文、成本、耗时、父子链、
   sidechain 和工具输入输出证据。
-- `pricing`：模型的四类 token 单价。
+- `pricing`：模型四类 token 的人民币/百万 token 单价、单位与生效时间。
 - `model_context`：模型上下文窗口。
+- `schema_migrations`：按版本记录已执行的增量 schema 迁移。
 
-兼容的新字段通过增量 migration 补充；正常升级不应依赖删除 `trace.db`。任何 schema
-修改都必须在对应 Task 中写明 migration/backfill 与验证方案。
+兼容的新字段通过有序、幂等的 migration 补充；正常升级不应依赖删除 `trace.db`。
+任何 schema 修改都必须在对应 Task 中写明 migration/backfill 与验证方案。
 
 ## 指标边界
 
 - `contextTokens = input + cacheCreation + cacheRead`
 - `cacheHitRate = cacheRead / (input + cacheCreation + cacheRead)`
-- 成本由四类 token 与当前模型定价计算；未知定价必须显式展示为未知。
+- 成本统一使用人民币，根据每个 LLM Span 的发生时间选择当时已生效的模型定价；同时
+  保存定价生效时间、计算时间和计算器版本。未知定价必须显式展示为未知。
 - 工具成本归因是按同一 LLM 回合内的工具类别进行分析分摊，不等于供应商账单。
 - 效率分是“过程效率”，不能替代测试、构建或人工验收结果。
 - LLM 语义诊断属于带证据的推断，应与确定性规则区分。

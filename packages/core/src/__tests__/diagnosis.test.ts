@@ -65,14 +65,28 @@ function makeThinking(overrides: Partial<Span> & { id: string }): Span {
 
 function makeDetail(spans: Span[], overrides: Partial<SessionDetail> = {}): SessionDetail {
   const turns = spans.filter((s) => s.type === 'llm_turn');
-  const totalInput = turns.reduce((s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens, 0);
-  const cacheHitRate = totalInput > 0
-    ? turns.reduce((s, t) => s + t.cacheReadTokens, 0) / totalInput
-    : 0;
-  const peakContext = Math.max(0, ...turns.map((t) => t.contextTokens || (t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens)));
-  const avgContext = turns.length > 0
-    ? Math.round(turns.reduce((s, t) => s + (t.contextTokens || (t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens)), 0) / turns.length)
-    : 0;
+  const totalInput = turns.reduce(
+    (s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens,
+    0,
+  );
+  const cacheHitRate =
+    totalInput > 0 ? turns.reduce((s, t) => s + t.cacheReadTokens, 0) / totalInput : 0;
+  const peakContext = Math.max(
+    0,
+    ...turns.map(
+      (t) => t.contextTokens || t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens,
+    ),
+  );
+  const avgContext =
+    turns.length > 0
+      ? Math.round(
+          turns.reduce(
+            (s, t) =>
+              s + (t.contextTokens || t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens),
+            0,
+          ) / turns.length,
+        )
+      : 0;
 
   return {
     id: 'sess-1',
@@ -101,6 +115,8 @@ const FLASH_PRICING: Pricing = {
   cacheCreationPrice: 1,
   cacheReadPrice: 0.02,
   outputPrice: 2,
+  currency: 'CNY',
+  unit: 'per_million_tokens',
 };
 
 function pricingLookup(model?: string): Pricing | undefined {
@@ -124,17 +140,23 @@ describe('diagnoseSessionSync', () => {
   it('detects repeated_read', () => {
     const spans: Span[] = [
       makeTool({
-        id: 'r1', name: 'Read', startTime: 1000,
+        id: 'r1',
+        name: 'Read',
+        startTime: 1000,
         outputBytes: 2000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),
       makeTool({
-        id: 'r2', name: 'Read', startTime: 2000,
+        id: 'r2',
+        name: 'Read',
+        startTime: 2000,
         outputBytes: 2000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),
       makeTool({
-        id: 'r3', name: 'Read', startTime: 3000,
+        id: 'r3',
+        name: 'Read',
+        startTime: 3000,
         outputBytes: 2000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),
@@ -152,7 +174,9 @@ describe('diagnoseSessionSync', () => {
   it('does not flag single read as repeated', () => {
     const spans: Span[] = [
       makeTool({
-        id: 'r1', name: 'Read', startTime: 1000,
+        id: 'r1',
+        name: 'Read',
+        startTime: 1000,
         outputBytes: 2000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),
@@ -167,7 +191,9 @@ describe('diagnoseSessionSync', () => {
     const spans: Span[] = [
       makeTurn({ id: 't0', inputTokens: 50, outputTokens: 30, startTime: 500 }),
       makeTool({
-        id: 'bash1', name: 'Bash', startTime: 1000,
+        id: 'bash1',
+        name: 'Bash',
+        startTime: 1000,
         outputBytes: 50_000,
       }),
       makeTurn({ id: 't1', inputTokens: 100, outputTokens: 50, startTime: 1500 }),
@@ -229,7 +255,9 @@ describe('diagnoseSessionSync', () => {
     const longText = 'x'.repeat(5_000);
     const spans: Span[] = [
       makeThinking({
-        id: 'th1', name: 'thinking', startTime: 1000,
+        id: 'th1',
+        name: 'thinking',
+        startTime: 1000,
         metadata: { thinking: longText },
       }),
     ];
@@ -244,7 +272,9 @@ describe('diagnoseSessionSync', () => {
     const longText = 'x'.repeat(5_000);
     const spans: Span[] = Array.from({ length: 8 }, (_, i) =>
       makeThinking({
-        id: `th${i}`, name: 'thinking', startTime: 1000 + i * 100,
+        id: `th${i}`,
+        name: 'thinking',
+        startTime: 1000 + i * 100,
         metadata: { thinking: longText },
       }),
     );
@@ -258,7 +288,9 @@ describe('diagnoseSessionSync', () => {
   it('does not flag short thinking', () => {
     const spans: Span[] = [
       makeThinking({
-        id: 'th1', name: 'thinking', startTime: 1000,
+        id: 'th1',
+        name: 'thinking',
+        startTime: 1000,
         metadata: { thinking: 'short thought' },
       }),
     ];
@@ -301,7 +333,9 @@ describe('diagnoseSessionSync', () => {
   it('detects read_scope_too_large', () => {
     const spans: Span[] = [
       makeTool({
-        id: 'r1', name: 'Read', startTime: 1000,
+        id: 'r1',
+        name: 'Read',
+        startTime: 1000,
         outputBytes: 30_000,
         metadata: { input: JSON.stringify({ file_path: '/src/big.ts' }) }, // no limit
       }),
@@ -316,7 +350,9 @@ describe('diagnoseSessionSync', () => {
   it('does not flag Read with limit', () => {
     const spans: Span[] = [
       makeTool({
-        id: 'r1', name: 'Read', startTime: 1000,
+        id: 'r1',
+        name: 'Read',
+        startTime: 1000,
         outputBytes: 30_000,
         metadata: { input: JSON.stringify({ file_path: '/src/big.ts', limit: 50 }) },
       }),
@@ -329,7 +365,13 @@ describe('diagnoseSessionSync', () => {
   // ===== costUnknown handling =====
   it('marks costUnknown for unpriced model', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', model: 'unknown-model', inputTokens: 200_000, outputTokens: 5_000, startTime: 1000 }),
+      makeTurn({
+        id: 't1',
+        model: 'unknown-model',
+        inputTokens: 200_000,
+        outputTokens: 5_000,
+        startTime: 1000,
+      }),
     ];
     const detail = makeDetail(spans);
     const result = diagnoseSessionSync(detail, { pricingLookup });
@@ -343,19 +385,28 @@ describe('diagnoseSessionSync', () => {
     const spans: Span[] = [
       // repeated_read (medium/low)
       makeTool({
-        id: 'r1', name: 'Read', startTime: 1000,
+        id: 'r1',
+        name: 'Read',
+        startTime: 1000,
         outputBytes: 1_000_000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),
       makeTool({
-        id: 'r2', name: 'Read', startTime: 2000,
+        id: 'r2',
+        name: 'Read',
+        startTime: 2000,
         outputBytes: 1_000_000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),
       // context_bloat (high)
       makeTurn({ id: 't1', inputTokens: 300_000, outputTokens: 1_000, startTime: 500 }),
       // long_thinking (medium/high)
-      makeThinking({ id: 'th1', name: 'thinking', startTime: 1500, metadata: { thinking: longText } }),
+      makeThinking({
+        id: 'th1',
+        name: 'thinking',
+        startTime: 1500,
+        metadata: { thinking: longText },
+      }),
     ];
     const detail = makeDetail(spans);
     const result = diagnoseSessionSync(detail, { pricingLookup });
@@ -374,10 +425,30 @@ describe('diagnoseSessionSync', () => {
   it('detects same_param_loop', () => {
     // sameParamLoopMin defaults to 3, needs ≥4 consecutive same-param calls
     const spans: Span[] = [
-      makeTool({ id: 'e1', name: 'Bash', startTime: 1000, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
-      makeTool({ id: 'e2', name: 'Bash', startTime: 1100, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
-      makeTool({ id: 'e3', name: 'Bash', startTime: 1200, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
-      makeTool({ id: 'e4', name: 'Bash', startTime: 1300, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+      makeTool({
+        id: 'e1',
+        name: 'Bash',
+        startTime: 1000,
+        metadata: { input: JSON.stringify({ command: 'ls' }) },
+      }),
+      makeTool({
+        id: 'e2',
+        name: 'Bash',
+        startTime: 1100,
+        metadata: { input: JSON.stringify({ command: 'ls' }) },
+      }),
+      makeTool({
+        id: 'e3',
+        name: 'Bash',
+        startTime: 1200,
+        metadata: { input: JSON.stringify({ command: 'ls' }) },
+      }),
+      makeTool({
+        id: 'e4',
+        name: 'Bash',
+        startTime: 1300,
+        metadata: { input: JSON.stringify({ command: 'ls' }) },
+      }),
     ];
     const detail = makeDetail(spans);
     const result = diagnoseSessionSync(detail, { pricingLookup });
@@ -388,9 +459,24 @@ describe('diagnoseSessionSync', () => {
 
   it('does not flag different params as same_param_loop', () => {
     const spans: Span[] = [
-      makeTool({ id: 'e1', name: 'Bash', startTime: 1000, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
-      makeTool({ id: 'e2', name: 'Bash', startTime: 1100, metadata: { input: JSON.stringify({ command: 'pwd' }) } }),
-      makeTool({ id: 'e3', name: 'Bash', startTime: 1200, metadata: { input: JSON.stringify({ command: 'ls' }) } }),
+      makeTool({
+        id: 'e1',
+        name: 'Bash',
+        startTime: 1000,
+        metadata: { input: JSON.stringify({ command: 'ls' }) },
+      }),
+      makeTool({
+        id: 'e2',
+        name: 'Bash',
+        startTime: 1100,
+        metadata: { input: JSON.stringify({ command: 'pwd' }) },
+      }),
+      makeTool({
+        id: 'e3',
+        name: 'Bash',
+        startTime: 1200,
+        metadata: { input: JSON.stringify({ command: 'ls' }) },
+      }),
     ];
     const detail = makeDetail(spans);
     const result = diagnoseSessionSync(detail, { pricingLookup });
@@ -400,8 +486,19 @@ describe('diagnoseSessionSync', () => {
   // ===== write_then_read =====
   it('detects write_then_read', () => {
     const spans: Span[] = [
-      makeTool({ id: 'w1', name: 'Write', startTime: 1000, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
-      makeTool({ id: 'r1', name: 'Read', startTime: 1100, outputBytes: 2000, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
+      makeTool({
+        id: 'w1',
+        name: 'Write',
+        startTime: 1000,
+        metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
+      }),
+      makeTool({
+        id: 'r1',
+        name: 'Read',
+        startTime: 1100,
+        outputBytes: 2000,
+        metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
+      }),
     ];
     const detail = makeDetail(spans);
     const result = diagnoseSessionSync(detail, { pricingLookup });
@@ -411,8 +508,19 @@ describe('diagnoseSessionSync', () => {
 
   it('does not flag read before write', () => {
     const spans: Span[] = [
-      makeTool({ id: 'r1', name: 'Read', startTime: 1000, outputBytes: 100, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
-      makeTool({ id: 'w1', name: 'Write', startTime: 1100, metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) } }),
+      makeTool({
+        id: 'r1',
+        name: 'Read',
+        startTime: 1000,
+        outputBytes: 100,
+        metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
+      }),
+      makeTool({
+        id: 'w1',
+        name: 'Write',
+        startTime: 1100,
+        metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
+      }),
     ];
     const detail = makeDetail(spans);
     const result = diagnoseSessionSync(detail, { pricingLookup });
@@ -444,13 +552,43 @@ describe('diagnoseSessionSync', () => {
   // ===== model_downgrade =====
   it('detects model_downgrade', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', model: 'claude-fable-5', inputTokens: 1000, outputTokens: 100, startTime: 1000 }),
-      makeTurn({ id: 't2', model: 'deepseek-v4-flash', inputTokens: 1000, outputTokens: 100, startTime: 2000 }),
+      makeTurn({
+        id: 't1',
+        model: 'claude-fable-5',
+        inputTokens: 1000,
+        outputTokens: 100,
+        startTime: 1000,
+      }),
+      makeTurn({
+        id: 't2',
+        model: 'deepseek-v4-flash',
+        inputTokens: 1000,
+        outputTokens: 100,
+        startTime: 2000,
+      }),
     ];
     const detail = makeDetail(spans);
     const multiPricing = (model?: string) => {
-      if (model === 'claude-fable-5') return { model, inputPrice: 21, cacheCreationPrice: 26.25, cacheReadPrice: 1.5, outputPrice: 105 };
-      if (model === 'deepseek-v4-flash') return { model, inputPrice: 1, cacheCreationPrice: 1, cacheReadPrice: 0.02, outputPrice: 2 };
+      if (model === 'claude-fable-5')
+        return {
+          model,
+          inputPrice: 21,
+          cacheCreationPrice: 26.25,
+          cacheReadPrice: 1.5,
+          outputPrice: 105,
+          currency: 'CNY' as const,
+          unit: 'per_million_tokens' as const,
+        };
+      if (model === 'deepseek-v4-flash')
+        return {
+          model,
+          inputPrice: 1,
+          cacheCreationPrice: 1,
+          cacheReadPrice: 0.02,
+          outputPrice: 2,
+          currency: 'CNY' as const,
+          unit: 'per_million_tokens' as const,
+        };
       return undefined;
     };
     const result = diagnoseSessionSync(detail, { pricingLookup: multiPricing });
@@ -460,8 +598,20 @@ describe('diagnoseSessionSync', () => {
 
   it('does not flag same-model as downgrade', () => {
     const spans: Span[] = [
-      makeTurn({ id: 't1', model: 'deepseek-v4-flash', inputTokens: 1000, outputTokens: 100, startTime: 1000 }),
-      makeTurn({ id: 't2', model: 'deepseek-v4-flash', inputTokens: 1000, outputTokens: 100, startTime: 2000 }),
+      makeTurn({
+        id: 't1',
+        model: 'deepseek-v4-flash',
+        inputTokens: 1000,
+        outputTokens: 100,
+        startTime: 1000,
+      }),
+      makeTurn({
+        id: 't2',
+        model: 'deepseek-v4-flash',
+        inputTokens: 1000,
+        outputTokens: 100,
+        startTime: 2000,
+      }),
     ];
     const detail = makeDetail(spans);
     const result = diagnoseSessionSync(detail, { pricingLookup });
@@ -472,12 +622,16 @@ describe('diagnoseSessionSync', () => {
     const longText = 'x'.repeat(5_000);
     const spans: Span[] = [
       makeTool({
-        id: 'r1', name: 'Read', startTime: 1000,
+        id: 'r1',
+        name: 'Read',
+        startTime: 1000,
         outputBytes: 10_000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),
       makeTool({
-        id: 'r2', name: 'Read', startTime: 2000,
+        id: 'r2',
+        name: 'Read',
+        startTime: 2000,
         outputBytes: 10_000,
         metadata: { input: JSON.stringify({ file_path: '/src/foo.ts' }) },
       }),

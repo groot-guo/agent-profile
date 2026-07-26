@@ -36,7 +36,8 @@ API supports manual import of a selected transcript directory.
 | --- | --- |
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, tool categorization, pricing calculations |
 | `apps/server/src/routes/scan.ts` | Source discovery/import for Claude Code, Codex, Zed, and MiMo; normalization and persistence |
-| `apps/server/src/db.ts` | SQLite schema, additive compatibility migrations, pricing, and model-context seed data |
+| `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
+| `apps/server/src/db.ts` | Default local database instance, pricing/model-context seed data, and current lookup wrappers |
 | `apps/server/src/routes/` | Health, sessions, aggregate analysis, diagnosis, statistics, pricing, context-window, scan, export, and comparison APIs |
 | `apps/web` | Project/session navigation, dashboards, detail analysis, comparisons, statistics, annotations, and configuration UI |
 
@@ -58,7 +59,7 @@ source: a missing field means “not captured”, not zero or failure.
 
 ## Persistence model
 
-`apps/server/src/db.ts` owns four current tables:
+`apps/server/src/database.ts` owns five current internal tables:
 
 - `sessions` — source identity and incremental metadata; agent/model/project
   fields; four token totals; context, cache, cost, duration, annotation tags,
@@ -66,23 +67,29 @@ source: a missing field means “not captured”, not zero or failure.
 - `spans` — normalized `llm_turn` and `tool_call` evidence, token/context/cost
   fields, timing, parent/sidechain links, tool input/output metadata, and
   truncation-safe content.
-- `pricing` — per-model prices for the four token classes.
+- `pricing` — per-model CNY prices for the four token classes, with unit and
+  effective time.
 - `model_context` — per-model context-window limits.
+- `schema_migrations` — ordered, idempotent schema changes and their application
+  time.
 
-The database applies additive migrations for compatible new columns such as
-session annotations. Schema changes must include an explicit migration or
-backfill plan in their task; deleting `trace.db` is not the normal upgrade
-strategy. The SQLite file is generated local state and can be rebuilt from
-available source histories when recovery is necessary.
+The database applies ordered additive migrations. Existing annotation columns
+and T39 cost-provenance columns are detected safely and each migration version
+is recorded once. Schema changes must include an explicit migration/backfill
+plan and integration test in their Task; deleting `trace.db` is not the normal
+upgrade strategy. The SQLite file is generated local state and can be rebuilt
+from available source histories when recovery is necessary.
 
 ## Metric semantics
 
 - `contextTokens = input + cacheCreation + cacheRead`
 - `windowUtilization = contextTokens / configuredContextWindow`
 - `cacheHitRate = cacheRead / (input + cacheCreation + cacheRead)`
-- Span cost uses all four token classes and the active model pricing. Unknown
-  pricing is surfaced as unknown rather than silently estimated as a known
-  bill.
+- Span cost uses all four token classes and the model price effective at the
+  span's `startTime`. The current contract is `CNY` per million tokens.
+  `costCurrency`, `pricingEffectiveFrom`, `costCalculatedAt`, and
+  `costCalculatorVersion` make the derived value reproducible. Unknown pricing
+  is surfaced as unknown rather than silently estimated as a known bill.
 - Cost attribution distributes an LLM turn's cost across tool categories used
   by that turn and shows tool-free turns separately. It is an analytical
   allocation, not a provider invoice.
@@ -111,6 +118,12 @@ The current server/UI support:
   comparison;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - editable pricing/model-context data and total-cost recomputation.
+
+Mutable pricing and model-context requests have runtime JSON-schema validation.
+New user pricing defaults to its write time; callers may supply an explicit
+`effectiveFrom`. Recompute selects pricing independently for each historical
+LLM span and records calculator version `v1`. Pre-T39 stored costs retain
+`legacy` provenance until they are imported again or recomputed.
 
 LLM diagnosis is optional. Without its API configuration, deterministic
 analysis remains available and the service continues to function.
@@ -141,7 +154,7 @@ analysis remains available and the service continues to function.
 | `GET` | `/api/stats` | Aggregate statistics and distributions |
 | `GET/PUT` | `/api/pricing` | Model pricing |
 | `GET/PUT` | `/api/model-context` | Model context-window configuration |
-| `POST` | `/api/recompute-cost` | Recalculate stored session costs |
+| `POST` | `/api/recompute-cost` | Recalculate stored costs by span-time pricing and refresh provenance |
 
 ## Operation and configuration
 
@@ -154,6 +167,8 @@ analysis remains available and the service continues to function.
 - Local source histories and the generated SQLite database remain on the
   machine; any future raw-record export or remote runtime integration must keep
   explicit privacy and redaction controls.
+- Root `pnpm test` runs Core and Server tests. Root `pnpm build` includes Core
+  TypeScript, Server TypeScript, and the Web production build.
 
 ## Documentation boundary
 

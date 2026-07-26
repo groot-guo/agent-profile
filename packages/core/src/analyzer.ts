@@ -1,4 +1,4 @@
-import { calcCost } from './pricing';
+import { COST_CALCULATOR_VERSION, COST_CURRENCY, calcCost } from './pricing';
 import type {
   CostAttribution,
   CostByCategory,
@@ -24,10 +24,11 @@ export interface FileMeta {
 // 填 llm_turn 的 contextTokens + cost，聚合 session 级四类 token / cost / 上下文 / cache 命中率
 export function analyzeSession(
   parsed: ParsedSession,
-  pricingLookup: (model?: string) => Pricing | undefined,
+  pricingLookup: (model?: string, at?: number) => Pricing | undefined,
   fileMeta?: FileMeta,
   importedAt?: number,
 ): { summary: SessionSummary; spans: Span[] } {
+  const calculatedAt = importedAt ?? Date.now();
   let inputTokens = 0;
   let cacheCreationTokens = 0;
   let cacheReadTokens = 0;
@@ -40,11 +41,16 @@ export function analyzeSession(
 
   for (const span of parsed.spans) {
     if (span.type === 'llm_turn') {
-      span.contextTokens = (span.inputTokens || 0) + (span.cacheCreationTokens || 0) + (span.cacheReadTokens || 0);
-      const pricing = pricingLookup(span.model);
+      span.contextTokens =
+        (span.inputTokens || 0) + (span.cacheCreationTokens || 0) + (span.cacheReadTokens || 0);
+      const pricing = pricingLookup(span.model, span.startTime);
       const { cost, unknown } = calcCost(span, pricing);
       span.cost = cost;
       span.costUnknown = unknown;
+      span.costCurrency = COST_CURRENCY;
+      span.pricingEffectiveFrom = pricing?.effectiveFrom ?? 0;
+      span.costCalculatedAt = calculatedAt;
+      span.costCalculatorVersion = COST_CALCULATOR_VERSION;
       if (unknown) costUnknownCount++;
       inputTokens += span.inputTokens || 0;
       cacheCreationTokens += span.cacheCreationTokens || 0;
@@ -78,6 +84,9 @@ export function analyzeSession(
     outputTokens,
     totalCost,
     costUnknownCount,
+    costCurrency: COST_CURRENCY,
+    costCalculatedAt: calculatedAt,
+    costCalculatorVersion: COST_CALCULATOR_VERSION,
     peakContextTokens: peakContext,
     avgContextTokens: llmTurnCount > 0 ? Math.round(sumContext / llmTurnCount) : 0,
     cacheHitRate,
@@ -85,19 +94,27 @@ export function analyzeSession(
     fileSize: fileMeta?.size,
     fileLines: fileMeta?.lines,
     messageCount: parsed.meta.messageCount,
-    importedAt: importedAt ?? Date.now(),
+    importedAt: calculatedAt,
   };
 
   return { summary, spans: parsed.spans };
 }
 
 const TOOL_CATEGORY: Record<string, string> = {
-  Read: 'file', Write: 'file', Edit: 'file', Grep: 'file', Glob: 'file',
+  Read: 'file',
+  Write: 'file',
+  Edit: 'file',
+  Grep: 'file',
+  Glob: 'file',
   Bash: 'command',
-  WebFetch: 'network', WebSearch: 'network',
+  WebFetch: 'network',
+  WebSearch: 'network',
   AskUserQuestion: 'interactive',
-  Workflow: 'orchestration', Task: 'orchestration', TaskCreate: 'orchestration',
-  ToolSearch: 'meta', TodoWrite: 'meta',
+  Workflow: 'orchestration',
+  Task: 'orchestration',
+  TaskCreate: 'orchestration',
+  ToolSearch: 'meta',
+  TodoWrite: 'meta',
 };
 
 function catOf(name: string): string {
@@ -110,15 +127,21 @@ function extractFilePath(toolInput: unknown): string | undefined {
   try {
     const obj = JSON.parse(toolInput) as { file_path?: unknown };
     if (typeof obj.file_path === 'string') return obj.file_path;
-  } catch { /* truncated JSON */ }
+  } catch {
+    /* truncated JSON */
+  }
   return undefined;
 }
 
 const FILE_TOOLS = new Set(['Read', 'Write', 'Edit']);
 
 export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
-  const tools = spans.filter((s) => s.type === 'tool_call').sort((a, b) => a.startTime - b.startTime);
-  const turns = spans.filter((s) => s.type === 'llm_turn').sort((a, b) => a.startTime - b.startTime);
+  const tools = spans
+    .filter((s) => s.type === 'tool_call')
+    .sort((a, b) => a.startTime - b.startTime);
+  const turns = spans
+    .filter((s) => s.type === 'llm_turn')
+    .sort((a, b) => a.startTime - b.startTime);
   const thinkings = spans.filter((s) => s.type === 'thinking');
 
   // 1. Tool success rates
@@ -144,7 +167,9 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
     // Find thinking spans that are children of this turn
     const childThinkings = thinkings.filter((th) => th.parentId === turn.id);
     const thinkingChars = childThinkings.reduce(
-      (sum, th) => sum + (typeof th.metadata?.thinking === 'string' ? (th.metadata.thinking as string).length : 0),
+      (sum, th) =>
+        sum +
+        (typeof th.metadata?.thinking === 'string' ? (th.metadata.thinking as string).length : 0),
       0,
     );
     // Find tool calls that are children of this turn
@@ -160,17 +185,22 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
 
   // 3. Context growth velocity
   const contextGrowthPerTurn = turns.map((turn, i) => {
-    const ctx = turn.contextTokens || (turn.inputTokens + turn.cacheCreationTokens + turn.cacheReadTokens);
-    const prevCtx = i > 0
-      ? (turns[i - 1].contextTokens || (turns[i - 1].inputTokens + turns[i - 1].cacheCreationTokens + turns[i - 1].cacheReadTokens))
-      : 0;
+    const ctx =
+      turn.contextTokens || turn.inputTokens + turn.cacheCreationTokens + turn.cacheReadTokens;
+    const prevCtx =
+      i > 0
+        ? turns[i - 1].contextTokens ||
+          turns[i - 1].inputTokens + turns[i - 1].cacheCreationTokens + turns[i - 1].cacheReadTokens
+        : 0;
     return { turnIndex: i + 1, turnId: turn.id, contextTokens: ctx, delta: ctx - prevCtx };
   });
-  const contextGrowthVelocity = turns.length > 1
-    ? Math.round(
-        contextGrowthPerTurn.slice(1).reduce((s, t) => s + Math.max(0, t.delta), 0) / (turns.length - 1),
-      )
-    : 0;
+  const contextGrowthVelocity =
+    turns.length > 1
+      ? Math.round(
+          contextGrowthPerTurn.slice(1).reduce((s, t) => s + Math.max(0, t.delta), 0) /
+            (turns.length - 1),
+        )
+      : 0;
 
   // 4. File operations
   const fileOps = new Map<string, FileOperation>();
@@ -184,9 +214,13 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
     else if (t.name === 'Write') entry.writes++;
     fileOps.set(path, entry);
   }
-  const fileOperations = [...fileOps.values()].sort((a, b) => (b.reads + b.edits + b.writes) - (a.reads + a.edits + a.writes));
+  const fileOperations = [...fileOps.values()].sort(
+    (a, b) => b.reads + b.edits + b.writes - (a.reads + a.edits + a.writes),
+  );
   const filesRead = fileOperations.filter((f) => f.reads > 0).length;
-  const filesReadThenEdited = fileOperations.filter((f) => f.reads > 0 && (f.edits > 0 || f.writes > 0)).length;
+  const filesReadThenEdited = fileOperations.filter(
+    (f) => f.reads > 0 && (f.edits > 0 || f.writes > 0),
+  ).length;
   const readToEditRate = filesRead > 0 ? filesReadThenEdited / filesRead : 0;
 
   return {
@@ -200,9 +234,15 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
 }
 
 const CAT_LABEL: Record<string, string> = {
-  file: '文件操作', command: '命令执行', network: '网络',
-  interactive: '用户交互', mcp: 'MCP', orchestration: '编排', meta: '元工具',
-  unattributed: '无工具调用', other: '其他',
+  file: '文件操作',
+  command: '命令执行',
+  network: '网络',
+  interactive: '用户交互',
+  mcp: 'MCP',
+  orchestration: '编排',
+  meta: '元工具',
+  unattributed: '无工具调用',
+  other: '其他',
 };
 
 const PHASE_NAMES = ['探索期', '实现期', '验证期'];
@@ -225,17 +265,17 @@ export function calcEfficiencyScore(
   totalCost: number,
   wastedCost?: number,
 ): EfficiencyScore {
-  const tokenEfficiency = totalTokens > 0 ? Math.min(1, outputTokens / totalTokens * 3) : 0;
+  const tokenEfficiency = totalTokens > 0 ? Math.min(1, (outputTokens / totalTokens) * 3) : 0;
   const cacheUtilization = cacheHitRate;
   const totalToolCalls = efficiency.toolSuccessRates.reduce((sum, tool) => sum + tool.total, 0);
   const totalToolErrors = efficiency.toolSuccessRates.reduce((sum, tool) => sum + tool.errors, 0);
   const toolSuccess = totalToolCalls > 0 ? (totalToolCalls - totalToolErrors) / totalToolCalls : 1;
-  const wasteAvoidance = totalCost > 0 && wastedCost != null
-    ? 1 - Math.min(1, wastedCost / totalCost)
-    : 1;
+  const wasteAvoidance =
+    totalCost > 0 && wastedCost != null ? 1 - Math.min(1, wastedCost / totalCost) : 1;
 
   const score = Math.round(
-    (tokenEfficiency * 0.2 + cacheUtilization * 0.3 + toolSuccess * 0.2 + wasteAvoidance * 0.3) * 100,
+    (tokenEfficiency * 0.2 + cacheUtilization * 0.3 + toolSuccess * 0.2 + wasteAvoidance * 0.3) *
+      100,
   );
   return {
     score: Math.max(0, Math.min(100, score)),
@@ -246,11 +286,10 @@ export function calcEfficiencyScore(
   };
 }
 
-export function analyzeCostAttribution(
-  spans: Span[],
-  wastedCost?: number,
-): CostAttribution {
-  const turns = spans.filter((s) => s.type === 'llm_turn').sort((a, b) => a.startTime - b.startTime);
+export function analyzeCostAttribution(spans: Span[], wastedCost?: number): CostAttribution {
+  const turns = spans
+    .filter((s) => s.type === 'llm_turn')
+    .sort((a, b) => a.startTime - b.startTime);
   const tools = spans.filter((s) => s.type === 'tool_call');
 
   const totalCost = turns.reduce((s, t) => s + (t.cost || 0), 0);
@@ -285,7 +324,12 @@ export function analyzeCostAttribution(
     for (const [category, toolCount] of toolsByCategory) {
       // A turn's LLM cost is distributed by its tool-call mix, so category
       // totals always reconcile exactly with the session total.
-      addCategoryCost(category, turn, (turn.cost || 0) * toolCount / childTools.length, toolCount);
+      addCategoryCost(
+        category,
+        turn,
+        ((turn.cost || 0) * toolCount) / childTools.length,
+        toolCount,
+      );
     }
   }
 
@@ -306,7 +350,10 @@ export function analyzeCostAttribution(
     const phaseTurns = turns.slice(p * phaseSize, (p + 1) * phaseSize);
     if (phaseTurns.length === 0) continue;
     const phaseCost = phaseTurns.reduce((s, t) => s + (t.cost || 0), 0);
-    const phaseInput = phaseTurns.reduce((s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens, 0);
+    const phaseInput = phaseTurns.reduce(
+      (s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens,
+      0,
+    );
     const phaseOutput = phaseTurns.reduce((s, t) => s + t.outputTokens, 0);
     costByPhase.push({
       phase: PHASE_NAMES[p],
@@ -319,13 +366,20 @@ export function analyzeCostAttribution(
   }
 
   // 3. Wasted cost ratio
-  const wastedCostRatio = totalCost > 0 && wastedCost != null ? Math.min(1, wastedCost / totalCost) : 0;
+  const wastedCostRatio =
+    totalCost > 0 && wastedCost != null ? Math.min(1, wastedCost / totalCost) : 0;
 
   return { totalCost, costByCategory, costByPhase, wastedCostRatio };
 }
 
-const p95 = (arr: number[]): number => { const s = [...arr].sort((a, b) => a - b); return s[Math.max(0, Math.floor(s.length * 0.95))] || 0; };
-const median = (arr: number[]): number => { const s = [...arr].sort((a, b) => a - b); return s[Math.max(0, Math.floor(s.length * 0.5))] || 0; };
+const p95 = (arr: number[]): number => {
+  const s = [...arr].sort((a, b) => a - b);
+  return s[Math.max(0, Math.floor(s.length * 0.95))] || 0;
+};
+const median = (arr: number[]): number => {
+  const s = [...arr].sort((a, b) => a - b);
+  return s[Math.max(0, Math.floor(s.length * 0.5))] || 0;
+};
 
 function latencyStats(durations: number[]): LatencyStats {
   if (durations.length === 0) return { avg: 0, median: 0, p95: 0, max: 0 };
@@ -338,15 +392,21 @@ function latencyStats(durations: number[]): LatencyStats {
 }
 
 export function analyzePerformance(spans: Span[]): PerformanceMetrics {
-  const turns = spans.filter((s) => s.type === 'llm_turn').sort((a, b) => a.startTime - b.startTime);
+  const turns = spans
+    .filter((s) => s.type === 'llm_turn')
+    .sort((a, b) => a.startTime - b.startTime);
   const tools = spans.filter((s) => s.type === 'tool_call');
 
   // Turn latency
-  const turnDurations = turns.map((t) => (t.endTime ? t.endTime - t.startTime : 0)).filter((d) => d > 0);
+  const turnDurations = turns
+    .map((t) => (t.endTime ? t.endTime - t.startTime : 0))
+    .filter((d) => d > 0);
   const turnLatency = latencyStats(turnDurations);
 
   // Tool latency
-  const toolDurations = tools.map((t) => (t.endTime ? t.endTime - t.startTime : 0)).filter((d) => d > 0);
+  const toolDurations = tools
+    .map((t) => (t.endTime ? t.endTime - t.startTime : 0))
+    .filter((d) => d > 0);
   const toolLatency = latencyStats(toolDurations);
 
   // Tool latency by name
@@ -360,26 +420,35 @@ export function analyzePerformance(spans: Span[]): PerformanceMetrics {
   }
   const toolLatencyByName = [...byName.entries()]
     .map(([name, durations]) => ({
-      name, count: durations.length,
+      name,
+      count: durations.length,
       avg: Math.round(durations.reduce((a, b) => a + b, 0) / durations.length),
-      median: median(durations), p95: p95(durations), max: Math.max(...durations),
+      median: median(durations),
+      p95: p95(durations),
+      max: Math.max(...durations),
     }))
     .sort((a, b) => b.avg - a.avg);
 
   // Slow turns (> 2x P95 or > 60s)
   const slowThreshold = Math.max(turnLatency.p95 * 1.5, 60_000);
-  const slowTurns = turns.map((turn, i) => ({
-    turnIndex: i + 1,
-    turnId: turn.id,
-    duration: turn.endTime ? turn.endTime - turn.startTime : 0,
-    isSlow: (turn.endTime ? turn.endTime - turn.startTime : 0) > slowThreshold,
-  })).filter((t) => t.isSlow);
+  const slowTurns = turns
+    .map((turn, i) => ({
+      turnIndex: i + 1,
+      turnId: turn.id,
+      duration: turn.endTime ? turn.endTime - turn.startTime : 0,
+      isSlow: (turn.endTime ? turn.endTime - turn.startTime : 0) > slowThreshold,
+    }))
+    .filter((t) => t.isSlow);
 
   // Throughput (tokens/min)
-  const totalTokens = turns.reduce((s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens + t.outputTokens, 0);
+  const totalTokens = turns.reduce(
+    (s, t) => s + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens + t.outputTokens,
+    0,
+  );
   const firstTurn = turns[0];
   const lastTurn = turns[turns.length - 1];
-  const sessionDuration = firstTurn && lastTurn ? (lastTurn.endTime || lastTurn.startTime) - firstTurn.startTime : 0;
+  const sessionDuration =
+    firstTurn && lastTurn ? (lastTurn.endTime || lastTurn.startTime) - firstTurn.startTime : 0;
   const throughput = sessionDuration > 0 ? Math.round(totalTokens / (sessionDuration / 60000)) : 0;
 
   return { turnLatency, toolLatency, toolLatencyByName, slowTurns, throughput, sessionDuration };
@@ -420,7 +489,9 @@ export interface ToolParamAnalysis {
 }
 
 export function analyzeToolParams(spans: Span[]): ToolParamAnalysis {
-  const tools = spans.filter((s) => s.type === 'tool_call').sort((a, b) => a.startTime - b.startTime);
+  const tools = spans
+    .filter((s) => s.type === 'tool_call')
+    .sort((a, b) => a.startTime - b.startTime);
 
   // Bash command classification
   const bashCats = new Map<string, number>();
@@ -430,31 +501,47 @@ export function analyzeToolParams(spans: Span[]): ToolParamAnalysis {
     if (typeof input !== 'string') continue;
     try {
       const obj = JSON.parse(input) as Record<string, unknown>;
-      const cmd = typeof obj.command === 'string' ? obj.command : typeof obj.description === 'string' ? obj.description : '';
+      const cmd =
+        typeof obj.command === 'string'
+          ? obj.command
+          : typeof obj.description === 'string'
+            ? obj.description
+            : '';
       if (cmd) {
         const cat = classifyBash(cmd);
         bashCats.set(cat, (bashCats.get(cat) || 0) + 1);
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   const bashCategories = [...bashCats.entries()]
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count);
 
   // Read parameter stats
-  let withLimit = 0, withoutLimit = 0, totalLimit = 0, limitCount = 0;
+  let withLimit = 0,
+    withoutLimit = 0,
+    totalLimit = 0,
+    limitCount = 0;
   for (const t of tools) {
     if (t.name !== 'Read' && t.name !== 'read_file') continue;
     const input = t.metadata?.input;
     if (typeof input !== 'string') continue;
     try {
       const obj = JSON.parse(input) as { limit?: number; offset?: number };
-      if (obj.limit != null && obj.limit > 0) { withLimit++; totalLimit += obj.limit; limitCount++; }
-      else withoutLimit++;
-    } catch { /* skip */ }
+      if (obj.limit != null && obj.limit > 0) {
+        withLimit++;
+        totalLimit += obj.limit;
+        limitCount++;
+      } else withoutLimit++;
+    } catch {
+      /* skip */
+    }
   }
   const readParamStats = {
-    withLimit, withoutLimit,
+    withLimit,
+    withoutLimit,
     avgLimit: limitCount > 0 ? Math.round(totalLimit / limitCount) : undefined,
   };
 
