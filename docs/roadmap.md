@@ -1,8 +1,13 @@
 # Roadmap & Task Breakdown
 
-Each task: status / dependencies / steps / affected files / acceptance / risks. **Execution requires orchestration confirmation** (see bottom).
+Each task records status, purpose, scope, affected files, acceptance criteria, risks, and verification. Repository-wide execution rules are defined in `../AGENTS.md`.
 
-Task IDs (T5–T15) map to task system (#5–#15).
+Task IDs T5–T15 are retained from the historical task system. T36 and later IDs are repository-local.
+
+Completed task bodies below preserve their original execution plans and may
+mention superseded file paths or one-time migration steps. Use
+`../ARCHITECTURE.md` and the focused current-state documents for present
+behavior.
 
 ## Current Progress (done)
 
@@ -14,7 +19,7 @@ Task IDs (T5–T15) map to task system (#5–#15).
 | P2.19 LLM semantic diagnosis                                  | done                          |
 | UI light theme + paginated tables + project grouping (by cwd) | done                          |
 | pricing seed (DeepSeek) + typecheck fix                       | done                          |
-| data source                                                   | Claude Code + Codex           |
+| data source                                                   | Claude Code + Codex + Zed + MiMo |
 | Architecture refactor (async scanner, DB abs path, routes split, config/theme extraction, auto-scan) | done |
 | IDE-style UI (sidebar project tree + dashboard + embed detail) | done |
 | @lobehub/icons (agent & model SVG icons)                      | done |
@@ -35,7 +40,8 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
   2. `routes.ts` SESSION_COLS + insertSession + scan body include agent
   3. `core/types.ts` SessionSummary add `agent: string`
   4. `core/parser.ts` parseTranscript accept agent param, stamp into ParsedSession
-  5. delete `apps/server/trace.db`, re-scan
+  5. the original rollout rebuilt the generated local database; later schema
+     work introduced additive migration as the normal upgrade path
 - affected: apps/server/src/db.ts, apps/server/src/routes.ts, packages/core/src/types.ts, packages/core/src/parser.ts
 - acceptance: sessions table has agent column; existing Claude Code sessions agent='claude-code'
 - risk: deleting trace.db loses current data (re-scan recovers)
@@ -75,12 +81,14 @@ Foundation for batch 2 (filter) and batch 3 (stats). See `multi-agent.md`.
 - status: done
 - depends: T6, T7
 - steps:
-  1. scanner: scan three locations (claude/codex/zed), dispatch parser by agent
-  2. incremental: claude/codex use file mtime/size; zed uses threads.db `updated_at` or row count
-  3. routes.ts: POST /api/scan add `agent` param (`all` | `claude` | `codex` | `zed`), default all
-- affected: packages/core/src/scanner.ts, apps/server/src/routes.ts
-- acceptance: /api/scan scans all three sources; agent param filters source
-- risk: scan latency with three sources; zed sqlite readonly concurrent access
+  1. file-based Claude/Codex import dispatches parser by detected agent
+  2. Zed database import runs through its read-only thread adapter
+  3. later MiMo work adds the fourth database-backed source
+  4. startup performs background multi-source import; `POST /api/scan` accepts
+     a selected transcript directory for file-based sources
+- affected: source scanners/parsers, `apps/server/src/routes/scan.ts`, `apps/server/src/index.ts`
+- acceptance: supported sources are imported into one session/span model without blocking service startup; optional source failure does not remove already imported data
+- risk: scan latency and differences in source-field coverage
 
 ## Batch 2 · UI Optimization & Filtering
 
@@ -203,26 +211,67 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - affected: `apps/server/src/db.ts`, `apps/server/src/routes/{scan,stats,sessions,diagnosis}.ts`, `packages/core/src/{analyzer,types}.ts`, session detail UI and tests
 - acceptance: core tests, server typecheck, and web production build all pass
 
+## Batch 7 · Documentation Governance
+
+### T37 task-driven documentation consistency
+
+- status: completed
+- purpose: make every repository change traceable to an explicit task, require a targeted document plan before code changes, and close the task with synchronized documentation after validation
+- scope:
+  1. add repository-wide task and documentation lifecycle rules
+  2. define the source of truth and responsibility of each primary document
+  3. synchronize README, current architecture, Chinese overview, roadmap, and future runtime-profile design
+  4. correct stale current-state claims in agent guidance and focused diagnosis/multi-agent documents
+  5. synchronize the focused statistics document with the implemented response shape
+  6. label the original improvement analysis as a historical snapshot where its old task bodies are retained
+  7. record validation evidence and close T37 only after the document set is consistent
+- affected:
+  - `AGENTS.md` (new)
+  - `README.md`
+  - `ARCHITECTURE.md`
+  - `docs/roadmap.md`
+  - `docs/zh/OVERVIEW.md`
+  - `docs/agent-runtime-profile-design.md`
+  - `CLAUDE.md`
+  - `docs/diagnosis.md`
+  - `docs/multi-agent.md`
+  - `docs/stats.md`
+  - `docs/improvement-analysis.md`
+- acceptance:
+  - a task must exist and be marked `in_progress` before code, schema, API, UI, configuration, or behavior changes begin
+  - the task contains a targeted documentation plan and concrete acceptance/verification criteria
+  - completion requires updating affected current-state/design docs and marking the task `completed`
+  - primary documents describe the same current data sources, implemented capabilities, and current-versus-future boundary
+- risks:
+  - process rules that are too heavy can discourage small maintenance; the rule therefore scales task detail to change risk while retaining explicit task ownership
+- verification:
+  - `git diff --check` — passed
+  - targeted stale-claim scan across current-state documents — passed with no
+    matches for the retired “LLM not implemented”, “Claude only”, planned
+    Codex/Zed, missing GLM pricing, or delete-database upgrade claims
+  - Fastify route-path extraction compared with the API table in
+    `ARCHITECTURE.md` — all current route paths represented
+  - primary/focused document path existence check — passed
+  - final task-status review — T37 changed from `in_progress` to `completed`
+- completion:
+  - completed_at: 2026-07-26
+  - result: repository-wide documentation-first rules added; current-state,
+    historical-snapshot, and future-proposal boundaries defined; current
+    capabilities, sources, migrations, diagnosis, statistics, APIs, and runtime
+    design documents synchronized
+  - implementation impact: documentation/process only; no application code,
+    schema, API behavior, or generated database changed
+
 ## Execution Order
 
-T5–T15 and T36 are complete. Future work should be added as a new task with a status, explicit acceptance criteria, and the verification command used at completion.
+T5–T15, T36, and T37 are complete. Future work must be added as a new task before implementation begins.
 
-## Orchestration Confirmation Process
+## Task Lifecycle
 
-**Every task execution requires prior confirmation:**
+The detailed workflow is maintained in `../AGENTS.md`. The canonical transition is:
 
-1. Before starting a task, output an execution orchestration:
-   - task ID + scope
-   - files to change (exact paths)
-   - step-by-step plan
-   - dependencies / blockers
-   - acceptance criteria
-   - risks
-2. Wait for user confirmation.
-3. Execute + verify (run / typecheck / smoke test).
-4. On completion: update this doc's task status + `TaskUpdate` to completed.
-5. Report result (what done, what verified, what skipped).
+`planned` → `in_progress` → `completed`
 
-**No confirmation → no execution.** Status transitions: `pending` → `confirmed` → `in_progress` → `completed`.
+`blocked` and `cancelled` are terminal alternatives when completion is not possible or no longer desired.
 
-To start a task, tell me which (e.g. "start T5"); I will output the orchestration and wait for your confirmation before any code change.
+User authorization can be given by the request that starts the work; a second confirmation is required only when scope, risk, or external effects materially exceed that authorization. A task may be marked `completed` only after its implementation, affected documentation, and verification evidence have all been recorded.

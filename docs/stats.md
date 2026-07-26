@@ -1,81 +1,81 @@
-# Cost & Consumption Statistics
+# Cost and Consumption Statistics — Current State
 
-Aggregate view across all sessions on this machine. Independent page `/stats` + API `/api/stats`, separate from session detail.
+The implemented `/stats` page and `GET /api/stats` endpoint aggregate the local
+session database. The statistics are descriptive process telemetry; source
+coverage and missing pricing must be considered before comparing agents.
 
-## Overview Cards
+## Current overview
 
-- total sessions / agents / projects count
-- total tokens (4 types) + total cost (CNY)
-- total duration
-- cache hit rate (weighted)
+The overview contains:
 
-## Group Aggregations
+- total sessions, tokens, and calculated cost;
+- total input/output tokens;
+- average cache-hit rate and peak context;
+- number of sessions containing unknown model cost.
 
-| dimension        | metrics                                | display                    |
-| ---------------- | -------------------------------------- | -------------------------- |
-| by agent         | session count, tokens, cost, cache hit | table + bar                |
-| by project (cwd) | session count, tokens, cost, top N     | table, sorted by cost desc |
-| by model         | token in/cc/cr/out, cost, call count   | table + pie/bar            |
+## Grouped statistics
 
-## Session Cost Distribution (histogram)
+| Dimension | Current metrics |
+| --- | --- |
+| Agent | session count, tokens, cost, average cache-hit rate |
+| Project | session count, tokens, cost |
+| Model | LLM-turn count, input-side tokens, output tokens, cost |
 
-Cost distribution is long-tailed (most sessions cheap, few expensive). Use **log-scale bins** (not equal-width) to avoid empty high-end bins.
+Project grouping uses `cwd` and falls back to a project name derived from the
+source path. Model values are aggregated from LLM-turn spans rather than only
+the session summary.
 
-Default cost bins (CNY):
+## Distributions
 
-| bin         | label                            |
-| ----------- | -------------------------------- |
-| = 0         | free (cost=0 or unknown pricing) |
-| (0, 0.01]   | <¥0.01                           |
-| (0.01, 0.1] | ¥0.01–0.1                        |
-| (0.1, 1]    | ¥0.1–1                           |
-| (1, 10]     | ¥1–10                            |
-| (10, ∞)     | >¥10                             |
+The API returns fixed logarithmic-style buckets for:
 
-Each bin: session count, rendered as bar chart.
+- session cost: `¥0`, `¥0-0.01`, `¥0.01-0.1`, `¥0.1-1`, `¥1-5`, `¥5+`;
+- session tokens: `<1k`, `1k-10k`, `10k-100k`, `100k-500k`,
+  `500k-1M`, `1M+`;
+- model and agent call/session distributions.
 
-Token distribution (optional toggle), same log-bin strategy:
+The web page renders cost/token distributions, grouped tables, and model
+breakdowns. Bucket thresholds are currently fixed in the server; quantile
+buckets and query-configurable edges are not current API behavior.
 
-| bin (tokens) | label  |
-| ------------ | ------ |
-| <10k         | tiny   |
-| 10k–100k     | small  |
-| 100k–1M      | medium |
-| >1M          | large  |
+## Baselines, anomalies, and trends
 
-**Bin strategy**:
+For each project the API calculates session count, average/median/P95 cost,
+average tokens, and average cache hit. A session is flagged as a cost anomaly
+only when its project has at least three sessions and its cost exceeds three
+times the project median (with a non-trivial median).
 
-- default: log bins (cost and token distributions are long-tailed; equal-width leaves high bins empty)
-- optional: equal-depth (quantile) bins for zoomed/drill-down views
-- bin edges configurable in `/api/stats` query params; defaults above
+Daily trends aggregate tokens, cost, session count, and average cache hit.
+These are correlations over observed sessions; they do not establish that a
+configuration caused the change.
 
-## Model Call Distribution
+## Response shape
 
-- pie chart: cost share by model (which model consumes most cost)
-- stacked bar: per model token breakdown (input / cache_creation / cache_read / output)
-- table: model → session count, total tokens, total cost, avg cost/session
-
-## API
-
-```
+```text
 GET /api/stats
   → {
-      overview: { sessions, agents, projects, tokens{input,cc,cr,out}, cost, duration, cacheHitRate },
-      byAgent: [{ agent, sessions, tokens, cost, cacheHitRate }],
-      byProject: [{ cwd, sessions, tokens, cost }],   // top N by cost
-      byModel: [{ model, sessions, tokens, cost }],
-      costDistribution: [{ bin, label, count }],
-      tokenDistribution: [{ bin, label, count }]
+      overview,
+      byAgent[],
+      byProject[],
+      byModel[],
+      distribution: {
+        costBins[],
+        tokenBins[],
+        modelDistribution[],
+        agentDistribution[]
+      },
+      baseline: {
+        projects,
+        anomalySessions[]
+      },
+      trends[]
     }
 ```
 
-Single aggregation over `sessions` table (already has 4 token aggregates + cost + cwd + agent).
+When there are no sessions, grouped/distribution collections are empty. The
+current empty response does not include populated baseline/trend structures, so
+consumers must treat those fields as optional until data exists.
 
-## UI (`/stats` page)
-
-- overview cards (top)
-- by agent / by project / by model tables (grouped, collapsible)
-- cost distribution histogram (log bins)
-- model call distribution: pie + stacked bar
-
-Reuse design tokens from session detail (light theme, `C` palette). Charts via inline SVG (consistent with context growth chart). No new chart dependency.
+Any metric, bucket, baseline, anomaly, trend, or response-shape change requires
+an explicit task in `roadmap.md`, server verification, UI verification, and an
+update to this document.

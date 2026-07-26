@@ -1,88 +1,104 @@
 # Agent Profile — 中文总览
 
-> 本文件同步英文设计文档（`ARCHITECTURE.md` + `docs/`）的核心内容，供中文阅读。详细设计以英文文档为准。
+> 本文描述当前已经实现的能力，并与 `README.md`、`ARCHITECTURE.md` 保持一致。
+> 面向 Agent Runtime 的 Task、Outcome、Configuration 与反馈闭环仍是
+> `docs/agent-runtime-profile-design.md` 中的未来方案。
 
-## 项目
+## 定位
 
-Agent Profile — AI 编码 agent 会话 transcript 的离线 profile 分析工具。扫描本地会话文件（Claude Code / Codex / Zed），还原 token / 上下文 / cost / 耗时 / 工具调用，支撑成本优化、上下文健康、性能分析。
+Agent Profile 是面向 AI 编码 Agent Runtime 的本地离线 profiler。它不是聊天记录
+产品，而是把本地运行记录转换为可比较的资源、过程效率、可靠性和异常证据。
 
-## 数据流
+当前系统以 Session 为分析中心，已经可以回答 token、成本、时间、上下文、工具和
+子 Agent 消耗在哪里，以及过程中发生了哪些重复、失败和退化。由于还没有统一的
+Task 与 Outcome 数据，它目前不能仅凭过程指标判断最终交付是否正确，也不能直接
+宣称某个 Agent 全面优于另一个 Agent。
 
+## 当前数据源与数据流
+
+当前已接入 Claude Code、Codex、Zed 和 MiMo：
+
+```text
+Claude Code JSONL ─┐
+Codex rollout JSONL ├→ 各来源解析器 → 统一 Session/Span
+Zed SQLite + zstd ──┤                         ↓
+MiMo SQLite ────────┘                   分析与诊断
+                                               ↓
+                                            SQLite
+                                               ↓
+                                      Fastify API → Next.js UI
 ```
-会话文件 (.jsonl / SQLite)
-  → Scanner（扫描/去重/增量）
-  → Parser（NDJSON / zstd 解码，tool_use↔tool_result 配对，parentUuid 调用链）
-  → Analyzer（四类 token、上下文、cache 命中率、cost）
-  → SQLite (apps/server/trace.db)
-  → Web UI (Next.js)
-```
 
-## 技术栈
+各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
 
-pnpm workspace + TypeScript。
-- `packages/core`：scanner / parser / analyzer / pricing / diagnosis / types。纯逻辑，server 与 web 共用。
-- `server`：Fastify + better-sqlite3。建表 + REST API。
-- `web`：Next.js。会话列表（按项目分组）+ 详情（条形图 / 上下文曲线 / token 拆解 / 诊断 / 分页表）。
+## 当前能力
+
+- 分别保留 input、cache creation、cache read、output 四类 token。
+- 按项目和 Agent 浏览、搜索、排序和筛选 Session，并支持标签、备注和多会话对比。
+- 查看 LLM 回合、工具调用与参数、上下文增长、耗时、子 Agent、Git commit 和成本归因。
+- 使用确定性启发式规则诊断重复读取、大输出、低缓存命中、上下文膨胀、长 thinking、
+  重复失败和读取范围过大。
+- 在配置 Anthropic-native 或 OpenAI-compatible API 后执行可选的 LLM 语义诊断；
+  没有配置时，启发式分析与整个服务仍可正常使用。
+- 展示过程效率、综合过程分、项目内相对位置、趋势、分布，以及按 Agent/项目/模型的
+  消耗统计。
+- 维护模型定价与上下文窗口，并在定价变化后重新计算历史成本。
+- 导出 Session 数据和分析报告。
 
 ## 数据模型
 
-四张表（`apps/server/src/db.ts`）：
-- **sessions**：id + 文件 mtime/size/lines + 四类 token 聚合 + peak/avg context + cache_hit_rate + cwd + `agent`（规划：claude-code | codex | zed）。
-- **spans**：llm_turn | tool_call。四类 token + context_tokens + output_bytes + metadata（>10KB 截断）。parentId 调用链，isSidechain。
-- **pricing**：model → 四类 token 单价（人民币/百万 token）。
-- **model_context**：model → context window。
+当前 SQLite 由 `apps/server/src/db.ts` 管理四张表：
 
-改 schema 需删 `apps/server/trace.db` 重建（`CREATE TABLE IF NOT EXISTS` 不改已存在表）。
+- `sessions`：来源与增量扫描信息、Agent/模型/项目、四类 token 聚合、上下文、缓存、
+  成本、耗时、标签和备注。
+- `spans`：`llm_turn` 与 `tool_call` 的 token、上下文、成本、耗时、父子链、
+  sidechain 和工具输入输出证据。
+- `pricing`：模型的四类 token 单价。
+- `model_context`：模型上下文窗口。
 
-## 关键约定
+兼容的新字段通过增量 migration 补充；正常升级不应依赖删除 `trace.db`。任何 schema
+修改都必须在对应 Task 中写明 migration/backfill 与验证方案。
 
-- 四类 token 不合并（input / cache_creation / cache_read / output）。cache_read 价格与语义都不同于 input。
-- transcript 无 cost 字段，cost 全部由 analyzer 按 model + token + pricing 算；未定价 → costUnknown，不估算。
-- thinking / answer 是 llm_turn 内部 block，token 含在轮 output 不单拆。
-- 增量更新：transcript 追加写入，scan 检测 mtime/size，变了删旧重插。
-- tool 配对：tool_use.id ↔ tool_result.tool_use_id。
-- 分类：工具按类别归组（文件/命令/网络/交互/MCP/编排/元）用于着色，不是结构层。
+## 指标边界
 
-## 诊断（详见 `docs/diagnosis.md`）
+- `contextTokens = input + cacheCreation + cacheRead`
+- `cacheHitRate = cacheRead / (input + cacheCreation + cacheRead)`
+- 成本由四类 token 与当前模型定价计算；未知定价必须显式展示为未知。
+- 工具成本归因是按同一 LLM 回合内的工具类别进行分析分摊，不等于供应商账单。
+- 效率分是“过程效率”，不能替代测试、构建或人工验收结果。
+- LLM 语义诊断属于带证据的推断，应与确定性规则区分。
 
-两层：
-- 启发式规则（已实现，7 项）：重复读取 / 大输出携带 / cache 命中低 / 上下文堆积 / 过长 thinking / 重复试错 / 读取范围过大。wastedTokens 按公式估算（bytes/4 等），wastedCost 按模型 input_price 估上限。
-- LLM 语义分析（P2.19，接口预留未实现）：thinking 偏离 / 工具偏离 / 无效探索。预筛 + 批量 prompt + 30s 超时降级。分析成本单独记录。
+## 当前与未来
 
-## 多 agent 接入（详见 `docs/multi-agent.md`，批1）
+当前：
 
-| agent | 位置 | 格式 | project |
-|---|---|---|---|
-| Claude Code | `~/.claude/projects/*/*.jsonl` | JSONL | cwd |
-| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | JSONL | session_meta.cwd |
-| Zed | `~/Library/Application Support/Zed/threads/threads.db` | SQLite + zstd BLOB | folder_paths |
+- 以 Session/Span 为核心；
+- 能解释运行资源和过程异常；
+- 能提供相对比较和人工复盘证据。
 
-各 agent parser 输出统一 ParsedSession/Span，下游不变。sessions 表加 agent 列。
+未来方案：
 
-## 消耗统计（详见 `docs/stats.md`，批3）
+- 引入 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment；
+- 生成稳定的 Task Profile Report；
+- 让 Agent Runtime 在任务结束后或运行中消费经过验证的建议；
+- 把提示词和 Agent 规则作为可实验配置，而不是把“改提示词”作为唯一目标。
 
-独立页 `/stats` + API `/api/stats`：
-- 总览卡（总 token / cost / session / agent / 项目数）
-- 按 agent / 项目 / 模型分组
-- session cost 分布直方图（对数分桶：=0 / <¥0.01 / 0.01–0.1 / 0.1–1 / 1–10 / >10）
-- 模型调用分布（饼图 + 堆叠条形）
+## 文档与 Task 流程
 
-对数分桶因 cost 分布长尾，等宽会让高端空桶。
+- `README.md`：面向用户的当前能力和启动入口。
+- `ARCHITECTURE.md`：当前实现、API、数据和限制。
+- `docs/roadmap.md`：Task 状态、验收条件与验证证据。
+- `docs/agent-runtime-profile-design.md`：未来 Agent Runtime Profile 方案。
+- `AGENTS.md`：仓库修改必须遵循的工作规范。
 
-## 路线图（详见 `docs/roadmap.md`）
+每次修改代码、schema、API、UI、配置或行为前，必须先在
+`docs/roadmap.md` 建立明确 Task 并标记为 `in_progress`，写清针对性的文档计划、
+验收条件和验证方式。实现完成后必须同步实际受影响的文档，记录验证结果，最后才能把
+Task 标记为 `completed`。
 
-- 批1 多 agent 接入（schema → Codex → Zed → scanner）
-- 批2 UI 优化 + 筛选（agent 过滤 + 子 agent 调用链合并 + 去无效请求）
-- 批3 消耗统计
-- 批4 LLM 语义分析实现
-- 批5 遗留（glm-5.2 定价 + totalCost 重算）
+## 端口与配置
 
-## 当前进度
-
-- ✓ P0 数据列举 / P1 诊断（7 项）/ P2.18 read_scope / UI 明亮+分页+分项目 / pricing seed / typecheck 修复
-- ◐ P2.19 LLM 接口预留
-- ✗ 仅 Claude Code 数据源 / glm-5.2 定价缺 / totalCost 不随 pricing 重算
-
-## 端口
-
-server 3000，web 3001。可配 `PORT`（server）、`NEXT_PUBLIC_API`（web）。
+- server 默认 `3000`，可通过 `PORT` 修改。
+- web 默认 `3001`，可通过 `NEXT_PUBLIC_API` 修改 API 地址。
+- LLM 诊断使用 `LLM_API_KEY`，以及可选的 `LLM_PROVIDER`、`LLM_MODEL` 和
+  `LLM_BASE_URL`。

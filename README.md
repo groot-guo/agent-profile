@@ -1,43 +1,83 @@
 # Agent Profile
 
-Offline profile analysis for AI coding agent session transcripts (Claude Code / Codex / Zed). Reconstructs tokens / context / cost / duration / tool calls; provides data for cost optimization, context health, and performance analysis.
+Agent Profile is a local-first profiler for AI coding-agent runtimes. It imports
+local session data from Claude Code, Codex, Zed, and MiMo, reconstructs token,
+context, cost, duration, tool, and sub-agent activity, then turns that evidence
+into process-efficiency and reliability analysis.
 
-## Quick Start
+The current product is session-centric. The proposed evolution toward
+Task/Outcome/Configuration-aware runtime feedback is documented separately in
+`docs/agent-runtime-profile-design.md`.
+
+## Quick start
 
 ```bash
-pnpm install        # install
-pnpm dev            # server(3000) + web(3001)
+pnpm install
+pnpm dev
 ```
 
-Open `http://localhost:3001`, enter your Claude Code projects dir (default `~/.claude/projects`), click **Scan**.
+Open `http://localhost:3001`. The Fastify API listens on port `3000`; the web
+application listens on port `3001`.
 
-## Data Flow
+The server performs background imports on startup for the configured
+Claude/Codex transcript directories and the available Zed/MiMo databases. A
+manual scan can import a selected transcript directory. Source availability
+depends on which agent data exists on the machine.
 
+## Current capabilities
+
+- Import Claude Code JSONL, Codex rollout JSONL, Zed thread data, and MiMo
+  SQLite sessions into a shared session/span model.
+- Preserve input, cache-creation, cache-read, and output tokens separately for
+  context and pricing analysis.
+- Explore sessions by project and agent, search and sort them, annotate them,
+  compare selected sessions, and inspect trends and distributions.
+- Inspect LLM turns, tool calls, tool parameters, context growth, performance,
+  sub-agent activity, Git commits, and cost attribution.
+- Run deterministic heuristic diagnosis and optional Anthropic-native or
+  OpenAI-compatible LLM semantic diagnosis.
+- Calculate session efficiency, process score, cost, cache behavior, and
+  model/context statistics; update pricing and recompute stored costs.
+- Export session data and reports for later review.
+
+These metrics describe the observed execution process. They do not by
+themselves prove outcome quality or that one agent is universally better.
+
+## Data flow
+
+```text
+local agent data
+  → source scanner/parser
+  → normalized sessions and spans
+  → analysis and diagnosis
+  → SQLite
+  → Fastify API
+  → Next.js UI
 ```
-session files → Scanner → Parser → Analyzer → SQLite → Web UI
-```
 
-## Features
+## Repository
 
-- **4 token types** (input / cache_creation / cache_read / output) — never merged, for accurate cost & context
-- **Heuristic diagnosis** (7 rules): repeated read, large output carry, low cache hit, context bloat, long thinking, repeated failure, read scope
-- **Multi-agent** (planned): Claude Code (done) / Codex / Zed
-- **Consumption statistics** (planned): overview + cost distribution + model breakdown
-- **LLM semantic diagnosis** (planned): thinking/tool deviation
+This is a pnpm TypeScript workspace:
+
+- `packages/core` — parsers, analysis logic, diagnosis, pricing, and shared
+  types.
+- `apps/server` — Fastify API and SQLite persistence.
+- `apps/web` — Next.js App Router UI.
 
 ## Documentation
 
-- `ARCHITECTURE.md` — core architecture
-- `docs/diagnosis.md` — diagnosis design (heuristic + LLM)
-- `docs/multi-agent.md` — multi-agent ingestion
-- `docs/stats.md` — consumption statistics
-- `docs/roadmap.md` — roadmap & task breakdown
-- `docs/zh/OVERVIEW.md` — 中文总览
+- `AGENTS.md` — mandatory task and documentation lifecycle for repository
+  changes.
+- `ARCHITECTURE.md` — current implemented architecture and limitations.
+- `docs/roadmap.md` — task definitions, status, acceptance, and verification
+  evidence.
+- `docs/agent-runtime-profile-design.md` — proposed Agent Runtime Profile target
+  design; not a claim of current implementation.
+- `docs/diagnosis.md` — diagnosis design.
+- `docs/multi-agent.md` — source-ingestion design and notes.
+- `docs/stats.md` — statistics design and metric notes.
+- `docs/zh/OVERVIEW.md` — Chinese current-state overview.
 
-## Tech Stack
-
-pnpm workspace + TypeScript: `packages/core` (parsing logic) + `apps/server` (Fastify + SQLite) + `apps/web` (Next.js).
-
-## Status
-
-P0 data listing + P1 diagnosis done. See `docs/roadmap.md` for full progress and task breakdown.
+Before changing code or behavior, create and start an explicit task in
+`docs/roadmap.md`. After implementation, synchronize the affected documentation
+and record verification before closing the task.

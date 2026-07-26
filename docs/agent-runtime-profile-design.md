@@ -3,6 +3,17 @@
 > 状态：Proposal
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
+## 文档地位
+
+本文是未来目标设计，不描述当前已经实现的全部行为。当前实现以
+`../ARCHITECTURE.md` 为准，用户入口以 `../README.md` 为准，具体实施状态与验收
+证据以 `roadmap.md` 为准。
+
+实现本文中的任一 Phase 前，必须先在 `roadmap.md` 建立明确 Task，写出该阶段的
+数据迁移、API/指标兼容、文档更新和验证计划并标记为 `in_progress`。实现结束后，
+应先把当前架构及相关领域文档同步为真实状态，再记录验证结果并关闭 Task。Proposal
+中的概念、接口和时间阶段在任务完成前均不得被表述为当前能力。
+
 ## 1. 定位
 
 **Agent Profile 是 Agent Runtime 的 pprof。**

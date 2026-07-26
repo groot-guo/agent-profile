@@ -2,7 +2,11 @@
 
 > 2026-07-26 全量代码审查 + 架构分析。不修改代码，仅产出文档与 task 列表。
 >
-> **状态更新（2026-07-26）**：此文最初是 task 快照。下方台账为当前状态，已完成项不应重新排期。
+> **文档地位（2026-07-26）**：此文是当时的代码审查和候选 task 历史快照，不是
+> 当前能力或任务状态的 source of truth。文中的“现状”“缺失”“依赖”和优先级保留
+> 了提出建议时的语境，可能已经被后续实现取代。当前实现以 `../ARCHITECTURE.md`
+> 为准，当前 task 状态以 `roadmap.md` 为准，未来定位以
+> `agent-runtime-profile-design.md` 为准；已完成项不得从本快照重新排期。
 
 ## 一、工具当前能力总结
 
@@ -493,7 +497,8 @@ Cost 计算已经准确，但缺少「钱花在哪里最值得」的经济学视
   - /api/session/:id PATCH 更新标签和备注
   - 前端 UI：标签输入 + 备注文本区
   - session 列表可过滤标签
-- **依赖**：需要 schema 变更（delete trace.db 重建）
+- **历史依赖说明**：原提案需要 schema 变更；最终实现使用 additive migration，
+  不要求正常升级时删除 `trace.db`
 - **影响文件**：
   - `apps/server/src/db.ts`（schema 加列）
   - `apps/server/src/routes/sessions.ts`（PATCH 端点）
@@ -540,12 +545,11 @@ Cost 计算已经准确，但缺少「钱花在哪里最值得」的经济学视
   - `apps/web/app/session/[id]/page.tsx`（导出按钮）
 - **预估工作量**：小（半天）
 
-### P6 — LLM 语义诊断（P2.19 剩余）
+### P6 — LLM 语义诊断（历史提案，现已实现基础版本）
 
-#### T14 LlmDiagnoser 实现（已有，状态 pending）
+#### T14 LlmDiagnoser 实现（历史状态；当前已完成）
 
-- **已在 roadmap 中**，blocked by model/key 决策
-- **建议优先完成**，因为是对诊断质量的质变提升
+- 当前实现和限制见 `diagnosis.md`；provider 凭据只影响运行时是否启用语义层。
 
 ---
 
@@ -576,11 +580,11 @@ Cost 计算已经准确，但缺少「钱花在哪里最值得」的经济学视
 | T21 时间序列趋势 | 同上 |
 | T23 Git 关联 | 实验性功能，可能 cwd 变更导致找不到仓库 |
 | T24 定价补全 | 持续维护任务 |
-| T28 Session 标注 | schema 变更需重建 db |
+| T28 Session 标注 | 已由后续任务实现；schema 使用 additive migration |
 | T29 搜索排序 | 快速 UI 改进 |
 | T30 暗色模式 | UI 增强 |
 | T31 报告导出 | 低频需求 |
-| T14 LLM 诊断 | blocked by model/key 决策 |
+| T14 LLM 诊断 | 已实现可选语义层；当前限制见 `diagnosis.md` |
 
 ---
 

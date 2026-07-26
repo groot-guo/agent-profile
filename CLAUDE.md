@@ -4,7 +4,11 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-Agent Profile — offline profile analysis of AI coding agent session transcripts. Scans local session files (Claude Code / Codex / Zed), reconstructs tokens / context / cost / duration / tool calls, and provides data for cost optimization, context health, and performance analysis. Full design: `ARCHITECTURE.md` + `docs/`.
+Agent Profile — local-first runtime profile analysis of AI coding agent sessions. Imports local Claude Code, Codex, Zed, and MiMo data, reconstructs tokens / context / cost / duration / tool calls, and provides process-efficiency, reliability, and performance evidence. Current architecture: `ARCHITECTURE.md`. Future runtime-profile proposal: `docs/agent-runtime-profile-design.md`.
+
+Before changing this repository, follow the task and documentation lifecycle in
+`AGENTS.md`: start an explicit task in `docs/roadmap.md`, implement and verify,
+update affected documents, then close the task.
 
 ## Commands
 
@@ -34,7 +38,7 @@ transcript file
 ```
 
 - `packages/core` (`@agent-profile/core`): scanner / parser / analyzer / pricing / diagnosis / types. Pure logic (zero runtime deps), shared by server and web (web reads src via transpilePackages).
-- `server` (`trace-server`): Fastify + better-sqlite3. `config.ts` (port, autoScanDir), `db.ts` (schema + pricing/model_context lookup), `routes/` (scan | sessions | diagnosis | pricing | health, registered via `routes/index.ts`). Auto-scans `~/.claude/projects` on startup (set `AUTO_SCAN_DIR=""` to skip).
+- `server` (`trace-server`): Fastify + better-sqlite3. `config.ts` (port, autoScanDir), `db.ts` (schema + pricing/model_context lookup), `routes/` (scan | sessions | diagnosis | pricing | stats | health, registered via `routes/index.ts`). Starts a background source scan by default (set `AUTO_SCAN_DIR=""` to skip the configured transcript-directory scan).
 - `web` (`agent-profile-web`): Next.js App Router. `config.ts` (API base URL), `theme.ts` (shared colors, constants, formatters). Detail page = tool call bar chart + context growth chart + token breakdown + per-turn/per-tool tables + diagnosis.
 
 ## Non-obvious Conventions (read before changing code)
@@ -47,13 +51,17 @@ transcript file
 - **tool call pairing**: `tool_use.id` ↔ next user row's `tool_result.tool_use_id`, paired by id to produce `tool_call` span; `endTime` = tool_result row timestamp.
 - **call chain**: span `parentId` = transcript `parentUuid`; `isSidechain` marks sub-agents.
 - **categorization**: tools grouped by category (file / command / network / interactive / MCP / orchestration / meta) for coloring, **not structure**. Aggregate by tool name, **not by params**; no model split (model is just a label).
-- **diagnosis**: `diagnoseSessionSync` (7 heuristic rules, sync) for API use; `diagnoseSession` (async wrapper) for future LLM injection. Use sync version when no LLM diagnoser is needed.
+- **diagnosis**: `diagnoseSessionSync` provides the 7 deterministic rules. `diagnoseSession` accepts the server's optional `LlmDiagnoser`; the diagnosis route uses it when `LLM_API_KEY` is configured and otherwise returns heuristic results.
 
 ## Data Model
 
-Four tables (`apps/server/src/db.ts`): `sessions` (sessionId + file mtime/size/lines + 4 token aggregates + peak/avg context + cache_hit_rate + cwd), `spans` (llm_turn / tool_call, 4 token types + `context_tokens` + `output_bytes` + metadata, >10KB truncated), `pricing` (model → 4 token unit prices), `model_context` (model → context window size).
+Four tables (`apps/server/src/db.ts`): `sessions` (sessionId + source metadata + agent/model/project + 4 token aggregates + context/cache/cost/duration + tags/notes), `spans` (llm_turn / tool_call, 4 token types + `context_tokens` + `output_bytes` + timing/parent/tool metadata, large content truncated), `pricing` (model → 4 token unit prices), `model_context` (model → context window size).
 
-**Schema changes require deleting `apps/server/trace.db`** — `CREATE TABLE IF NOT EXISTS` won't alter existing tables; old db missing new columns causes INSERT failure. `trace.db` is generated under `apps/server/` (better-sqlite3 relative path, cwd = apps/server/), not project root.
+Schema changes require a task-specific migration/backfill plan. Compatible
+columns are added through migrations after table creation; deleting
+`apps/server/trace.db` is a recovery option for generated local state, not the
+normal upgrade path. The database path is resolved by the server rather than
+depending on the shell working directory.
 
 ## Ports
 
@@ -61,4 +69,8 @@ server 3000, web 3001. Configurable: `PORT` (server, see `apps/server/src/config
 
 ## Current Progress
 
-P0 data listing done. P1 quantified diagnosis done. P2.18 heuristic done. P2.19 LLM interface reserved. T9.5 auto-scan on startup done. Architecture refactor done (async scanner, DB absolute path, routes split, config/web theme extraction). Remaining batches (multi-agent / UI-filter / stats / LLM impl / leftover) — see `docs/roadmap.md`.
+Claude Code, Codex, Zed, and MiMo ingestion, quantified diagnosis, optional LLM
+semantic diagnosis, statistics, filtering/comparison, annotations, export,
+pricing recomputation, and detail analysis are implemented. The application is
+still session-centric; Task/Outcome/Configuration-aware runtime feedback remains
+a proposal. See `docs/roadmap.md` for authoritative task status.

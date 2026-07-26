@@ -1,62 +1,77 @@
-# Multi-Agent Data Ingestion
+# Multi-Agent Data Ingestion — Current State
 
-Support multiple coding agents' session transcripts. Unified data model: each agent parser outputs `ParsedSession`/`Span` (existing), downstream analyzer/diagnosis/stats unchanged.
+Claude Code, Codex, Zed, and MiMo ingestion are implemented. Every adapter emits
+the shared `ParsedSession`/`Span` model so analysis, diagnosis, statistics, and
+the UI can operate without a separate metric implementation per agent.
 
 ## Sources
 
-| agent       | location                                                                         | format             | project source     | key fields                                                                                               |
-| ----------- | -------------------------------------------------------------------------------- | ------------------ | ------------------ | -------------------------------------------------------------------------------------------------------- |
-| Claude Code | `~/.claude/projects/*/*.jsonl`                                                   | JSONL              | cwd (first row)    | usage (4 tokens), content (thinking/text/tool_use), tool_result, parentUuid                              |
-| Codex       | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (+ `~/.codex/archived_sessions/`) | JSONL              | `session_meta.cwd` | session_meta, response_item (message/reasoning/custom_tool_call+output), event_msg (token_count)         |
-| Zed         | `~/Library/Application Support/Zed/threads/threads.db`                           | SQLite + zstd BLOB | `folder_paths`     | threads (id, summary, data BLOB zstd, folder_paths, updated_at); decompress data then parse (format TBD) |
+| Agent | Local source | Format | Project source |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude/projects/*/*.jsonl` | JSONL | transcript `cwd` |
+| Codex | `~/.codex/sessions/.../rollout-*.jsonl` and archived rollouts | JSONL | `session_meta.cwd` |
+| Zed | `~/Library/Application Support/Zed/threads/threads.db` | SQLite + compressed thread payload | `folder_paths` |
+| MiMo | `~/.local/share/mimocode/mimocode.db` | SQLite session/message/part rows | session directory |
 
-## Schema Change
+The shared `sessions.agent` field distinguishes sources. Existing databases
+receive compatible new session columns through additive migration; normal
+upgrades do not require deleting the local database.
 
-`sessions` table add `agent` column (`claude-code` | `codex` | `zed`). Requires deleting `apps/server/trace.db` (schema rebuild, `CREATE TABLE IF NOT EXISTS` won't alter existing).
+## Normalization
 
-## Parser Mapping (per agent → unified Span)
+### Claude Code
 
-### Claude Code (existing)
+- assistant messages become LLM-turn evidence with four usage-token classes;
+- `tool_use.id` pairs with `tool_result.tool_use_id`;
+- text/thinking blocks and transcript parent/sidechain information are retained
+  to the extent supported by the normalized model.
 
-- assistant row → llm_turn span (4 tokens from usage)
-- content.thinking → thinking span
-- content.tool_use ↔ next user row tool_result → tool_call span (pair by id)
-- content.text → answer span
+### Codex
 
-### Codex (planned)
+- `session_meta` supplies session identity and project metadata;
+- response messages/reasoning become LLM evidence;
+- custom tool calls pair with their outputs by call ID;
+- token-count events provide available token aggregates.
 
-- `session_meta` → session meta (cwd, cli_version, session_id)
-- `response_item|reasoning` → thinking span
-- `response_item|custom_tool_call` ↔ `response_item|custom_tool_call_output` → tool_call span (pair by call id)
-- `response_item|message` → answer span
-- `event_msg|token_count` → 4 token types for nearest turn
-- `event_msg|user_message` / `agent_message` → user/assistant text
+### Zed
 
-### Zed (planned, format TBD)
+- the source database is opened read-only;
+- compressed thread records are decoded and mapped to session/span evidence;
+- thread folder paths provide project grouping.
 
-- read `threads.db` (SQLite, better-sqlite3, readonly)
-- per thread: decompress `data` BLOB (zstd) → parse (format to verify before writing parser: JSON or MessagePack?)
-- map to spans (messages, tool calls, tokens — depends on decompressed schema)
-- project = `folder_paths`
+### MiMo
 
-## Scanner Multi-Source
+- session rows provide identity, title, directory, and time range;
+- message and part rows are joined and mapped into normalized turns and tools;
+- MiMo uses the stored session directory for project grouping.
 
-- scan three locations, dispatch parser by agent
-- incremental: Claude Code / Codex use file mtime/size; Zed uses threads.db `updated_at` or row count
-- `POST /api/scan` add `agent` param (`all` | `claude` | `codex` | `zed`)
+## Scanning behavior
 
-## Dependencies
+At startup, configured Claude/Codex transcript directories are imported in the
+background and the Zed/MiMo database importers run when those databases exist.
+`POST /api/scan` imports a selected transcript directory, which covers the
+file-based adapters. File-based sources use file metadata for incremental
+decisions; database-based sources use their available session/thread update
+metadata. A changed source session is re-normalized and replaces its previous
+generated rows so aggregates do not double count.
 
-- Zed: zstd decompression (node `@lib/zstd` or system `zstd` CLI); SQLite read (better-sqlite3 already available)
-- Codex / Claude Code: no new dependency (NDJSON)
+The startup background scan and the manual scan share the same persistence
+model. A failure to access one optional local source must not make the health
+endpoint or already imported data unavailable.
 
-## Project Unification
+## Coverage and comparison limits
 
-project = cwd (Claude Code first row / Codex `session_meta.cwd`) / `folder_paths` (Zed) → `SessionSummary.cwd` (existing field). Session list groups by cwd.
+The normalized shape makes basic comparison possible, but it does not make all
+sources equally observable. Token classes, thinking text, parent chains, tool
+outputs, duration, and error fields may be absent or approximated in a source.
+UI and analysis must treat absent coverage as unknown, not as zero, success, or
+superior efficiency.
 
-## Implementation Order
+Adding or changing an adapter requires an explicit roadmap task that records:
 
-1. schema add `agent` column (delete db rebuild)
-2. Codex parser (JSONL, direct)
-3. Zed parser (zstd + format verification, most complex)
-4. scanner multi-source + scan API
+- source format/version assumptions and fixtures;
+- normalized field mapping and missing-data semantics;
+- incremental identity and replacement behavior;
+- privacy/truncation rules;
+- parser, import, and cross-source metric verification;
+- updates to this document and `ARCHITECTURE.md`.
