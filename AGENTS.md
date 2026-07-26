@@ -1,15 +1,95 @@
-# Repository Working Agreement
+# Agent Profile Repository Instructions
 
-This file applies to the entire repository. It defines the minimum task and
-documentation lifecycle for every intentional change.
+This is the canonical instruction file for every coding Agent working in this
+repository. `CLAUDE.md` is a compatibility symlink to this file; do not maintain
+separate instructions behind the two entry points.
 
-## 1. Every change belongs to an explicit task
+## Project context
+
+Agent Profile is a local-first profiler for AI coding-agent runtimes. It imports
+Claude Code, Codex, Zed, and MiMo session data and analyzes tokens, context,
+cost, duration, tools, sub-agents, process efficiency, and reliability.
+
+Keep the boundaries clear:
+
+- `README.md` is the user-facing current-state entry point.
+- `ARCHITECTURE.md` is the detailed source of truth for current implementation.
+- `docs/roadmap.md` is the source of truth for Task status and verification.
+- `docs/agent-runtime-profile-design.md` is a future proposal, not current
+  behavior.
+
+The current application is session-centric. Do not describe proposed
+Task/Outcome/Configuration-aware runtime feedback as implemented until its
+roadmap Task has been completed and the current-state documents have changed.
+
+## Common commands
+
+```bash
+pnpm install
+pnpm dev
+pnpm build
+pnpm lint
+pnpm --filter trace-server dev
+pnpm --filter agent-profile-web dev
+pnpm --filter @agent-profile/core test
+```
+
+- Web UI: `http://localhost:3001`
+- API health: `http://localhost:3000/api/health`
+- `AUTO_SCAN_DIR=""` disables the configured transcript-directory startup
+  scan.
+- `PORT` changes the API port; `NEXT_PUBLIC_API` changes the web API origin.
+
+Run verification in proportion to the change. Core behavior normally needs core
+tests; server/type changes need TypeScript/build validation; web changes need
+lint and a production build or focused UI verification.
+
+## Durable implementation invariants
+
+These rules protect metric correctness and must not change accidentally:
+
+- Keep input, cache-creation, cache-read, and output tokens separate. Context
+  tokens are input + cache creation + cache read; cache-read pricing and meaning
+  differ from ordinary input.
+- Source transcripts do not provide a trustworthy universal cost field. Compute
+  cost from model, four token classes, and the pricing table. Unknown pricing
+  must remain visibly unknown rather than becoming a trusted estimate.
+- Thinking and answer text are blocks inside an LLM turn; their tokens are part
+  of the turn output and are not independently recoverable.
+- File-based sessions are incrementally identified by source metadata. When a
+  source session changes, replace its generated session/spans so aggregates do
+  not double count.
+- The primary scanner path is asynchronous. Keep synchronous helpers only for
+  compatibility or focused use; do not move blocking scans into request/startup
+  paths without an explicit design Task.
+- Pair tool calls/results using source IDs where available
+  (`tool_use.id` ↔ `tool_result.tool_use_id`, Codex call IDs, or equivalent).
+- Preserve parent and sidechain evidence when the source provides it.
+- Tool categories are analytical groupings, not a structural runtime call
+  graph. Tool-name and tool-parameter analyses answer different questions.
+- Deterministic diagnosis remains available without an LLM provider. Semantic
+  diagnosis is optional, inferential, bounded, and must fail back to heuristic
+  results.
+- Schema changes require a migration/backfill plan. Additive migration is the
+  normal upgrade strategy; deleting generated `trace.db` is a recovery option,
+  not the default migration.
+- Missing source fields mean “not captured”, not zero, success, or failure.
+  Cross-agent comparisons must expose coverage differences.
+- Efficiency and score metrics describe the observed process. Without a
+  verifiable Task Outcome they do not prove delivery quality or universal Agent
+  superiority.
+
+For formulas, API behavior, storage details, and current source adapters, use
+`ARCHITECTURE.md` and the focused documents under `docs/` instead of duplicating
+them here.
+
+## Every change belongs to an explicit Task
 
 Before editing code, schemas, APIs, UI behavior, configuration, scripts, or
 user-visible documentation:
 
-1. Create or update a task in `docs/roadmap.md`.
-2. Give the task a unique ID and mark it `in_progress`.
+1. Create or update a Task in `docs/roadmap.md`.
+2. Give the Task a unique ID and mark it `in_progress`.
 3. Record, at a level proportional to the change:
    - purpose and expected outcome;
    - scope and exact files or components expected to change;
@@ -17,70 +97,70 @@ user-visible documentation:
    - acceptance criteria;
    - verification commands or checks;
    - the documents that must be updated after implementation.
-4. State the active task before making implementation changes.
+4. State the active Task before making implementation changes.
 
-A user request may both authorize and start a task. Do not require a redundant
-confirmation unless the implementation would materially expand the requested
-scope, risk, external effects, or destructive impact.
+A user request may both authorize and start a Task. Do not require a redundant
+confirmation unless implementation would materially expand the requested scope,
+risk, external effects, or destructive impact.
 
-Small typo or formatting fixes may use a compact task entry, but they still
-belong to an explicit task. Do not hide unrelated work inside another task.
+Small typo or formatting fixes may use a compact Task entry, but they still
+belong to an explicit Task. Do not hide unrelated work inside another Task.
 
-## 2. Keep the task accurate while working
+## Keep the Task accurate while working
 
 - The normal transition is `planned` → `in_progress` → `completed`.
-- Use `blocked` when required input or an external dependency prevents
-  progress, and `cancelled` when the task is intentionally abandoned.
-- Update the task before broadening its scope or changing its acceptance
-  criteria.
+- Use `blocked` when required input or an external dependency prevents progress,
+  and `cancelled` when the Task is intentionally abandoned.
+- Update the Task before broadening its scope or changing acceptance criteria.
 - Record material design decisions and deviations from the original plan.
 - If a change affects public behavior, data interpretation, storage, APIs,
   configuration, or operations, update the corresponding document in the same
-  task.
+  Task.
 
-## 3. Documentation responsibilities
+## Documentation responsibilities
 
 | Document | Source-of-truth responsibility |
 | --- | --- |
+| `AGENTS.md` | Canonical repository instructions, durable implementation invariants, and Task workflow |
+| `CLAUDE.md` | Compatibility symlink to `AGENTS.md`; never an independent source |
 | `README.md` | Current user-facing positioning, implemented capabilities, setup, and document entry points |
 | `ARCHITECTURE.md` | Current implemented architecture, data flow, storage, APIs, limitations, and operational behavior |
 | `docs/roadmap.md` | Task definitions, lifecycle status, acceptance criteria, and completion evidence |
 | `docs/agent-runtime-profile-design.md` | Proposed target model and future Agent Runtime Profile design; it must not present unimplemented behavior as current |
-| `docs/diagnosis.md`, `docs/multi-agent.md`, `docs/stats.md` | Focused domain designs and implementation notes that must agree with the current architecture |
+| `docs/diagnosis.md`, `docs/multi-agent.md`, `docs/stats.md` | Focused current designs and implementation notes that must agree with the architecture |
 | `docs/zh/OVERVIEW.md` | Chinese current-state overview aligned with README and architecture |
 
-When code and documentation disagree, inspect the implementation and tests,
-then correct the current-state documents. Future design belongs in a clearly
-labelled proposal, not in current-state claims.
+When code and documentation disagree, inspect implementation and tests, then
+correct the current-state documents. Future design belongs in a clearly labelled
+proposal, not in current-state claims.
 
-## 4. Required documentation update after implementation
+## Required documentation update after implementation
 
-Before closing a task:
+Before closing a Task:
 
-1. Update the affected documents with the behavior that was actually
-   implemented, not only the original intention.
-2. Record any API, schema, migration, metric-definition, configuration,
-   compatibility, or operational impact.
-3. Record known gaps and deferred follow-up work as separate tasks when they
-   are actionable.
-4. Add the verification commands/checks and their results to the task.
+1. Update affected documents with the behavior that was actually implemented,
+   not only the original intention.
+2. Record API, schema, migration, metric-definition, configuration,
+   compatibility, and operational impacts where relevant.
+3. Record known gaps and deferred actionable work as separate Tasks.
+4. Add verification commands/checks and their results to the Task.
 5. Review the diff for stale or contradictory claims.
 
-Code completion without the corresponding documentation update is not task
+Code completion without the corresponding documentation update is not Task
 completion.
 
-## 5. Task completion gate
+## Task completion gate
 
-A task may be marked `completed` only when:
+A Task may be marked `completed` only when:
 
 - its acceptance criteria are satisfied;
-- relevant tests, builds, type checks, smoke tests, or document checks have
-  been run in proportion to risk;
+- relevant tests, builds, type checks, smoke tests, or document checks have run
+  in proportion to risk;
 - affected documentation describes the final state;
 - actual changed files and verification results are recorded;
 - remaining limitations are explicit.
 
-The completion report must identify the task ID, what changed, what was
+The completion report must identify the Task ID, what changed, what was
 verified, and anything intentionally left open. If these conditions are not
-met, keep the task `in_progress` or mark it `blocked`; do not report it as
+met, keep the Task `in_progress` or mark it `blocked`; do not report it as
 finished.

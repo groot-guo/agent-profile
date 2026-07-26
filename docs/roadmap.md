@@ -262,9 +262,62 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - implementation impact: documentation/process only; no application code,
     schema, API behavior, or generated database changed
 
+### T38 unify agent guidance entry points
+
+- status: completed
+- purpose: eliminate drift between `AGENTS.md` and `CLAUDE.md` while preserving
+  both tools' expected repository instruction entry points
+- scope:
+  1. classify existing Claude guidance into repository-wide rules, durable
+     technical invariants, and duplicated/current-progress content
+  2. integrate only the repository-wide and durable technical guidance into a
+     structured, agent-neutral `AGENTS.md`
+  3. replace duplicated architecture/progress prose with links to the
+     corresponding source-of-truth documents
+  4. replace `CLAUDE.md` with a relative symbolic link to `AGENTS.md`
+  5. document the canonical-file/compatibility-alias relationship
+- affected:
+  - `AGENTS.md`
+  - `CLAUDE.md` (regular file → symbolic link)
+  - `README.md`
+  - `docs/roadmap.md`
+- acceptance:
+  - `AGENTS.md` contains the Task lifecycle plus the commands and technical
+    invariants an implementation Agent needs before editing code
+  - Claude-specific duplication and independently maintained current-progress
+    claims are removed
+  - `CLAUDE.md` is a relative symlink whose target is `AGENTS.md`
+  - reading either path yields identical repository instructions
+  - source-of-truth documents remain responsible for detailed architecture and
+    current task status
+- risks:
+  - environments that materialize Git symlinks as plain files may not follow
+    the alias; Git mode and target-content checks must therefore be recorded
+  - overloading `AGENTS.md` with full architecture prose would recreate drift;
+    only durable working context belongs in the instruction file
+- verification:
+  - `test -L CLAUDE.md` — passed
+  - `readlink CLAUDE.md` — returned the relative target `AGENTS.md`
+  - `cmp -s AGENTS.md CLAUDE.md` — passed; both entry points resolve to
+    identical instructions
+  - `git ls-files -s AGENTS.md CLAUDE.md` — canonical file mode `100644`;
+    compatibility alias mode `120000`
+  - duplicate/stale guidance scan — no Claude-specific title or independently
+    maintained Current Progress section remains in the canonical instructions
+  - `git diff --check` — passed
+- completion:
+  - completed_at: 2026-07-26
+  - integration decision: retained the Task lifecycle, common commands, and
+    durable metric/parser/migration invariants; replaced duplicated
+    architecture and dynamic progress prose with source-of-truth links
+  - result: `AGENTS.md` is the only maintained repository instruction body and
+    `CLAUDE.md` is its relative compatibility symlink
+  - implementation impact: instructions and repository file layout only; no
+    application behavior, API, schema, or generated data changed
+
 ## Execution Order
 
-T5–T15, T36, and T37 are complete. Future work must be added as a new task before implementation begins.
+T5–T15 and T36–T38 are complete. Future work must be added as a new task before implementation begins.
 
 ## Task Lifecycle
 

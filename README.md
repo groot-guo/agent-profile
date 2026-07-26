@@ -66,8 +66,10 @@ This is a pnpm TypeScript workspace:
 
 ## Documentation
 
-- `AGENTS.md` — mandatory task and documentation lifecycle for repository
-  changes.
+- `AGENTS.md` — canonical repository instructions, implementation invariants,
+  and mandatory Task/documentation lifecycle.
+- `CLAUDE.md` — compatibility symlink to `AGENTS.md`, so Claude Code consumes
+  the same repository instructions without a second maintained copy.
 - `ARCHITECTURE.md` — current implemented architecture and limitations.
 - `docs/roadmap.md` — task definitions, status, acceptance, and verification
   evidence.
