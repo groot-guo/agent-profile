@@ -1,6 +1,7 @@
 # Agent Profile — 中文总览
 
-> 本文描述当前已经实现的能力，并与 `README.md`、`ARCHITECTURE.md` 保持一致。
+> 本文描述当前已经实现的能力，并与 [中文 README](../../README.zh-CN.md)、
+> `README.md`、`ARCHITECTURE.md` 保持一致。
 > 面向 Agent Runtime 的 Task、Outcome、Configuration 与反馈闭环仍是
 > `docs/agent-runtime-profile-design.md` 中的未来方案。
 
@@ -116,7 +117,7 @@ Session。
 
 ## 文档与 Task 流程
 
-- `README.md`：面向用户的当前能力和启动入口。
+- `README.md` 与 `README.zh-CN.md`：面向用户的中英文当前能力和启动入口。
 - `ARCHITECTURE.md`：当前实现、API、数据和限制。
 - `docs/roadmap.md`：Task 状态、验收条件与验证证据。
 - `docs/agent-runtime-profile-design.md`：未来 Agent Runtime Profile 方案。

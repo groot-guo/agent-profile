@@ -1157,10 +1157,131 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     cost, but bounded prefetching warms the four static destinations and the UI
     now acknowledges clicks immediately
 
+### T47 product documentation and bilingual README
+
+- status: completed
+- purpose:
+  - make the current local profiler understandable to a new user without
+    requiring them to read architecture documents or source code
+  - provide a Chinese README equivalent to the user-facing English entry point
+  - distinguish verified current behavior from future product work
+- scope:
+  1. rewrite the English README around installation prerequisites, first run,
+     source discovery/import, core views, configuration, data ownership,
+     troubleshooting, and explicit product boundaries
+  2. add a root-level Chinese README with equivalent current-state claims and
+     link the two language entry points
+  3. align the Chinese overview and architecture entry points without claiming
+     source-health, Task/Outcome, remote deployment, or other unimplemented
+     behavior
+  4. add a concise documented roadmap of known product gaps and their status
+- dependencies and assumptions:
+  - documentation describes only behavior already implemented and verified in
+    T45–T46 or pre-existing completed Tasks
+  - installation remains developer-oriented because no distributable desktop
+    package or non-watch local start command exists yet
+- risks:
+  - a polished README can overstate the product if it does not keep the
+    Session-only evidence and missing Outcome boundaries explicit
+- acceptance:
+  - a new local developer can follow either README through install, launch,
+    first import, basic navigation, and recovery from an empty list
+  - both language entry points agree on sources, ports, scan behavior, privacy,
+    limitations, and current-versus-future boundary
+  - no document claims a packaged app, source-health UI, Task/Outcome capture,
+    experiment loop, or remote deployment as current behavior
+- verification plan:
+  - compare README commands and configuration descriptions with package
+    scripts, server configuration, and the verified local launch
+  - run stale-claim searches across the English and Chinese entry points and
+    review the rendered Markdown structure
+- documentation plan:
+  - update README, add `README.zh-CN.md`, update the Chinese overview, and
+    record exact coverage and remaining product gaps here
+- implemented:
+  - rewrote the English README around requirements, launch, first import,
+    source behavior, main views, configuration, local-data boundaries,
+    troubleshooting, and current product limits
+  - added root-level `README.zh-CN.md` with equivalent user-facing guidance and
+    cross-links between English, Chinese, architecture, roadmap, and focused
+    documents
+  - aligned the Chinese overview with the Chinese README and made the explicit
+    current-versus-future boundary visible at each user entry point
+  - recorded T48 and T49 as planned follow-on product work instead of claiming
+    source-health or Task/Outcome behavior before implementation
+- verification:
+  - compared all documented launch scripts, ports, scan sources, environment
+    variables, database path, and current limitations with `package.json`,
+    `apps/server/package.json`, `apps/server/src/config.ts`, `apps/server/src/db.ts`,
+    and the verified T45–T46 runtime behavior
+  - reviewed both README structures for first-run, empty-state recovery,
+    privacy, and explicit current-product boundaries; no code behavior changed
+  - `git diff --check` and stale-claim scans across English and Chinese entry
+    points — passed
+- completion:
+  - changed files: `README.md`, `README.zh-CN.md`, `docs/zh/OVERVIEW.md`, and
+    `docs/roadmap.md`
+  - remaining documentation gap: source-health UI, a non-watch start command,
+    Task/Outcome capture, cohort/experiment evaluation, and a distributable
+    local app remain planned implementation work under T48–T49 rather than
+    documentation claims
+
+### T48 product-ready local operation and first-run onboarding
+
+- status: planned
+- purpose:
+  - add source health, first-run recovery, stable local launch, and safe
+    operational defaults after the documentation baseline is complete
+- planned scope:
+  - source-status API and UI for configured Claude Code, Codex, Zed, and MiMo
+    availability and imported-session counts
+  - first-run/empty-state recovery and scan progress feedback
+  - non-watch local start mode, local backup/recovery guidance, and safe
+    local-only network defaults
+  - retain API compatibility for explicit directory scans or document a safe
+    migration path
+- dependencies and risks:
+  - source-path metadata is locally sensitive and must never include transcript
+    content; unavailable sources must not prevent API health or existing data
+    access
+
+### T49 Task/Outcome, cohort, and experiment foundations
+
+- status: planned
+- purpose:
+  - implement the missing Task, Configuration Snapshot, Outcome, Task-Session,
+    cohort, and experiment model described in the proposal so process metrics
+    can be evaluated against explicit results
+- dependencies and risks:
+  - requires additive schema migrations, explicit missing-versus-failed outcome
+    semantics, privacy boundaries for goals/acceptance criteria, APIs, UI, and
+    cross-source verification; it must not turn unverified runtime correlation
+    into a causal claim
+
+### T50 scale, project intelligence, responsive UX, and local safety
+
+- status: planned
+- purpose:
+  - keep the profiler usable with long histories and large Sessions while
+    making project-level evidence and small-screen workflows practical
+- planned scope:
+  - project-level cross-Session file/tool trends and explicit parent/child
+    Session relationships without inventing missing evidence
+  - append-only transcript parsing, scan progress/retry, and virtualized or
+    downsampled rendering for large histories
+  - responsive dashboard navigation that replaces the fixed desktop sidebar at
+    narrow widths and preserves accessible Session selection
+  - reviewed local network/API defaults, documented backup/export workflow,
+    and authentication/directory-access controls before any remote exposure
+- dependencies and risks:
+  - requires performance fixtures, measured UI budgets, source-revision
+    compatibility, and a separate threat model before changing API exposure
+
 ## Execution Order
 
-T5–T15 and T36–T43 plus T45–T46 are complete. T44 remains a separate planned
-lint-debt Task and must not be folded into feature work.
+T5–T15 and T36–T43 plus T45–T47 are complete. T48–T50 record the next product
+capabilities. T44 remains a separate planned lint-debt Task and must not be
+folded into feature work.
 
 ## Task Lifecycle
 

@@ -1,14 +1,32 @@
 # Agent Profile
 
-Agent Profile is a local-first profiler for AI coding-agent runtimes. It imports
-local session data from Claude Code, Codex, Zed, and MiMo, reconstructs token,
-context, cost, duration, tool, and sub-agent activity, then turns that evidence
-into process-efficiency and reliability analysis.
+[中文说明](README.zh-CN.md) · [Current architecture](ARCHITECTURE.md) · [Roadmap](docs/roadmap.md)
 
-The runtime evidence is currently session-centric. The product also offers an
-ephemeral prompt-structure review, while the proposed evolution toward
-Task/Outcome/Configuration-aware experiments and validated runtime feedback is
-documented separately in `docs/agent-runtime-profile-design.md`.
+Agent Profile is a local-first profiler for AI coding-agent runtimes. It imports
+local Claude Code, Codex, Zed, and MiMo session data, then explains where time,
+tokens, context, cost, tool calls, and sub-agent work went.
+
+It is an analysis tool for observed runtime process. It is not a chat-history
+viewer, a hosted monitoring service, or a universal ranking of agents.
+
+## Who it is for
+
+Use Agent Profile when you want to answer questions such as:
+
+- Which local coding-agent sessions cost the most or grew the largest context?
+- Did a tool fail repeatedly, produce unusually large output, or cause a
+  context spike?
+- How do the observed resource and tool-use patterns differ across agents or
+  projects?
+- Does a task prompt clearly state its goal, scope, acceptance criteria, and
+  verification plan?
+
+## Requirements
+
+- Node.js (an active LTS release is recommended)
+- pnpm
+- At least one supported local agent data source; missing sources are optional
+  and do not stop the application from starting
 
 ## Quick start
 
@@ -17,102 +35,142 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts the Fastify API and Next.js application concurrently; the
-API also restarts when server source changes. Open `http://localhost:3001`.
-The API listens on port `3000` and the Web application listens on port `3001`.
-Run their package-level `dev` commands separately only when debugging one
+Open [http://localhost:3001](http://localhost:3001). The Fastify API runs on
+port `3000`; the Web application runs on port `3001`.
+
+`pnpm dev` starts both processes together and watches Server source changes.
+Run package-level `dev` commands only when you deliberately need to debug one
 process in isolation.
 
-The Web development server writes `apps/web/.next-dev`, while production
-builds write `apps/web/.next`. This keeps `pnpm build` from invalidating chunks
-used by a running `pnpm dev`.
+The Web development server writes `apps/web/.next-dev`; production builds write
+`apps/web/.next`. You can safely run `pnpm build` while development is running.
 
-The server performs background imports on startup for the configured
-Claude/Codex transcript directories and the available Zed/MiMo databases. The
-Web “重新扫描” action imports both default transcript directories; the scan API
-can also import one selected directory. Source availability depends on which
-agent data exists on the machine.
+## First import
 
-## Current capabilities
+On startup, the Server begins background imports. The page remains usable while
+this happens.
 
-- Import Claude Code JSONL, Codex rollout JSONL, Zed thread data, and MiMo
-  SQLite sessions into a shared session/span model.
-- Preserve input, cache-creation, cache-read, and output tokens separately for
-  context and pricing analysis.
-- Explore sessions by project and agent, search and sort them, annotate them,
-  compare selected sessions, and inspect trends and distributions.
-- Read each Session from a fixed identity/KPI summary, then switch among
-  overview, context/cost, tools/chain, and normalized-evidence views instead of
-  scrolling through every analysis panel at once.
-- Inspect LLM turns, tool calls, tool parameters, context growth, performance,
-  sub-agent activity, Git commits, and cost attribution.
-- Inspect every normalized Session Span in one filterable evidence timeline,
-  including parent/sidechain relationships and data coverage. Stored content
-  is omitted by default; optional previews are secret-redacted and bounded.
-- Run deterministic heuristic diagnosis and optional Anthropic-native or
-  OpenAI-compatible LLM semantic diagnosis.
-- Calculate session efficiency, process score, cost, cache behavior, and
-  model/context statistics; update pricing and recompute stored costs.
-- Compare versioned Agent process profiles across resource use, context,
-  tool reliability, and sidechain behavior with sample and coverage limits.
-- Review prompt structure locally across goal, scope, acceptance, constraints,
-  context, and verification; optionally combine an Agent profile into guarded
-  iteration hypotheses without storing the prompt or calling an LLM.
-- Export session data and reports for later review.
+| Source | Default local location | When it is imported |
+| --- | --- | --- |
+| Claude Code | `~/.claude/projects` | startup and “重新扫描” |
+| Codex | `~/.codex/sessions` | startup and “重新扫描” |
+| Zed | local Zed `threads.db` | startup when present |
+| MiMo | local `mimocode.db` | startup when present |
 
-The Agent profile view is a runtime fingerprint, not a leaderboard. These
-metrics describe the observed execution process. They do not by themselves
-prove outcome quality or that one agent is universally better.
+If the list is empty, click **重新扫描**. It scans the default Claude Code and
+Codex directories and reports how many files were imported, updated, skipped,
+or failed. Zed and MiMo are discovered at startup when their databases exist.
 
-The Session evidence view is not a raw-chat viewer. It includes every stored
-normalized Span, but source adapters do not yet capture every user message or
-Runtime event as a first-class Span. “No error observed” is not the same as a
-verified successful result.
+Sessions are grouped by project path. Use the Agent chips, search, and sort
+controls to narrow the list.
 
-## Data flow
+## What the main views do
 
-```text
-local agent data
-  → source adapter (revision + parser)
-  → normalized sessions and spans
-  → shared import coordinator
-  → analysis + transactional session repository
-  → SQLite
-  → Fastify API (session evidence + agent-profile/v1)
-  → Next.js session / profile views
+- **会话** — browse imported sessions by project and Agent; open a session for
+  diagnosis, context/cost, tools/chain, or normalized evidence.
+- **画像** — compare observed Agent runtime fingerprints with sample-size and
+  coverage limits. “Higher” or “lower” describes behavior, not quality.
+- **迭代** — review a task prompt locally for goal, scope, acceptance,
+  constraints, context, and verification structure. Optional runtime-profile
+  hints are hypotheses to validate, not automatic prompt rewrites.
+- **统计** — inspect aggregate token, cost, context, project, Agent, and model
+  distributions.
 
-prompt text
-  → ephemeral deterministic checks (no database / no semantic provider)
-  → prompt-review/v1 + iteration-hints/v1
-  → Next.js prompt-review bench
+The Session evidence view contains every *stored normalized Span*, not every
+line of the original transcript. Content previews are off by default; when
+requested, previews are redacted and bounded.
+
+## Configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | API port; default `3000` |
+| `NEXT_PUBLIC_API` | Web API origin; default `http://localhost:3000/api` |
+| `AUTO_SCAN_DIR` | Unset: scan default Claude Code and Codex directories. Empty: disable transcript auto-scan. A path: scan that one transcript directory. |
+| `TRACE_DB_PATH` | Override the local SQLite database path; default `apps/server/trace.db` |
+| `LLM_API_KEY` | Enables optional semantic diagnosis; no key is required for deterministic analysis |
+| `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Optional semantic-diagnosis provider settings |
+
+Example: start without transcript auto-scan.
+
+```bash
+AUTO_SCAN_DIR="" pnpm dev
 ```
 
-## Repository
+## Local data and privacy
 
-This is a pnpm TypeScript workspace:
+- Agent Profile reads local source histories and writes derived Session/Span
+  data to SQLite. It does not upload transcript data by default.
+- The default database is `apps/server/trace.db`. Stop the Server before making
+  a file-level backup of it.
+- Prompt review is ephemeral: prompt text is not written to the database and is
+  not sent to a semantic provider by that feature.
+- Source data varies. A missing field means “not captured”, not zero, success,
+  or failure.
 
-- `packages/core` — parsers, analysis logic, diagnosis, pricing, and shared
-  types.
-- `apps/server` — source adapters/import coordination, Fastify API, and SQLite
-  persistence.
-- `apps/web` — Next.js App Router UI.
+## Troubleshooting
 
-## Documentation
+### No sessions appear
 
-- `AGENTS.md` — canonical repository instructions, implementation invariants,
-  and mandatory Task/documentation lifecycle.
-- `CLAUDE.md` — compatibility symlink to `AGENTS.md`, so Claude Code consumes
-  the same repository instructions without a second maintained copy.
-- `ARCHITECTURE.md` — current implemented architecture and limitations.
-- `docs/roadmap.md` — task definitions, status, acceptance, and verification
-  evidence.
-- `docs/agent-runtime-profile-design.md` — proposed Agent Runtime Profile target
-  design; not a claim of current implementation.
-- `docs/diagnosis.md` — diagnosis design.
-- `docs/multi-agent.md` — source-ingestion design and notes.
-- `docs/stats.md` — statistics design and metric notes.
-- `docs/zh/OVERVIEW.md` — Chinese current-state overview.
+1. Confirm that a supported source exists at one of the default locations.
+2. Wait for startup import to finish, then click **重新扫描** for Claude Code
+   and Codex.
+3. For a custom transcript directory, start with
+   `AUTO_SCAN_DIR=/absolute/path pnpm dev`.
+4. Read the scan result and error notice; an unavailable source does not erase
+   sessions that were already imported.
 
-Before changing code or behavior, create and start an explicit task in
-`docs/roadmap.md`. After implementation, synchronize the affected documentation
-and record verification before closing the task.
+### Port 3000 or 3001 is already in use
+
+Stop the older Agent Profile development process, then run `pnpm dev` again.
+The root command is intended to own both ports.
+
+### Next.js reports a missing chunk or module
+
+Stop all local Agent Profile dev/build processes, then remove only the generated
+Web outputs and restart:
+
+```bash
+rm -rf apps/web/.next apps/web/.next-dev
+pnpm dev
+```
+
+## Current product boundaries
+
+- There is no packaged desktop application or non-watch production launcher
+  yet; today the supported entry point is the local developer workflow above.
+- Task, Configuration Snapshot, Outcome, cohort, and experiment records are
+  not implemented. The product can explain observed process behavior but cannot
+  prove whether a session delivered a correct result.
+- Cross-file parent/child Codex threads remain separate Sessions. Their
+  sidechain evidence is preserved, but a full persisted task graph is future
+  work.
+- Very large session histories still use file discovery and full changed-session
+  replacement; append-only parsing and large-session virtualisation are planned
+  improvements.
+- The application is designed for local use. Do not expose its API to an
+  untrusted network without adding authentication and directory-access controls.
+
+## Development checks
+
+```bash
+pnpm test
+pnpm build
+pnpm lint
+```
+
+`pnpm build` currently passes. The repository-wide lint baseline is tracked
+separately in [T44](docs/roadmap.md); do not treat a lint failure as evidence
+that a runtime metric is wrong.
+
+## Further reading
+
+- [Chinese README](README.zh-CN.md) — equivalent user-facing guide
+- [Architecture](ARCHITECTURE.md) — implemented data flow, APIs, storage, and
+  metric semantics
+- [Chinese overview](docs/zh/OVERVIEW.md) — current implementation in Chinese
+- [Multi-agent ingestion](docs/multi-agent.md) — source-specific normalization
+  behavior and coverage limits
+- [Roadmap](docs/roadmap.md) — Task status and verification evidence
+- [Future runtime design](docs/agent-runtime-profile-design.md) — proposal, not
+  current behavior
