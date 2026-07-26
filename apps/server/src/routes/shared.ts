@@ -6,7 +6,7 @@ export const SESSION_COLS = `id, name, file_path as filePath, agent, file_mtime 
   cache_read_tokens as cacheReadTokens, output_tokens as outputTokens, total_cost as totalCost,
   cost_unknown_count as costUnknownCount, peak_context_tokens as peakContextTokens,
   avg_context_tokens as avgContextTokens, cache_hit_rate as cacheHitRate,
-  message_count as messageCount, imported_at as importedAt`;
+  message_count as messageCount, imported_at as importedAt, tags, notes`;
 
 export const SPAN_COLS = `id, session_id as sessionId, parent_id as parentId, type, name,
   start_time as startTime, end_time as endTime, input_tokens as inputTokens,

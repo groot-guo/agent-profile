@@ -99,6 +99,9 @@ export default function SessionPage() {
       <div style={{ fontSize: 12, color: C.sub, marginBottom: 16 }}>
         {data.claudeVersion || '-'} · {data.messageCount} msgs · {data.gitBranch || data.cwd || ''}
         <span style={{ marginLeft: 12 }}>
+          <TagEditor id={id} initialTags={(data as Record<string, unknown>).tags as string || ''} />
+        </span>
+        <span style={{ marginLeft: 12 }}>
           <a href={`${API}/session/${id}/export`} download style={{ color: C.link, textDecoration: 'none', fontSize: 11, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 3 }}>⬇ JSON</a>
           {' '}
           <a href={`${API}/session/${id}/export?format=csv`} download style={{ color: C.link, textDecoration: 'none', fontSize: 11, padding: '2px 6px', border: `1px solid ${C.border}`, borderRadius: 3 }}>⬇ CSV</a>
@@ -1003,6 +1006,32 @@ function CostAttributionPanel({ attr }: { attr: CostAttribution }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function TagEditor({ id, initialTags }: { id: string; initialTags: string }) {
+  const [tags, setTags] = useState(initialTags);
+  const [editing, setEditing] = useState(false);
+  const save = async () => {
+    await fetch(`${API}/session/${id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    });
+    setEditing(false);
+  };
+  if (!editing) return (
+    <span onClick={() => setEditing(true)} style={{ cursor: 'pointer', fontSize: 11, padding: '2px 6px', border: `1px dashed ${C.border}`, borderRadius: 3 }}>
+      {tags ? tags.split(',').map((t) => (
+        <span key={t} style={{ background: `${C.link}18`, color: C.link, padding: '0 4px', borderRadius: 2, marginRight: 3 }}>{t.trim()}</span>
+      )) : '+ 标签'}
+    </span>
+  );
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="逗号分隔标签" size={15}
+        style={{ padding: '1px 4px', fontSize: 11, border: `1px solid ${C.link}`, borderRadius: 3 }} />
+      <button onClick={save} style={{ padding: '1px 6px', fontSize: 11, background: C.link, color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>✓</button>
+    </span>
   );
 }
 

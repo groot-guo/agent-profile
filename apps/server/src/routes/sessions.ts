@@ -10,6 +10,16 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .all() as SessionSummary[];
   });
 
+  // 标注 session
+  app.patch<{ Params: { id: string }; Body: { tags?: string; notes?: string } }>('/api/session/:id', async (req, reply) => {
+    const session = db.prepare('SELECT id FROM sessions WHERE id = ?').get(req.params.id) as { id: string } | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    const { tags, notes } = req.body;
+    if (tags !== undefined) db.prepare('UPDATE sessions SET tags = ? WHERE id = ?').run(tags, req.params.id);
+    if (notes !== undefined) db.prepare('UPDATE sessions SET notes = ? WHERE id = ?').run(notes, req.params.id);
+    return { ok: true };
+  });
+
   app.get<{ Params: { id: string } }>('/api/session/:id', async (req, reply) => {
     const session = db
       .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`)

@@ -8,6 +8,11 @@ export const db = new Database(resolve(__dirname, '..', 'trace.db'));
 
 db.pragma('journal_mode = WAL');
 
+// Schema migration: add annotation columns if missing
+for (const col of ['tags', 'notes']) {
+  try { db.exec(`ALTER TABLE sessions ADD COLUMN ${col} TEXT DEFAULT ''`); } catch { /* already exists */ }
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
     id                    TEXT PRIMARY KEY,
