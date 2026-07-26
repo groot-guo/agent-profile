@@ -118,7 +118,14 @@ db.exec(`
     ('doubao-pro', 2, 2, 0.1, 8, 0),
     -- MiMo 系列
     ('mimo-v2.5-pro', 3, 3, 0.025, 6, 0),
-    ('mimo-v2.5-pro-ultraspeed', 3, 3, 0.025, 6, 0)
+    ('mimo-v2.5-pro-ultraspeed', 3, 3, 0.025, 6, 0),
+    -- Kimi 系列
+    ('kimi-k3', 2, 2, 0.05, 8, 0),
+    ('kimi-k2', 2, 2, 0.05, 8, 0),
+    -- OpenAI 系列
+    ('openai', 5, 5, 0.25, 15, 0),
+    -- 内部标记模型（synthetic 为 Claude Code 内部占位，cost=0）
+    ('<synthetic>', 0, 0, 0, 0, 0)
 `);
 
 // 模型上下文窗口种子
