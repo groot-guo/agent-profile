@@ -28,6 +28,7 @@ export default function HomePage() {
   const [scanResult, setScanResult] = useState('');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [anomalyIds, setAnomalyIds] = useState<Set<string>>(new Set());
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -35,6 +36,16 @@ export default function HomePage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setSessions(await res.json());
       setError('');
+      // Also fetch anomaly data
+      try {
+        const statsRes = await fetch(`${API}/stats`);
+        if (statsRes.ok) {
+          const stats = await statsRes.json();
+          if (stats.baseline?.anomalySessions) {
+            setAnomalyIds(new Set(stats.baseline.anomalySessions));
+          }
+        }
+      } catch { /* non-critical */ }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'fetch failed');
     } finally {
@@ -136,7 +147,7 @@ export default function HomePage() {
             <div style={{ padding: 24, color: C.sub, textAlign: 'center', fontSize: 12 }}>Loading…</div>
           ) : (
             projectList.map(([proj, ss]) => (
-              <ProjectNode key={proj} project={proj} sessions={ss} selectedId={selectedId} onSelect={setSelectedId} />
+              <ProjectNode key={proj} project={proj} sessions={ss} selectedId={selectedId} onSelect={setSelectedId} anomalyIds={anomalyIds} />
             ))
           )}
         </div>
@@ -171,8 +182,8 @@ export default function HomePage() {
   );
 }
 
-function ProjectNode({ project, sessions, selectedId, onSelect }: {
-  project: string; sessions: SessionSummary[]; selectedId: string | null; onSelect: (id: string) => void;
+function ProjectNode({ project, sessions, selectedId, onSelect, anomalyIds }: {
+  project: string; sessions: SessionSummary[]; selectedId: string | null; onSelect: (id: string) => void; anomalyIds: Set<string>;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -198,6 +209,7 @@ function ProjectNode({ project, sessions, selectedId, onSelect }: {
             {s.name || s.id.slice(0, 8)}
           </span>
           <span style={{ fontSize: 10, color: s.costUnknownCount > 0 ? C.medium : C.sub, flexShrink: 0 }}>
+            {anomalyIds.has(s.id) && <span title="异常高成本" style={{ color: C.high, marginRight: 3 }}>⚠</span>}
             {s.costUnknownCount > 0 ? '—' : `¥${s.totalCost.toFixed(2)}`}
           </span>
         </div>

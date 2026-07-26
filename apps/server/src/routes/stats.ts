@@ -192,6 +192,42 @@ export function registerStatsRoutes(app: FastifyInstance) {
 
     const distribution: DistributionData = { costBins, tokenBins, modelDistribution: modelDist, agentDistribution: agentDist };
 
-    return { overview, byAgent, byProject, byModel, distribution };
+    // Baseline: per-project baseline stats + anomaly flags
+    const baselineProjMap = new Map<string, { costs: number[]; tokens: number[]; cacheHits: number[]; durations: number[] }>();
+    for (const s of sessions) {
+      const proj = (s.cwd as string) || extractProjectFromPath(s.filePath as string) || 'unknown';
+      const entry = baselineProjMap.get(proj) || { costs: [], tokens: [], cacheHits: [], durations: [] };
+      entry.costs.push((s.totalCost as number) || 0);
+      entry.tokens.push(((s.inputTokens as number) || 0) + ((s.cacheCreationTokens as number) || 0) + ((s.cacheReadTokens as number) || 0) + ((s.outputTokens as number) || 0));
+      entry.cacheHits.push((s.cacheHitRate as number) || 0);
+      entry.durations.push(((s.endTime as number) || (s.startTime as number)) - (s.startTime as number));
+      baselineProjMap.set(proj, entry);
+    }
+    const baselineProjects: Record<string, { sessions: number; avgCost: number; medCost: number; p95Cost: number; avgTokens: number; avgCacheHit: number }> = {};
+    const p95 = (arr: number[]) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length * 0.95)] || 0; };
+    const med = (arr: number[]) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length * 0.5)] || 0; };
+    for (const [proj, data] of baselineProjMap) {
+      baselineProjects[proj] = {
+        sessions: data.costs.length,
+        avgCost: data.costs.reduce((a, b) => a + b, 0) / data.costs.length,
+        medCost: med(data.costs),
+        p95Cost: p95(data.costs),
+        avgTokens: Math.round(data.tokens.reduce((a, b) => a + b, 0) / data.tokens.length),
+        avgCacheHit: data.cacheHits.reduce((a, b) => a + b, 0) / data.cacheHits.length,
+      };
+    }
+
+    // Anomaly flags: sessions > 2x project median cost
+    const anomalySessions = new Set<string>();
+    for (const s of sessions) {
+      const proj = (s.cwd as string) || extractProjectFromPath(s.filePath as string) || 'unknown';
+      const bl = baselineProjects[proj];
+      if (bl && bl.sessions >= 3) {
+        const cost = (s.totalCost as number) || 0;
+        if (bl.medCost > 0.001 && cost > bl.medCost * 3) anomalySessions.add(s.id as string);
+      }
+    }
+
+    return { overview, byAgent, byProject, byModel, distribution, baseline: { projects: baselineProjects, anomalySessions: [...anomalySessions] } };
   });
 }

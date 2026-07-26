@@ -21,6 +21,10 @@ interface StatsData {
     modelDistribution: { model: string; count: number; tokens: number }[];
     agentDistribution: { agent: string; count: number; tokens: number }[];
   };
+  baseline?: {
+    projects: Record<string, { sessions: number; avgCost: number; medCost: number; p95Cost: number; avgTokens: number; avgCacheHit: number }>;
+    anomalySessions: string[];
+  };
 }
 
 export default function StatsPage() {
@@ -86,6 +90,28 @@ export default function StatsPage() {
           </div>
         ))}
       </Section>
+
+      {/* Baselines */}
+      {data.baseline && Object.keys(data.baseline.projects).length > 0 && (
+        <Section title="项目基线 & 异常">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {Object.entries(data.baseline.projects).slice(0, 10).map(([proj, bl]) => (
+              <div key={proj} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%', color: C.text }}>{proj.split('/').pop() || proj}</span>
+                <span style={{ color: C.sub }}>
+                  {bl.sessions}会话 · 中位¥{bl.medCost.toFixed(4)} · P95 ¥{bl.p95Cost.toFixed(4)} · 均{fmtTokens(bl.avgTokens)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {data.baseline.anomalySessions.length > 0 && (
+            <div style={{ marginTop: 8, padding: '6px 10px', background: `${C.high}12`, borderRadius: 6, fontSize: 11 }}>
+              <span style={{ color: C.high, fontWeight: 600 }}>⚠ {data.baseline.anomalySessions.length} 个异常高成本会话</span>
+              <span style={{ color: C.sub }}>（成本 &gt; 项目 3x 中位数），会话列表中已标记</span>
+            </div>
+          )}
+        </Section>
+      )}
 
       {/* By model */}
       <Section title="按 Model">
