@@ -817,7 +817,7 @@ function DiagnosisList({ result }: { result: DiagnosisResult | null }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {result.findings.map((f, i) => (
         <div
-          key={f.spanIds[0] ?? i}
+          key={f.spanIds[0] ? `${f.type}-${f.spanIds[0]}` : i}
           style={{
             border: `1px solid ${C.border}`,
             borderRadius: 6,
