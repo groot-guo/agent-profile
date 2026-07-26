@@ -147,6 +147,8 @@ export interface SessionSummary {
   fileLines?: number;
   messageCount: number;
   importedAt: number;
+  tags?: string;
+  notes?: string;
 }
 
 export interface SessionDetail extends SessionSummary {
@@ -201,9 +203,14 @@ export interface EfficiencyMetrics {
   toolSuccessRates: ToolSuccessRate[];
   thinkingActionRatios: ThinkingActionRatio[];
   contextGrowthVelocity: number; // avg tokens/turn
-  contextGrowthPerTurn: { turnIndex: number; turnId: string; contextTokens: number; delta: number }[];
+  contextGrowthPerTurn: {
+    turnIndex: number;
+    turnId: string;
+    contextTokens: number;
+    delta: number;
+  }[];
   fileOperations: FileOperation[];
-  readToEditRate: number; // files edited / files read
+  readToEditRate: number; // files read before an edit/write / files read, 0-1
 }
 
 // ===== 成本归因 =====

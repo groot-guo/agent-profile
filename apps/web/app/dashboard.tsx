@@ -3,8 +3,11 @@
 import type { SessionSummary } from '@agent-profile/core';
 import { useEffect, useState } from 'react';
 import { API } from './config';
-import { getAgentIcon, getModelIcon } from './icons';
-import { AGENT_COLORS, AGENT_LABELS, C, fmtTokens } from './theme';
+import { getAgentIcon } from './icons';
+import { AGENT_COLORS, AGENT_LABELS, C, fmtTokens, FS, R, SP } from './theme';
+import { BarRow, Card, Empty, SectionTitle, StatCard, TokenStrip } from './ui';
+
+const SHADOW_CARD = 'var(--shadow-card)';
 
 interface StatsOverview {
   totalSessions: number;
@@ -39,7 +42,7 @@ export function DashboardView({ onSelectSession }: { onSelectSession?: (id: stri
       setOverview(stats.overview);
       setSessions(sessionList);
 
-      // 聚合所有 session 的工具调用频率
+      // 聚合最近 30 个 session 的工具调用频率
       const toolMap = new Map<string, { count: number; errors: number }>();
       for (const s of sessionList.slice(0, 30)) {
         try {
@@ -57,8 +60,8 @@ export function DashboardView({ onSelectSession }: { onSelectSession?: (id: stri
         .map(([name, e]) => ({ name, ...e }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 15);
-      setToolFreqs(freqs);
-      setLoading(false);
+      if (!cancelled) setToolFreqs(freqs);
+      if (!cancelled) setLoading(false);
     }).catch((err) => {
       if (!cancelled) setLoading(false);
       console.warn('Dashboard load failed:', err instanceof Error ? err.message : err);
@@ -66,135 +69,124 @@ export function DashboardView({ onSelectSession }: { onSelectSession?: (id: stri
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) return <div style={{ padding: 24, color: C.sub, textAlign: 'center' }}>Loading dashboard…</div>;
+  if (loading) return <Empty text="加载总览中…" />;
   if (!overview) return null;
 
+  const totalOf = (s: SessionSummary) => s.inputTokens + s.cacheCreationTokens + s.cacheReadTokens + s.outputTokens;
   const topByCost = [...sessions].sort((a, b) => b.totalCost - a.totalCost).slice(0, 10);
-  const topByTokens = [...sessions].sort((a, b) =>
-    (b.inputTokens + b.cacheCreationTokens + b.cacheReadTokens + b.outputTokens) -
-    (a.inputTokens + a.cacheCreationTokens + a.cacheReadTokens + a.outputTokens)
-  ).slice(0, 10);
+  const topByTokens = [...sessions].sort((a, b) => totalOf(b) - totalOf(a)).slice(0, 10);
   const agentCounts = new Map<string, number>();
   for (const s of sessions) agentCounts.set(s.agent, (agentCounts.get(s.agent) || 0) + 1);
 
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 20px', fontSize: 20, fontWeight: 700, color: C.text }}>Overview</h2>
-
-      {/* Overview cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
-        <KC v={overview.totalSessions} label="Sessions" />
-        <KC v={fmtTokens(overview.totalTokens)} label="Total Tokens" />
-        <KC v={`¥${overview.totalCost.toFixed(2)}`} label="Total Cost" warn={overview.sessionsWithCostUnknown > 0} />
-        <KC v={`${(overview.avgCacheHitRate * 100).toFixed(1)}%`} label="Avg Cache Hit" />
+    <div style={{ padding: SP.xl, maxWidth: 1200, margin: '0 auto' }}>
+      {/* 主指标 */}
+      <SectionTitle meta={`共 ${overview.totalSessions} 个会话`}>总览</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: SP.md, marginBottom: SP.md }}>
+        <StatCard value={overview.totalSessions} label="会话数" tip="已导入的 session 总数" />
+        <StatCard value={fmtTokens(overview.totalTokens)} label="总 Token" tip="input + cache_creation + cache_read + output 合计" />
+        <StatCard value={`¥${overview.totalCost.toFixed(2)}`} label="总成本" warn={overview.sessionsWithCostUnknown > 0} tip="按模型定价表计算;未定价模型不计入" />
+        <StatCard value={`${(overview.avgCacheHitRate * 100).toFixed(1)}%`} label="平均 Cache 命中" tip="cache_read ÷ (input + cache_creation + cache_read),越高越省成本" />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
-        <KC v={fmtTokens(overview.avgPeakContext)} label="Avg Peak Context" />
-        <KC v={fmtTokens(overview.totalInputTokens)} label="Total Input" />
-        <KC v={fmtTokens(overview.totalOutputTokens)} label="Total Output" />
-        <KC v={`${overview.sessionsWithCostUnknown}`} label="Unpriced" warn={overview.sessionsWithCostUnknown > 0} />
-      </div>
-
-      {/* Agent distribution */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 10, textTransform: 'uppercase' }}>Agent Distribution</div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {[...agentCounts.entries()].map(([agent, count]) => (
-            <div key={agent} style={{
-              padding: '10px 18px', background: C.card, border: `1px solid ${C.border}`,
-              borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, minWidth: 120,
-            }}>
-              <span style={{ fontSize: 18 }}>{getAgentIcon(agent, 18)}</span>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: AGENT_COLORS[agent] || C.mute }}>{AGENT_LABELS[agent] || agent}</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: C.text }}>{count}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: SP.md, marginBottom: SP.xl }}>
+        <StatCard value={fmtTokens(overview.avgPeakContext)} label="平均峰值上下文" tip="各会话上下文窗口峰值的平均值" />
+        <StatCard value={fmtTokens(overview.totalInputTokens)} label="总输入(含 cache)" tip="input + cache_creation + cache_read" />
+        <StatCard value={fmtTokens(overview.totalOutputTokens)} label="总输出" />
+        <StatCard value={`${overview.sessionsWithCostUnknown}`} label="未定价会话" warn={overview.sessionsWithCostUnknown > 0} tip="包含未知模型的会话,成本无法计算,列表中标记为「未定价」" />
       </div>
 
-      {/* Tool frequency bar chart */}
-      {toolFreqs.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 10, textTransform: 'uppercase' }}>Top Tools (all sessions)</div>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {toolFreqs.map((t) => (
-                <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                  <span style={{ width: 120, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, fontSize: 11 }}>{t.name}</span>
-                  <div style={{ flex: 1, height: 14, background: C.borderSoft, borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${(t.count / toolFreqs[0].count) * 100}%`, height: '100%', background: t.errors > 0 ? C.medium : C.link, borderRadius: 3 }} />
-                  </div>
-                  <span style={{ width: 80, textAlign: 'right', color: C.sub, flexShrink: 0, fontSize: 11 }}>
-                    {t.count} 次
-                    {t.errors > 0 && <span style={{ color: C.high }}> err {t.errors}</span>}
-                  </span>
-                </div>
-              ))}
+      {/* Agent 分布 */}
+      <SectionTitle>Agent 分布</SectionTitle>
+      <div style={{ display: 'flex', gap: SP.md, flexWrap: 'wrap', marginBottom: SP.xl }}>
+        {[...agentCounts.entries()].map(([agent, count]) => (
+          <div key={agent} style={{
+            padding: `${SP.md}px ${SP.lg}px`, background: C.card, borderRadius: R.lg,
+            boxShadow: SHADOW_CARD, display: 'flex', alignItems: 'center', gap: SP.md, minWidth: 132,
+          }}>
+            <span style={{ display: 'inline-flex' }}>{getAgentIcon(agent, 20)}</span>
+            <div>
+              <div style={{ fontSize: FS.cap, color: AGENT_COLORS[agent] || C.mute, fontWeight: 500 }}>{AGENT_LABELS[agent] || agent}</div>
+              <div className="tnum" style={{ fontSize: FS.kpi, fontWeight: 600, color: C.text, lineHeight: 1.25 }}>{count}</div>
             </div>
           </div>
-        </div>
+        ))}
+      </div>
+
+      {/* 工具频次 */}
+      {toolFreqs.length > 0 && (
+        <Card title="高频工具" meta="最近 30 个会话">
+          {toolFreqs.map((t) => (
+            <BarRow
+              key={t.name}
+              label={t.name}
+              ratio={t.count / toolFreqs[0].count}
+              color={t.errors > 0 ? C.medium : C.link}
+              right={<>{t.count} 次{t.errors > 0 && <span style={{ color: C.high }}> · 错误 {t.errors}</span>}</>}
+            />
+          ))}
+        </Card>
       )}
 
-      {/* Top sessions by cost */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 8, textTransform: 'uppercase' }}>Top by Cost</div>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8 }}>
-            {topByCost.map((s, i) => (
-              <div key={s.id} onClick={() => onSelectSession?.(s.id)}
-                style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center', cursor: 'pointer' }}>
-                <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ color: C.mute, marginRight: 4 }}>#{i + 1}</span>
-                  {getAgentIcon(s.agent, 13)}
-                  <span>{s.name || s.id.slice(0, 8)}</span>
-                </span>
-                <span style={{ color: C.out, fontWeight: 600, flexShrink: 0 }}>¥{s.totalCost.toFixed(4)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 8, textTransform: 'uppercase' }}>Top by Tokens</div>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8 }}>
-            {topByTokens.map((s, i) => {
-              const total = s.inputTokens + s.cacheCreationTokens + s.cacheReadTokens + s.outputTokens;
-              return (
-                <div key={s.id} onClick={() => onSelectSession?.(s.id)}
-                  style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', fontSize: 12, borderBottom: i < 9 ? `1px solid ${C.borderSoft}` : 'none', alignItems: 'center', cursor: 'pointer' }}>
-                  <span style={{ color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ color: C.mute, marginRight: 4 }}>#{i + 1}</span>
-                    {getAgentIcon(s.agent, 13)}
-                    <span>{s.name || s.id.slice(0, 8)}</span>
-                  </span>
-                  <span style={{ color: C.link, fontWeight: 600, flexShrink: 0 }}>{fmtTokens(total)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Top 会话 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SP.xl }}>
+        <Card title="成本 Top 10">
+          <TopList sessions={topByCost} metric={(s) => `¥${s.totalCost.toFixed(3)}`} metricColor={C.out} onSelect={onSelectSession} />
+        </Card>
+        <Card title="Token Top 10">
+          <TopList sessions={topByTokens} metric={(s) => fmtTokens(totalOf(s))} metricColor={C.link} onSelect={onSelectSession} />
+        </Card>
       </div>
 
-      {/* 数据计算声明 */}
-      <div style={{ marginTop: 32, padding: '14px 16px', background: `${C.bg}`, border: `1px solid ${C.borderSoft}`, borderRadius: 8, fontSize: 11, color: C.mute, lineHeight: 1.7 }}>
-        <div style={{ fontWeight: 600, color: C.sub, marginBottom: 4 }}>📐 数据说明</div>
-        <div>· Token 数据来源：transcript 原始 <code style={{ background: C.borderSoft, padding: '1px 4px', borderRadius: 2 }}>usage</code> 字段（input / cache_creation / cache_read / output），未做估算或补全</div>
-        <div>· Cost：本工具按模型定价表计算（¥ / 1M tokens），公式 = (input × in_price + cc × cc_price + cr × cr_price + output × out_price) / 1e6</div>
-        <div>· contextTokens = input + cache_creation + cache_read（由本工具聚合）</div>
-        <div>· cache 命中率 = cache_read / (input + cache_creation + cache_read)（由本工具计算）</div>
-        <div>· 未定价模型：cost 显示 —，标记 costUnknown</div>
-        <div>· 扫描目录：~/.claude/projects、~/.codex/sessions、Zed threads.db（启动时自动扫描）</div>
-      </div>
+      {/* 数据口径 */}
+      <Card title="数据口径说明" pad={SP.lg}>
+        <div style={{ fontSize: FS.sm, color: C.sub, lineHeight: 1.9 }}>
+          <Line>Token 取自 transcript 原始 <Code>usage</Code> 字段(input / cache_creation / cache_read / output),未做估算或补全</Line>
+          <Line>成本 = (input×输入价 + cc×创建价 + cr×读取价 + output×输出价) ÷ 1M,按模型定价表计算</Line>
+          <Line>上下文大小 = input + cache_creation + cache_read;Cache 命中率 = cache_read ÷ 上下文大小</Line>
+          <Line>未知模型的成本不估算,统一显示「未定价」</Line>
+          <Line>扫描目录:~/.claude/projects、~/.codex/sessions、Zed threads.db(启动时自动扫描)</Line>
+        </div>
+      </Card>
     </div>
   );
 }
 
-function KC({ v, label, warn }: { v: number | string; label: string; warn?: boolean }) {
+function Line({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: 'flex', gap: SP.sm }}><span style={{ color: C.mute }}>·</span><span style={{ flex: 1 }}>{children}</span></div>;
+}
+
+function Code({ children }: { children: React.ReactNode }) {
+  return <code className="tnum" style={{ background: C.borderSoft, padding: '1px 5px', borderRadius: 4, fontSize: FS.cap }}>{children}</code>;
+}
+
+function TopList({ sessions, metric, metricColor, onSelect }: {
+  sessions: SessionSummary[];
+  metric: (s: SessionSummary) => string;
+  metricColor: string;
+  onSelect?: (id: string) => void;
+}) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px' }}>
-      <div style={{ fontSize: 18, fontWeight: 600, color: warn ? C.medium : C.text }}>{v}</div>
-      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
+    <div>
+      {sessions.map((s, i) => {
+        const name = s.name || s.id.slice(0, 8);
+        return (
+          <div key={s.id} onClick={() => onSelect?.(s.id)} className="ap-row"
+            style={{
+              display: 'flex', alignItems: 'center', gap: SP.sm, cursor: 'pointer',
+              padding: '6px 8px', borderRadius: R.md, fontSize: FS.sm,
+            }}>
+            <span className="tnum" style={{ width: 22, textAlign: 'right', color: i < 3 ? C.out : C.mute, fontWeight: i < 3 ? 600 : 400, flexShrink: 0, fontSize: FS.cap }}>
+              {i + 1}
+            </span>
+            {getAgentIcon(s.agent, 14)}
+            <span className="clamp1" title={name} style={{ color: C.text, flex: 1, minWidth: 0 }}>{name}</span>
+            <span style={{ width: 72, flexShrink: 0, display: 'flex' }}>
+              <TokenStrip input={s.inputTokens} cc={s.cacheCreationTokens} cr={s.cacheReadTokens} out={s.outputTokens} height={3} />
+            </span>
+            <span className="tnum" style={{ color: metricColor, fontWeight: 600, flexShrink: 0, fontSize: FS.sm }}>{metric(s)}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

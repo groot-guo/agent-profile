@@ -240,8 +240,8 @@ describe('analyzeEfficiency', () => {
     const a = result.fileOperations.find((f) => f.path === '/src/a.ts')!;
     expect(a.reads).toBe(2);
     expect(a.edits).toBe(1);
-    // a.ts was read+edited, b.ts was only written (not read) → filesRead=1, filesEdited=2 → rate=2
-    expect(result.readToEditRate).toBe(2);
+    // a.ts was read+edited; b.ts was only written, so it does not count as a Read→Edit conversion.
+    expect(result.readToEditRate).toBe(1);
   });
 });
 
@@ -251,12 +251,21 @@ describe('analyzeCostAttribution', () => {
     const spans: Span[] = [
       makeTurn({ id: 't1', cost: 0.5, startTime: 1000 }),
       makeTool({ id: 'bash1', name: 'Bash', parentId: 't1' }),
+      makeTool({ id: 'read1', name: 'Read', parentId: 't1' }),
       makeTurn({ id: 't2', cost: 0.3, startTime: 2000 }),
-      makeTool({ id: 'read1', name: 'Read', parentId: 't2' }),
+      makeTool({ id: 'read2', name: 'Read', parentId: 't2' }),
     ];
     const result = analyzeCostAttribution(spans);
     expect(result.totalCost).toBeCloseTo(0.8);
-    expect(result.costByCategory.length).toBeGreaterThan(0);
+    expect(result.costByCategory.reduce((sum, item) => sum + item.cost, 0)).toBeCloseTo(0.8);
+    expect(result.costByCategory.reduce((sum, item) => sum + item.percentage, 0)).toBeCloseTo(1);
+    expect(result.costByCategory.find((item) => item.category === '命令执行')?.cost).toBeCloseTo(0.25);
+    expect(result.costByCategory.find((item) => item.category === '文件操作')?.cost).toBeCloseTo(0.55);
+  });
+
+  it('attributes tool-free turns explicitly instead of dropping their cost', () => {
+    const result = analyzeCostAttribution([makeTurn({ id: 't1', cost: 0.5 })]);
+    expect(result.costByCategory).toEqual([expect.objectContaining({ category: '无工具调用', cost: 0.5 })]);
   });
 
   it('splits by 3 phases', () => {

@@ -1,10 +1,29 @@
-import { diagnoseSession, diagnoseSessionSync, type SessionDetail, type SessionSummary } from '@agent-profile/core';
+import {
+  diagnoseSession,
+  diagnoseSessionSync,
+  type SessionDetail,
+  type SessionSummary,
+} from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import { db, getModelContext, getPricing } from '../db';
 import { createLlmDiagnoser } from '../llm-diagnoser';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
 const llmDiagnoser = createLlmDiagnoser();
+
+export async function diagnoseDetail(detail: SessionDetail) {
+  if (llmDiagnoser) {
+    return diagnoseSession(detail, {
+      pricingLookup: getPricing,
+      contextWindowLookup: getModelContext,
+      llmDiagnoser,
+    });
+  }
+  return diagnoseSessionSync(detail, {
+    pricingLookup: getPricing,
+    contextWindowLookup: getModelContext,
+  });
+}
 
 export function registerDiagnosisRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/session/:id/diagnosis', async (req, reply) => {
@@ -17,17 +36,6 @@ export function registerDiagnosisRoutes(app: FastifyInstance) {
       .all(req.params.id) as Record<string, unknown>[];
     const detail = { ...session, spans: rows.map(parseSpanRow) } as SessionDetail;
 
-    if (llmDiagnoser) {
-      return diagnoseSession(detail, {
-        pricingLookup: getPricing,
-        contextWindowLookup: getModelContext,
-        llmDiagnoser,
-      });
-    }
-
-    return diagnoseSessionSync(detail, {
-      pricingLookup: getPricing,
-      contextWindowLookup: getModelContext,
-    });
+    return diagnoseDetail(detail);
   });
 }

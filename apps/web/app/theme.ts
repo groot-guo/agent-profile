@@ -1,25 +1,40 @@
-// 使用 CSS 变量支持明暗模式切换
+// ============================================================
+// Agent Profile 设计 token —— 全局唯一视觉规范来源
+// 色值走 CSS 变量(明暗双主题见 layout.tsx);尺寸/字号/圆角/阴影为常量
+// 规范文档:docs/ui-guidelines.md
+// ============================================================
+
+// ---------- 颜色(引用 CSS 变量,fallback 为 light 值) ----------
 export const C = {
-  bg: 'var(--c-bg, #f6f8fa)',
-  card: 'var(--c-card, #ffffff)',
-  border: 'var(--c-border, #d0d7de)',
-  borderSoft: 'var(--c-borderSoft, #eaeef2)',
-  text: 'var(--c-text, #1f2328)',
-  sub: 'var(--c-sub, #656d76)',
-  mute: 'var(--c-mute, #8c959f)',
-  link: 'var(--c-link, #0969da)',
-  input: 'var(--c-input, #0969da)',
-  cc: 'var(--c-cc, #8250df)',
-  cr: 'var(--c-cr, #1a7f37)',
-  out: 'var(--c-out, #bc4c00)',
-  high: 'var(--c-high, #cf222e)',
-  medium: 'var(--c-medium, #9a6700)',
-  low: 'var(--c-low, #8c959f)',
-  axis: 'var(--c-axis, #d0d7de)',
-  grid: 'var(--c-grid, #eaeef2)',
+  bg: 'var(--c-bg, #F5F3F0)',
+  card: 'var(--c-card, #FEFDFC)',
+  border: 'var(--c-border, #E6E1DA)',
+  borderSoft: 'var(--c-borderSoft, #EFEBE5)',
+  text: 'var(--c-text, #2E2C28)',
+  sub: 'var(--c-sub, #6F6A61)',
+  mute: 'var(--c-mute, #9C958B)',
+  link: 'var(--c-link, #5F6FC0)',
+  input: 'var(--c-input, #6E7FC7)',
+  cc: 'var(--c-cc, #9A7FC8)',
+  cr: 'var(--c-cr, #6FA58A)',
+  out: 'var(--c-out, #C08356)',
+  high: 'var(--c-high, #C65D4E)',
+  medium: 'var(--c-medium, #B08A2E)',
+  low: 'var(--c-low, #9C958B)',
+  axis: 'var(--c-axis, #DDD7CE)',
+  grid: 'var(--c-grid, #EFEBE5)',
 } as const;
 
-// 工具类别映射
+// ---------- 尺寸 / 圆角 / 字号 / 阴影 ----------
+export const SP = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
+export const R = { sm: 6, md: 10, lg: 14, pill: 999 } as const;
+export const FS = { cap: 11, sm: 12, base: 13, title: 14, page: 18, kpi: 20 } as const;
+export const SHADOW = {
+  card: 'var(--shadow-card, 0 1px 2px rgba(80,66,45,.05), 0 6px 20px rgba(80,66,45,.05))',
+  lift: 'var(--shadow-lift, 0 2px 4px rgba(80,66,45,.07), 0 10px 28px rgba(80,66,45,.09))',
+} as const;
+
+// ---------- 工具类别映射 ----------
 export const TOOL_CAT: Record<string, string> = {
   Read: '文件操作',
   Write: '文件操作',
@@ -54,23 +69,24 @@ export const DIAG_LABEL: Record<string, string> = {
 };
 
 export const SEV_COLOR: Record<string, string> = { high: C.high, medium: C.medium, low: C.low };
+export const SEV_LABEL: Record<string, string> = { high: '高', medium: '中', low: '低' };
 
+// ---------- 类别 / Agent 配色(柔化,主要用于低透明度 chip 底 + 文字) ----------
 export const CAT_COLOR: Record<string, string> = {
-  文件操作: '#fb8f1e',
-  命令执行: '#d4a72c',
-  网络: '#bf8700',
-  用户交互: '#218bff',
-  MCP: '#bc4c00',
-  编排: '#d1572a',
-  元工具: '#8c959f',
-  其他: '#6e7681',
+  文件操作: '#D98E4A',
+  命令执行: '#C2A44A',
+  网络: '#B8933D',
+  用户交互: '#6FA3D9',
+  MCP: '#C97F52',
+  编排: '#CE7350',
+  元工具: '#98A0A9',
+  其他: '#8E959D',
 };
 
 export function catOf(name: string) {
   return name.startsWith('mcp__') ? 'MCP' : TOOL_CAT[name] || '其他';
 }
 
-// Agent 类型
 export const AGENT_LABELS: Record<string, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
@@ -87,21 +103,21 @@ export const AGENT_LABELS: Record<string, string> = {
 };
 
 export const AGENT_COLORS: Record<string, string> = {
-  'claude-code': '#0969da',
-  codex: '#8250df',
-  'kimi-code': '#8B5CF6',
-  'mimo-code': '#F97316',
-  opencode: '#10A37F',
-  copilot: '#34D399',
-  cursor: '#6366F1',
-  windsurf: '#06B6D4',
-  'gemini-cli': '#4285F4',
-  zcode: '#F59E0B',
-  zed: '#1a7f37',
-  unknown: '#656d76',
+  'claude-code': '#5F85E0',
+  codex: '#9A7BD8',
+  'kimi-code': '#9B83F0',
+  'mimo-code': '#EF9148',
+  opencode: '#3FBF9B',
+  copilot: '#5BC99A',
+  cursor: '#8589F0',
+  windsurf: '#4FB8CE',
+  'gemini-cli': '#6B9BF0',
+  zcode: '#DFAE57',
+  zed: '#5CA96B',
+  unknown: '#8A9199',
 };
 
-// 文字 fallback（SVG 图标优先，见 icons.tsx）
+// 文字 fallback(SVG 图标优先,见 icons.tsx)
 export const AGENT_ICONS: Record<string, string> = {
   'claude-code': 'C',
   codex: 'X',
@@ -112,7 +128,7 @@ export const AGENT_ICONS: Record<string, string> = {
   unknown: '?',
 };
 
-// 格式化工具函数
+// ---------- 格式化 ----------
 export function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
@@ -134,4 +150,15 @@ export function fmtBytes(b: number): string {
 
 export function fmtTime(ms: number): string {
   return new Date(ms).toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+// 相对时间:刚刚 / n分钟前 / n小时前 / n天前 / 超 30 天回退到日期
+export function fmtAgo(ms: number, now = Date.now()): string {
+  const diff = now - ms;
+  if (diff < 60_000) return '刚刚';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  if (diff < 30 * 86_400_000) return `${Math.floor(diff / 86_400_000)} 天前`;
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

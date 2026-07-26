@@ -1,24 +1,22 @@
 import { statSync } from 'node:fs';
 import { homedir } from 'node:os';
+import type { ZedThreadMeta } from '@agent-profile/core';
 import {
   analyzeSession,
   detectAgent,
   findTranscriptFiles,
   hasZedThreadsDb,
+  type ParsedSession,
   parseCodexTranscript,
   parseMiMoSession,
   parseTranscript,
   parseZedThread,
   readTranscript,
   type ScanResult,
-  type Span,
   zedThreadsDbPath,
 } from '@agent-profile/core';
-import type { ZedThreadMeta } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
-import { config } from '../config';
 import { db, getPricing } from '../db';
-import { SESSION_COLS } from './shared';
 
 interface ScanBody {
   dir: string;
@@ -49,15 +47,15 @@ function createUpsert() {
   const delSession = db.prepare('DELETE FROM sessions WHERE id = ?');
 
   return db.transaction(
-    (parsed: ReturnType<typeof parseTranscript>, mtime: number, size: number, lines: number) => {
-      const existing = db.prepare('SELECT file_mtime, file_size FROM sessions WHERE id = ?').get(parsed!.sessionId) as
+    (parsed: ParsedSession, mtime: number, size: number, lines: number) => {
+      const existing = db.prepare('SELECT file_mtime, file_size FROM sessions WHERE id = ?').get(parsed.sessionId) as
         | { file_mtime: number; file_size: number }
         | undefined;
       if (existing) {
-        delSpans.run(parsed!.sessionId);
-        delSession.run(parsed!.sessionId);
+        delSpans.run(parsed.sessionId);
+        delSession.run(parsed.sessionId);
       }
-      const { summary, spans } = analyzeSession(parsed!, getPricing, { mtime, size, lines }, Date.now());
+      const { summary, spans } = analyzeSession(parsed, getPricing, { mtime, size, lines }, Date.now());
       insertSession.run({
         id: summary.id, name: summary.name ?? null, filePath: summary.filePath, agent: summary.agent,
         fileMtime: mtime, fileSize: size, fileLines: lines,
@@ -85,7 +83,7 @@ function createUpsert() {
   );
 }
 
-async function parseFile(file: string): Promise<{ parsed: ReturnType<typeof parseTranscript>; lines: number } | null> {
+async function parseFile(file: string): Promise<{ parsed: ParsedSession; lines: number } | null> {
   const entries = await readTranscript(file);
   const agent = detectAgent(file);
   const parsed = agent === 'codex'
@@ -166,14 +164,14 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
 
   const zedDb = new (await import('better-sqlite3')).default(zedThreadsDbPath(), { readonly: true });
   const threads = zedDb
-    .prepare('SELECT id, summary, folder_paths, updated_at, created_at FROM threads')
+    .prepare('SELECT id, summary, folder_paths as folderPaths, updated_at as updatedAt, created_at as createdAt FROM threads')
     .all() as ZedThreadMeta[];
   zedDb.close();
 
   if (threads.length === 0) return { scanned: 0, imported: 0 };
 
   // 需要解压 zstd BLOB
-  const { decompress } = await import('simple-zstd');
+  const { decompressBuffer } = await import('simple-zstd');
 
   const getExisting = db.prepare('SELECT id FROM sessions WHERE id = ?');
   const insertSession = db.prepare(`
@@ -210,13 +208,13 @@ export async function scanZedThreads(): Promise<{ scanned: number; imported: num
 
       if (!row || !row.data || row.data.length === 0) continue;
 
-      const dataBuffer = decompress(row.data);
+      const dataBuffer = await decompressBuffer(row.data);
       const parsed = await parseZedThread({
         id: t.id,
         summary: t.summary,
-        folderPaths: t.folder_paths,
-        updatedAt: t.updated_at,
-        createdAt: t.created_at,
+        folderPaths: t.folderPaths,
+        updatedAt: t.updatedAt,
+        createdAt: t.createdAt,
         dataType: row.data_type,
         dataBuffer,
       });

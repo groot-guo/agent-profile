@@ -1,10 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { API } from '../config';
 import { getAgentIcon, getModelIcon } from '../icons';
-import { AGENT_COLORS, AGENT_LABELS, C, fmtTokens } from '../theme';
+import { AGENT_COLORS, AGENT_LABELS, C, fmtTokens, FS, R, SP } from '../theme';
+import { BarRow, Card, Empty, Notice, SectionTitle, StatCard } from '../ui';
 
 interface StatsData {
   overview: {
@@ -31,151 +31,127 @@ interface StatsData {
 export default function StatsPage() {
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch(`${API}/stats`).then((r) => r.json().then(setData)).finally(() => setLoading(false));
+    fetch(`${API}/stats`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ padding: 24, color: C.sub }}>Loading…</div>;
-  if (!data) return <div style={{ padding: 24, color: C.high }}>Failed to load stats</div>;
+  if (loading) return <Empty text="加载统计中…" />;
+  if (error || !data) return <div style={{ padding: SP.xl }}><Notice kind="err">{error || '统计数据加载失败'}</Notice></div>;
 
   const { overview, byAgent, byProject, byModel, distribution } = data;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
-      <Link href="/" style={{ color: C.link, fontSize: 13, textDecoration: 'none' }}>← Sessions</Link>
-      <h2 style={{ margin: '8px 0 4px', fontSize: 22, fontWeight: 600, color: C.text }}>Stats</h2>
-      <div style={{ fontSize: 12, color: C.sub, marginBottom: 24 }}>全量消费统计</div>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: SP.xl }}>
+      <SectionTitle meta="全量消费统计">统计</SectionTitle>
 
-      {/* Overview cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
-        <StatCard v={overview.totalSessions} label="Sessions" />
-        <StatCard v={fmtTokens(overview.totalTokens)} label="Total Tokens" />
-        <StatCard v={`¥${overview.totalCost.toFixed(2)}`} label="Total Cost" warn={overview.sessionsWithCostUnknown > 0} />
-        <StatCard v={`${(overview.avgCacheHitRate * 100).toFixed(1)}%`} label="Avg Cache Hit" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: SP.md, marginBottom: SP.md }}>
+        <StatCard value={overview.totalSessions} label="会话数" />
+        <StatCard value={fmtTokens(overview.totalTokens)} label="总 Token" tip="input + cache_creation + cache_read + output 合计" />
+        <StatCard value={`¥${overview.totalCost.toFixed(2)}`} label="总成本" warn={overview.sessionsWithCostUnknown > 0} tip="按模型定价表计算;未定价模型不计入" />
+        <StatCard value={`${(overview.avgCacheHitRate * 100).toFixed(1)}%`} label="平均 Cache 命中" tip="cache_read ÷ (input + cache_creation + cache_read)" />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 24 }}>
-        <StatCard v={fmtTokens(overview.avgPeakContext)} label="Avg Peak Context" />
-        <StatCard v={fmtTokens(overview.totalInputTokens)} label="Total Input" />
-        <StatCard v={fmtTokens(overview.totalOutputTokens)} label="Total Output" />
-        <StatCard v={`${overview.sessionsWithCostUnknown}`} label="Unpriced Sessions" warn={overview.sessionsWithCostUnknown > 0} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: SP.md, marginBottom: SP.xl }}>
+        <StatCard value={fmtTokens(overview.avgPeakContext)} label="平均峰值上下文" />
+        <StatCard value={fmtTokens(overview.totalInputTokens)} label="总输入(含 cache)" />
+        <StatCard value={fmtTokens(overview.totalOutputTokens)} label="总输出" />
+        <StatCard value={`${overview.sessionsWithCostUnknown}`} label="未定价会话" warn={overview.sessionsWithCostUnknown > 0} tip="包含未知模型的会话,成本无法计算" />
       </div>
 
-      {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
-        <BarChart title="Cost 分布" bins={distribution.costBins} color={C.out} />
-        <BarChart title="Token 分布" bins={distribution.tokenBins} color={C.link} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SP.xl }}>
+        <DistCard title="成本分布" bins={distribution.costBins} color={C.out} />
+        <DistCard title="Token 分布" bins={distribution.tokenBins} color={C.link} />
       </div>
 
-      {/* Daily trends */}
       {data.trends && data.trends.length > 1 && (
-        <div style={{ marginBottom: 24 }}>
-          <Section title="每日趋势">
-            <TrendChart trends={data.trends} />
-          </Section>
-        </div>
+        <Card title="每日趋势" meta={`共 ${data.trends.length} 天`}>
+          <TrendChart trends={data.trends} />
+        </Card>
       )}
 
-      {/* Agent pie */}
-      <Section title="按 Agent">
-        <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Card title="按 Agent">
+        <div style={{ display: 'flex', gap: SP.xl, alignItems: 'center', flexWrap: 'wrap' }}>
           <PieChart items={distribution.agentDistribution.map((a) => ({ label: AGENT_LABELS[a.agent] || a.agent, value: a.tokens, color: AGENT_COLORS[a.agent] || C.mute }))} size={140} />
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
             {byAgent.map((a) => (
-              <div key={a.agent} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{getAgentIcon(a.agent, 14)} {AGENT_LABELS[a.agent] || a.agent}</span>
-                <span style={{ color: C.sub }}>{a.sessions} sessions · {fmtTokens(a.totalTokens)} · ¥{a.totalCost.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
-
-      {/* By project */}
-      <Section title="按项目">
-        {byProject.slice(0, 10).map((p) => (
-          <div key={p.cwd} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{p.cwd}</span>
-            <span style={{ color: C.sub, flexShrink: 0 }}>{p.sessions} sessions · {fmtTokens(p.totalTokens)} · ¥{p.totalCost.toFixed(2)}</span>
-          </div>
-        ))}
-      </Section>
-
-      {/* Baselines */}
-      {data.baseline && Object.keys(data.baseline.projects).length > 0 && (
-        <Section title="项目基线 & 异常">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {Object.entries(data.baseline.projects).slice(0, 10).map(([proj, bl]) => (
-              <div key={proj} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '40%', color: C.text }}>{proj.split('/').pop() || proj}</span>
-                <span style={{ color: C.sub }}>
-                  {bl.sessions}会话 · 中位¥{bl.medCost.toFixed(4)} · P95 ¥{bl.p95Cost.toFixed(4)} · 均{fmtTokens(bl.avgTokens)}
+              <div key={a.agent} className="ap-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SP.md, fontSize: FS.sm, padding: '6px 8px', borderRadius: R.md }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.text }}>
+                  {getAgentIcon(a.agent, 14)} {AGENT_LABELS[a.agent] || a.agent}
+                </span>
+                <span className="tnum" style={{ color: C.sub, fontSize: FS.cap }}>
+                  {a.sessions} 会话 · {fmtTokens(a.totalTokens)} · ¥{a.totalCost.toFixed(2)}
                 </span>
               </div>
             ))}
           </div>
+        </div>
+      </Card>
+
+      <Card title="按项目" meta={`Top ${Math.min(10, byProject.length)}`}>
+        {byProject.slice(0, 10).map((p) => (
+          <div key={p.cwd} className="ap-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SP.md, fontSize: FS.sm, padding: '6px 8px', borderRadius: R.md }}>
+            <span className="clamp1" title={p.cwd} style={{ color: C.text, minWidth: 0, flex: 1 }}>{p.cwd}</span>
+            <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
+              {p.sessions} 会话 · {fmtTokens(p.totalTokens)} · ¥{p.totalCost.toFixed(2)}
+            </span>
+          </div>
+        ))}
+      </Card>
+
+      {data.baseline && Object.keys(data.baseline.projects).length > 0 && (
+        <Card title="项目基线与异常">
+          {Object.entries(data.baseline.projects).slice(0, 10).map(([proj, bl]) => (
+            <div key={proj} className="ap-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SP.md, fontSize: FS.sm, padding: '6px 8px', borderRadius: R.md }}>
+              <span className="clamp1" title={proj} style={{ color: C.text, minWidth: 0, flex: 1 }}>{proj.split('/').pop() || proj}</span>
+              <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
+                {bl.sessions} 会话 · 中位 ¥{bl.medCost.toFixed(4)} · P95 ¥{bl.p95Cost.toFixed(4)} · 均 {fmtTokens(bl.avgTokens)}
+              </span>
+            </div>
+          ))}
           {data.baseline.anomalySessions.length > 0 && (
-            <div style={{ marginTop: 8, padding: '6px 10px', background: `${C.high}12`, borderRadius: 6, fontSize: 11 }}>
-              <span style={{ color: C.high, fontWeight: 600 }}>⚠ {data.baseline.anomalySessions.length} 个异常高成本会话</span>
-              <span style={{ color: C.sub }}>（成本 &gt; 项目 3x 中位数），会话列表中已标记</span>
+            <div style={{ marginTop: SP.md }}>
+              <Notice kind="err">
+                {data.baseline.anomalySessions.length} 个会话成本超过项目 3× 中位数,已在会话列表中标记「异常」
+              </Notice>
             </div>
           )}
-        </Section>
+        </Card>
       )}
 
-      {/* By model */}
-      <Section title="按 Model">
-        <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Card title="按模型">
+        <div style={{ display: 'flex', gap: SP.xl, alignItems: 'center', flexWrap: 'wrap' }}>
           <PieChart items={byModel.map((m) => ({ label: m.model, value: m.totalInputTokens, color: modelColor(m.model) }))} size={120} />
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
             {byModel.slice(0, 8).map((m) => (
-              <div key={m.model} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{getModelIcon(m.model, 14)} {m.model}</span>
-                <span style={{ color: C.sub }}>{m.sessions} turns · {fmtTokens(m.totalInputTokens)} · ¥{m.totalCost.toFixed(4)}</span>
+              <div key={m.model} className="ap-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: SP.md, fontSize: FS.sm, padding: '6px 8px', borderRadius: R.md }}>
+                <span className="clamp1" title={m.model} style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.text, minWidth: 0 }}>
+                  {getModelIcon(m.model, 14)} {m.model}
+                </span>
+                <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
+                  {m.sessions} 轮 · {fmtTokens(m.totalInputTokens)} · ¥{m.totalCost.toFixed(4)}
+                </span>
               </div>
             ))}
           </div>
         </div>
-      </Section>
+      </Card>
     </div>
   );
 }
 
-function StatCard({ v, label, warn }: { v: number | string; label: string; warn?: boolean }) {
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px' }}>
-      <div style={{ fontSize: 20, fontWeight: 600, color: warn ? C.medium : C.text }}>{v}</div>
-      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function BarChart({ title, bins, color }: { title: string; bins: { bin: string; count: number }[]; color: string }) {
+function DistCard({ title, bins, color }: { title: string; bins: { bin: string; count: number }[]; color: string }) {
   const max = Math.max(...bins.map((b) => b.count), 1);
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 12 }}>{title}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {bins.map((b) => (
-          <div key={b.bin} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-            <span style={{ width: 70, textAlign: 'right', color: C.sub, flexShrink: 0 }}>{b.bin}</span>
-            <div style={{ flex: 1, height: 16, background: C.borderSoft, borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ width: `${(b.count / max) * 100}%`, height: '100%', background: color, borderRadius: 3, minWidth: b.count > 0 ? 3 : 0 }} />
-            </div>
-            <span style={{ width: 30, color: C.mute }}>{b.count}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <Card title={title}>
+      {bins.map((b) => (
+        <BarRow key={b.bin} label={b.bin} labelWidth={76} ratio={b.count / max} color={color} right={`${b.count}`} />
+      ))}
+    </Card>
   );
 }
 
@@ -183,7 +159,7 @@ function PieChart({ items, size }: { items: { label: string; value: number; colo
   const total = items.reduce((s, i) => s + i.value, 0) || 1;
   const r = size / 2;
   let cumAngle = -Math.PI / 2;
-  const slices: { path: string; color: string }[] = [];
+  const slices: { path: string; color: string; label: string; pct: string }[] = [];
 
   for (const item of items) {
     const angle = (item.value / total) * Math.PI * 2;
@@ -194,48 +170,58 @@ function PieChart({ items, size }: { items: { label: string; value: number; colo
     const x2 = r + r * Math.cos(cumAngle);
     const y2 = r + r * Math.sin(cumAngle);
     const largeArc = angle > Math.PI ? 1 : 0;
-    slices.push({ path: `M${r},${r} L${x1},${y1} A${r},${r} 0 ${largeArc},1 ${x2},${y2} Z`, color: item.color });
+    slices.push({
+      path: `M${r},${r} L${x1},${y1} A${r},${r} 0 ${largeArc},1 ${x2},${y2} Z`,
+      color: item.color,
+      label: item.label,
+      pct: ((item.value / total) * 100).toFixed(1),
+    });
   }
 
   return (
     <svg width={size + 20} height={size + 20} viewBox={`-10 -10 ${size + 20} ${size + 20}`}>
       {slices.map((s, i) => (
-        <path key={i} d={s.path} fill={s.color} fillOpacity={0.75} stroke={C.card} strokeWidth={1.5} />
+        <path key={i} d={s.path} fill={s.color} fillOpacity={0.8} stroke={C.card} strokeWidth={2}>
+          <title>{s.label}: {s.pct}%</title>
+        </path>
       ))}
     </svg>
   );
 }
 
-const MODEL_PALETTE = [C.link, C.cc, C.cr, C.out, C.medium, '#fb8f1e', '#d1572a', '#218bff'];
+const MODEL_PALETTE = [C.link, C.cc, C.cr, C.out, C.medium, '#D98E4A', '#CE7350', '#6FA3D9'];
 const modelColorMap = new Map<string, string>();
 let modelColorIdx = 0;
 
 function TrendChart({ trends }: { trends: { day: string; tokens: number; cost: number; sessions: number; avgCacheHit: number }[] }) {
   const W = 700, H = 200, PAD = 45;
   const maxCost = Math.max(...trends.map((t) => t.cost), 0.01);
-  const maxTokens = Math.max(...trends.map((t) => t.tokens), 1);
   const x = (i: number) => PAD + (i / (trends.length - 1 || 1)) * (W - PAD * 2);
   const yCost = (v: number) => H - PAD - (v / maxCost) * (H - PAD * 2);
   const costLine = trends.map((t, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${yCost(t.cost)}`).join(' ');
+  const areaPath = `${costLine} L${x(trends.length - 1)},${H - PAD} L${x(0)},${H - PAD} Z`;
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
-        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={C.axis} />
-        <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke={C.axis} />
-        <path d={costLine} fill="none" stroke={C.out} strokeWidth={2} />
+    <div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line key={f} x1={PAD} y1={PAD + (H - PAD * 2) * f} x2={W - PAD} y2={PAD + (H - PAD * 2) * f} stroke={C.grid} strokeWidth={1} />
+        ))}
+        <path d={areaPath} fill={C.out} fillOpacity={0.12} />
+        <path d={costLine} fill="none" stroke={C.out} strokeWidth={2} strokeLinejoin="round" />
         {trends.map((t, i) => (
-          <circle key={t.day} cx={x(i)} cy={yCost(t.cost)} r={3} fill={C.out}>
-            <title>{t.day}: ¥{t.cost.toFixed(4)}, {fmtTokens(t.tokens)}, {t.sessions}会话</title>
+          <circle key={t.day} cx={x(i)} cy={yCost(t.cost)} r={3.5} fill={C.out} stroke={C.card} strokeWidth={1.5}>
+            <title>{t.day}: ¥{t.cost.toFixed(4)}, {fmtTokens(t.tokens)}, {t.sessions} 会话</title>
           </circle>
         ))}
+        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke={C.axis} />
+        <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke={C.axis} />
         <text x={PAD} y={PAD - 6} fill={C.sub} fontSize={10}>¥{maxCost.toFixed(2)}</text>
         <text x={PAD} y={H - PAD + 14} fill={C.sub} fontSize={10}>{trends[0]?.day || ''}</text>
         <text x={W - PAD} y={H - PAD + 14} fill={C.sub} fontSize={10} textAnchor="end">{trends[trends.length - 1]?.day || ''}</text>
       </svg>
-      <div style={{ display: 'flex', gap: 16, fontSize: 11, marginTop: 6, color: C.sub }}>
-        <span><span style={{ color: C.out, fontWeight: 600 }}>━</span> Daily Cost（¥）</span>
-        <span>共 {trends.length} 天</span>
+      <div style={{ display: 'flex', gap: SP.lg, fontSize: FS.cap, marginTop: SP.xs, color: C.sub }}>
+        <span><span style={{ color: C.out, fontWeight: 600 }}>━</span> 每日成本(¥)</span>
       </div>
     </div>
   );

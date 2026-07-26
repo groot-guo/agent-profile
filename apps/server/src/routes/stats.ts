@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { db, getModelContext } from '../db';
+import { db } from '../db';
 import { SESSION_COLS } from './shared';
 
 interface StatsOverview {
@@ -59,7 +59,7 @@ function extractModel(sessions: { id: string }[]): Map<string, { count: number; 
   return models;
 }
 
-function buildLogBins(values: number[], config: { label: string; thresholds: number[] }[]): { bin: string; min: number; max: number | null; count: number }[] {
+function buildLogBins(values: number[], config: { label: string; thresholds: [number, number | null] }[]): { bin: string; min: number; max: number | null; count: number }[] {
   const bins = config.map((c) => ({ bin: c.label, min: c.thresholds[0], max: c.thresholds[1] ?? null, count: 0 }));
   for (const v of values) {
     for (let i = 0; i < config.length; i++) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { C, R } from './theme';
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<string>('light');
@@ -19,14 +20,11 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
+      data-tip={theme === 'dark' ? '切换到浅色' : '切换到深色'}
       style={{
-        padding: '4px 12px',
-        fontSize: 13,
-        background: 'var(--c-card)',
-        border: '1px solid var(--c-border)',
-        borderRadius: 6,
-        cursor: 'pointer',
-        color: 'var(--c-text)',
+        width: 30, height: 30, fontSize: 14,
+        background: 'transparent', border: `1px solid ${C.border}`, borderRadius: R.pill,
+        cursor: 'pointer', color: C.sub, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
       {theme === 'dark' ? '☀️' : '🌙'}

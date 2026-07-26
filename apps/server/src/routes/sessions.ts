@@ -1,7 +1,65 @@
-import { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, analyzeToolParams, calcEfficiencyScore, diagnoseSessionSync, type SessionDetail, type SessionSummary } from '@agent-profile/core';
+import { execFileSync } from 'node:child_process';
+import { analyzeCostAttribution, analyzeEfficiency, analyzePerformance, analyzeToolParams, calcEfficiencyScore, diagnoseSessionSync, type DiagnosisResult, type EfficiencyScore, type SessionDetail, type SessionSummary, type Span } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import { db, getModelContext, getPricing } from '../db';
+import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
+
+interface GitCommit {
+  hash: string;
+  message: string;
+  date: string;
+  author: string;
+}
+
+function scoreSession(session: SessionSummary, spans: Span[], diagnosis?: Pick<DiagnosisResult, 'totalWastedCost'>): EfficiencyScore {
+  const efficiency = analyzeEfficiency(spans);
+  const result = diagnosis || diagnoseSessionSync(
+    { ...session, spans } as SessionDetail,
+    { pricingLookup: getPricing, contextWindowLookup: getModelContext },
+  );
+  const totalTokens = session.inputTokens + session.cacheCreationTokens + session.cacheReadTokens + session.outputTokens;
+  return calcEfficiencyScore(efficiency, session.cacheHitRate, totalTokens, session.outputTokens, session.totalCost, result.totalWastedCost);
+}
+
+function loadSpansForSessions(sessionIds: string[]): Map<string, Span[]> {
+  const spansBySession = new Map<string, Span[]>();
+  if (sessionIds.length === 0) return spansBySession;
+  const placeholders = sessionIds.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id IN (${placeholders}) ORDER BY start_time ASC`)
+    .all(...sessionIds) as Record<string, unknown>[];
+  for (const span of rows.map(parseSpanRow)) {
+    const spans = spansBySession.get(span.sessionId) || [];
+    spans.push(span);
+    spansBySession.set(span.sessionId, spans);
+  }
+  return spansBySession;
+}
+
+function findAssociatedCommits(session: Pick<SessionSummary, 'cwd' | 'startTime' | 'endTime'>): { commits: GitCommit[]; error?: string } {
+  if (!session.cwd) return { commits: [] };
+  try {
+    const after = new Date(session.startTime - 3_600_000).toISOString();
+    const before = new Date((session.endTime || session.startTime) + 3_600_000).toISOString();
+    const output = execFileSync(
+      'git',
+      ['-C', session.cwd, 'log', '--format=%H%x1f%s%x1f%aI%x1f%an%x1e', `--after=${after}`, `--before=${before}`, '--no-merges'],
+      { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    const commits = output.split('\x1e').filter(Boolean).flatMap((record) => {
+      const [hash, message, date, author] = record.split('\x1f');
+      return hash && message && date && author ? [{ hash, message, date, author }] : [];
+    });
+    return { commits };
+  } catch {
+    return { commits: [], error: 'git command failed (cwd may not be a git repo)' };
+  }
+}
+
+function csvCell(value: unknown): string {
+  const text = value == null ? '' : typeof value === 'string' ? value : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
 
 export function registerSessionRoutes(app: FastifyInstance) {
   app.get('/api/sessions', async () => {
@@ -71,6 +129,58 @@ export function registerSessionRoutes(app: FastifyInstance) {
     return rows.map((r) => ({ ...r, contextWindow: getModelContext(r.model) ?? null }));
   });
 
+  // Detail-page data is derived from the same span set. Serve it in one read so
+  // loading a large session does not repeat the full spans query eight times.
+  app.get<{ Params: { id: string } }>('/api/session/:id/analysis', async (req, reply) => {
+    const session = db
+      .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`)
+      .get(req.params.id) as SessionSummary | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    const rows = db
+      .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
+      .all(req.params.id) as Record<string, unknown>[];
+    const spans = rows.map(parseSpanRow);
+    const detail = { ...session, spans } as SessionDetail;
+    const diagnosis = await diagnoseDetail(detail);
+    const efficiency = analyzeEfficiency(spans);
+    const score = scoreSession(session, spans, diagnosis);
+
+    if (session.cwd) {
+      const cohort = db.prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE cwd = ?`).all(session.cwd) as SessionSummary[];
+      const spansBySession = loadSpansForSessions(cohort.map((candidate) => candidate.id));
+      const cohortScores = cohort.map((candidate) => scoreSession(candidate, spansBySession.get(candidate.id) || []).score);
+      score.cohortSize = cohortScores.length;
+      score.percentile = cohortScores.length > 1
+        ? Math.round(cohortScores.filter((candidateScore) => candidateScore <= score.score).length / cohortScores.length * 100)
+        : undefined;
+    }
+
+    const context = spans
+      .filter((span) => span.type === 'llm_turn')
+      .map((span) => ({
+        startTime: span.startTime,
+        contextTokens: span.contextTokens,
+        inputTokens: span.inputTokens,
+        cacheCreationTokens: span.cacheCreationTokens,
+        cacheReadTokens: span.cacheReadTokens,
+        outputTokens: span.outputTokens,
+        model: span.model,
+        contextWindow: getModelContext(span.model) ?? null,
+      }));
+
+    return {
+      session: detail,
+      context,
+      diagnosis,
+      efficiency,
+      costAttribution: analyzeCostAttribution(spans, diagnosis.totalWastedCost),
+      score,
+      commits: findAssociatedCommits(session).commits,
+      performance: analyzePerformance(spans),
+      toolParams: analyzeToolParams(spans),
+    };
+  });
+
   // 效率指标
   app.get<{ Params: { id: string } }>('/api/session/:id/efficiency', async (req, reply) => {
     const session = db
@@ -109,21 +219,18 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
       .all(req.params.id) as Record<string, unknown>[];
     const spans = rows.map(parseSpanRow);
-    const eff = analyzeEfficiency(spans);
-    const detail = { ...session, spans } as SessionDetail;
-    const diag = diagnoseSessionSync(detail, { pricingLookup: getPricing, contextWindowLookup: getModelContext });
-    const totalTokens = session.inputTokens + session.cacheCreationTokens + session.cacheReadTokens + session.outputTokens;
-    const score = calcEfficiencyScore(eff, session.cacheHitRate, totalTokens, session.outputTokens, session.totalCost, diag.totalWastedCost);
-    // Compute percentile among all sessions
-    const allScores = db.prepare(`
-      SELECT id, total_cost as totalCost, cache_hit_rate as cacheHitRate,
-             input_tokens + cache_creation_tokens + cache_read_tokens + output_tokens as totalTokens,
-             output_tokens as outputTokens
-      FROM sessions
-    `).all() as { id: string; totalCost: number; cacheHitRate: number; totalTokens: number; outputTokens: number }[];
-    // Quick percentile: count how many sessions have lower cache hit rate as proxy
-    const betterCount = allScores.filter((s) => s.cacheHitRate > session.cacheHitRate).length;
-    score.percentile = allScores.length > 1 ? Math.round((1 - betterCount / allScores.length) * 100) : undefined;
+    const score = scoreSession(session, spans);
+    // A score is comparable only within the same project. Load the cohort's
+    // spans in one query, then rank by the same composite score shown in UI.
+    if (session.cwd) {
+      const cohort = db.prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE cwd = ?`).all(session.cwd) as SessionSummary[];
+      const spansBySession = loadSpansForSessions(cohort.map((candidate) => candidate.id));
+      const cohortScores = cohort.map((candidate) => scoreSession(candidate, spansBySession.get(candidate.id) || []).score);
+      score.cohortSize = cohortScores.length;
+      score.percentile = cohortScores.length > 1
+        ? Math.round(cohortScores.filter((candidateScore) => candidateScore <= score.score).length / cohortScores.length * 100)
+        : undefined;
+    }
     return score;
   });
 
@@ -164,9 +271,15 @@ export function registerSessionRoutes(app: FastifyInstance) {
     const format = req.query.format || 'json';
 
     if (format === 'csv') {
-      const headers = 'id,type,name,startTime,endTime,inputTokens,ccTokens,crTokens,outputTokens,contextTokens,outputBytes,model,cost,isError,isSidechain';
+      const headers = 'sessionId,sessionName,sessionAgent,sessionStartTime,sessionEndTime,sessionInputTokens,sessionCacheCreationTokens,sessionCacheReadTokens,sessionOutputTokens,sessionTotalCost,spanId,spanType,spanName,spanStartTime,spanEndTime,spanInputTokens,spanCacheCreationTokens,spanCacheReadTokens,spanOutputTokens,spanContextTokens,spanOutputBytes,spanModel,spanCost,spanIsError,spanIsSidechain,spanMetadata';
       const lines = spans.map((s) =>
-        [s.id, s.type, s.name, s.startTime, s.endTime || '', s.inputTokens, s.cacheCreationTokens, s.cacheReadTokens, s.outputTokens, s.contextTokens, s.outputBytes, s.model || '', s.cost.toFixed(6), s.isError ? '1' : '0', s.isSidechain ? '1' : '0'].join(','),
+        [
+          session.id, session.name, session.agent, session.startTime, session.endTime,
+          session.inputTokens, session.cacheCreationTokens, session.cacheReadTokens, session.outputTokens, session.totalCost.toFixed(6),
+          s.id, s.type, s.name, s.startTime, s.endTime, s.inputTokens, s.cacheCreationTokens, s.cacheReadTokens,
+          s.outputTokens, s.contextTokens, s.outputBytes, s.model, s.cost.toFixed(6), s.isError ? '1' : '0', s.isSidechain ? '1' : '0',
+          s.metadata ? JSON.stringify(s.metadata) : '',
+        ].map(csvCell).join(','),
       );
       return reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', `attachment; filename="session-${session.id.slice(0, 8)}.csv"`).send([headers, ...lines].join('\n'));
     }
@@ -180,25 +293,7 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .prepare(`SELECT id, start_time as startTime, end_time as endTime, cwd FROM sessions WHERE id = ?`)
       .get(req.params.id) as { id: string; startTime: number; endTime?: number; cwd?: string } | undefined;
     if (!session) return reply.status(404).send({ error: 'session not found' });
-    if (!session.cwd) return { commits: [], error: 'no cwd for this session' };
-
-    const { execSync } = await import('node:child_process');
-    try {
-      const after = new Date(session.startTime - 3600000).toISOString(); // 1h before session start
-      const before = new Date((session.endTime || session.startTime) + 3600000).toISOString(); // 1h after session end
-      const output = execSync(
-        `git -C "${session.cwd}" log --format="%H|%s|%ai|%an" --after="${after}" --before="${before}" --no-merges 2>/dev/null || echo ""`,
-        { encoding: 'utf-8', timeout: 5000 },
-      ).trim();
-      if (!output) return { commits: [] };
-      const commits = output.split('\n').filter(Boolean).map((line) => {
-        const [hash, message, date, author] = line.split('|');
-        return { hash, message, date, author };
-      });
-      return { commits };
-    } catch {
-      return { commits: [], error: 'git command failed (cwd may not be a git repo)' };
-    }
+    return findAssociatedCommits(session);
   });
 
   // Markdown 报告导出

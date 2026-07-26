@@ -5,6 +5,7 @@ import type {
   CostByPhase,
   EfficiencyMetrics,
   FileOperation,
+  LatencyStats,
   ParsedSession,
   PerformanceMetrics,
   Pricing,
@@ -139,12 +140,6 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
     .sort((a, b) => b.total - a.total);
 
   // 2. Thinking/action ratio per turn
-  const thinkingMap = new Map<string, string>();
-  for (const th of thinkings) {
-    if (th.metadata?.thinking && typeof th.metadata.thinking === 'string') {
-      thinkingMap.set(th.id, th.metadata.thinking);
-    }
-  }
   const thinkingActionRatios: ThinkingActionRatio[] = turns.map((turn, i) => {
     // Find thinking spans that are children of this turn
     const childThinkings = thinkings.filter((th) => th.parentId === turn.id);
@@ -191,8 +186,8 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
   }
   const fileOperations = [...fileOps.values()].sort((a, b) => (b.reads + b.edits + b.writes) - (a.reads + a.edits + a.writes));
   const filesRead = fileOperations.filter((f) => f.reads > 0).length;
-  const filesEdited = fileOperations.filter((f) => f.edits > 0 || f.writes > 0).length;
-  const readToEditRate = filesRead > 0 ? filesEdited / filesRead : 0;
+  const filesReadThenEdited = fileOperations.filter((f) => f.reads > 0 && (f.edits > 0 || f.writes > 0)).length;
+  const readToEditRate = filesRead > 0 ? filesReadThenEdited / filesRead : 0;
 
   return {
     toolSuccessRates,
@@ -206,7 +201,8 @@ export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
 
 const CAT_LABEL: Record<string, string> = {
   file: '文件操作', command: '命令执行', network: '网络',
-  interactive: '用户交互', mcp: 'MCP', orchestration: '编排', meta: '元工具', other: '其他',
+  interactive: '用户交互', mcp: 'MCP', orchestration: '编排', meta: '元工具',
+  unattributed: '无工具调用', other: '其他',
 };
 
 const PHASE_NAMES = ['探索期', '实现期', '验证期'];
@@ -218,6 +214,7 @@ export interface EfficiencyScore {
   toolSuccess: number; // overall tool success rate
   wasteAvoidance: number; // 1 - wastedCost/totalCost
   percentile?: number; // rank among all sessions (set by caller)
+  cohortSize?: number;
 }
 
 export function calcEfficiencyScore(
@@ -230,9 +227,9 @@ export function calcEfficiencyScore(
 ): EfficiencyScore {
   const tokenEfficiency = totalTokens > 0 ? Math.min(1, outputTokens / totalTokens * 3) : 0;
   const cacheUtilization = cacheHitRate;
-  const toolSuccess = efficiency.toolSuccessRates.length > 0
-    ? efficiency.toolSuccessRates.reduce((s, t) => s + t.successRate, 0) / efficiency.toolSuccessRates.length
-    : 1;
+  const totalToolCalls = efficiency.toolSuccessRates.reduce((sum, tool) => sum + tool.total, 0);
+  const totalToolErrors = efficiency.toolSuccessRates.reduce((sum, tool) => sum + tool.errors, 0);
+  const toolSuccess = totalToolCalls > 0 ? (totalToolCalls - totalToolErrors) / totalToolCalls : 1;
   const wasteAvoidance = totalCost > 0 && wastedCost != null
     ? 1 - Math.min(1, wastedCost / totalCost)
     : 1;
@@ -259,47 +256,44 @@ export function analyzeCostAttribution(
   const totalCost = turns.reduce((s, t) => s + (t.cost || 0), 0);
 
   // 1. Cost by tool category
-  const catCost = new Map<string, { cost: number; turnCount: number; toolCount: number }>();
-  for (const tool of tools) {
-    const cat = catOf(tool.name);
-    const parentTurn = turns.find((t) => t.id === tool.parentId);
-    const turnCost = parentTurn?.cost || 0;
-    const entry = catCost.get(cat) || { cost: 0, turnCount: 0, toolCount: 0 };
-    entry.cost += turnCost;
-    entry.toolCount++;
-    if (parentTurn && !catCost.has(cat)) entry.turnCount++;
-    catCost.set(cat, entry);
-  }
-  // Count unique parent turns per category
-  for (const tool of tools) {
-    const cat = catOf(tool.name);
-    const entry = catCost.get(cat);
-    if (entry && tool.parentId) {
-      const parentTurn = turns.find((t) => t.id === tool.parentId);
-      if (parentTurn) {
-        // dedup turn counting
-      }
-    }
-  }
-  // Rebuild with deduped turn counts
-  const catTurns = new Map<string, Set<string>>();
+  const catCost = new Map<string, { cost: number; turnIds: Set<string>; toolCount: number }>();
+  const toolsByTurn = new Map<string, Span[]>();
   for (const tool of tools) {
     if (!tool.parentId) continue;
-    const cat = catOf(tool.name);
-    const set = catTurns.get(cat) || new Set();
-    set.add(tool.parentId);
-    catTurns.set(cat, set);
+    const children = toolsByTurn.get(tool.parentId) || [];
+    children.push(tool);
+    toolsByTurn.set(tool.parentId, children);
   }
-  for (const [cat, turnSet] of catTurns) {
-    const entry = catCost.get(cat);
-    if (entry) entry.turnCount = turnSet.size;
+  const addCategoryCost = (category: string, turn: Span, cost: number, toolCount: number) => {
+    const entry = catCost.get(category) || { cost: 0, turnIds: new Set<string>(), toolCount: 0 };
+    entry.cost += cost;
+    entry.turnIds.add(turn.id);
+    entry.toolCount += toolCount;
+    catCost.set(category, entry);
+  };
+  for (const turn of turns) {
+    const childTools = toolsByTurn.get(turn.id) || [];
+    if (childTools.length === 0) {
+      addCategoryCost('unattributed', turn, turn.cost || 0, 0);
+      continue;
+    }
+    const toolsByCategory = new Map<string, number>();
+    for (const tool of childTools) {
+      const category = catOf(tool.name);
+      toolsByCategory.set(category, (toolsByCategory.get(category) || 0) + 1);
+    }
+    for (const [category, toolCount] of toolsByCategory) {
+      // A turn's LLM cost is distributed by its tool-call mix, so category
+      // totals always reconcile exactly with the session total.
+      addCategoryCost(category, turn, (turn.cost || 0) * toolCount / childTools.length, toolCount);
+    }
   }
 
   const costByCategory: CostByCategory[] = [...catCost.entries()]
     .map(([category, e]) => ({
       category: CAT_LABEL[category] || category,
       cost: e.cost,
-      turnCount: e.turnCount,
+      turnCount: e.turnIds.size,
       toolCount: e.toolCount,
       percentage: totalCost > 0 ? e.cost / totalCost : 0,
     }))

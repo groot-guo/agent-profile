@@ -11,13 +11,16 @@ Task IDs (T5–T15) map to task system (#5–#15).
 | P0 data listing (scanner/parser/analyzer/server/web/demo)     | done                          |
 | P1 quantified diagnosis (7 heuristic rules + API + web)       | done                          |
 | P2.18 read_scope_too_large heuristic                          | done                          |
-| P2.19 LLM interface reserved (designed, not implemented)      | interface done / impl pending |
+| P2.19 LLM semantic diagnosis                                  | done                          |
 | UI light theme + paginated tables + project grouping (by cwd) | done                          |
 | pricing seed (DeepSeek) + typecheck fix                       | done                          |
 | data source                                                   | Claude Code + Codex           |
 | Architecture refactor (async scanner, DB abs path, routes split, config/theme extraction, auto-scan) | done |
 | IDE-style UI (sidebar project tree + dashboard + embed detail) | done |
 | @lobehub/icons (agent & model SVG icons)                      | done |
+| pricing seed + total-cost recompute                            | done |
+| session efficiency, attribution, comparison, trends, export   | done |
+| stability hardening (schema, server types, metric correctness) | done |
 
 ## Batch 1 · Multi-Agent Data Ingestion
 
@@ -161,7 +164,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T14 LlmDiagnoser implementation (P2.19a)
 
-- status: pending (blocked: model/key/sync decision) (blocked: model/key/sync decision)
+- status: done
 - depends: none (interface ready)
 - steps:
   1. implement LlmDiagnoser in server (call LLM API, OpenAI-compatible)
@@ -176,7 +179,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T15 glm-5.2 pricing + totalCost recompute
 
-- status: pending (blocked: user-provided glm-5.2 unit price) (blocked: user-provided glm-5.2 unit price)
+- status: done
 - depends: none
 - steps:
   1. add glm-5.2 to pricing seed (db.ts) once price provided
@@ -185,9 +188,24 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - acceptance: glm-5.2 sessions show cost; pricing change updates totalCost
 - risk: none
 
+## Batch 6 · Stability & Data Correctness
+
+### T36 stability hardening
+
+- status: done
+- scope:
+  1. server TypeScript build: fix nullable parser values, Zed zstd API usage/field aliases, and distribution-bin types
+  2. schema migration: create annotation columns for new databases before querying them; retain additive migration for existing databases
+  3. cost attribution: allocate each LLM turn's cost across its tool categories without double counting; show tool-free turns explicitly
+  4. efficiency metrics: make Read→Edit conversion bounded to 0–100%, weight tool success by calls, and rank efficiency score by the same composite score within a project
+  5. export + Git: CSV escapes fields and includes session aggregates; Git uses `execFileSync` instead of a shell command
+  6. detail performance: one `/api/session/:id/analysis` response replaces repeated full-span reads from eight detail endpoints
+- affected: `apps/server/src/db.ts`, `apps/server/src/routes/{scan,stats,sessions,diagnosis}.ts`, `packages/core/src/{analyzer,types}.ts`, session detail UI and tests
+- acceptance: core tests, server typecheck, and web production build all pass
+
 ## Execution Order
 
-Batch 1 first (agent column foundation). Within: T5 → T6 → T7 → T8. After batch 1, batch 2 (T9–T11) and batch 3 (T12–T13) can parallelize. Batch 4 (T14) blocked on model decision. Batch 5 (T15) blocked on glm price.
+T5–T15 and T36 are complete. Future work should be added as a new task with a status, explicit acceptance criteria, and the verification command used at completion.
 
 ## Orchestration Confirmation Process
 

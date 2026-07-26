@@ -1,17 +1,12 @@
-import type { Pricing } from '@agent-profile/core';
-import Database from 'better-sqlite3';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Pricing } from '@agent-profile/core';
+import Database from 'better-sqlite3';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const db = new Database(resolve(__dirname, '..', 'trace.db'));
 
 db.pragma('journal_mode = WAL');
-
-// Schema migration: add annotation columns if missing
-for (const col of ['tags', 'notes']) {
-  try { db.exec(`ALTER TABLE sessions ADD COLUMN ${col} TEXT DEFAULT ''`); } catch { /* already exists */ }
-}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
@@ -37,6 +32,8 @@ db.exec(`
     avg_context_tokens    INTEGER DEFAULT 0,
     cache_hit_rate        REAL DEFAULT 0,
     message_count         INTEGER DEFAULT 0,
+    tags                  TEXT DEFAULT '',
+    notes                 TEXT DEFAULT '',
     imported_at           INTEGER NOT NULL DEFAULT (unixepoch()*1000)
   );
 
@@ -83,6 +80,16 @@ db.exec(`
     context_window         INTEGER NOT NULL
   );
 `);
+
+// Existing databases predate session annotations. Run this after CREATE TABLE so
+// a brand-new database and an upgraded database have the same schema.
+for (const col of ['tags', 'notes']) {
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN ${col} TEXT DEFAULT ''`);
+  } catch {
+    /* column already exists */
+  }
+}
 
 // 默认定价种子（人民币元/百万 token，官方定价；effective_from=0 表示最早，INSERT OR IGNORE 不覆盖用户手改）
 db.exec(`

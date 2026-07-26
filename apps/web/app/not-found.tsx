@@ -1,10 +1,12 @@
 import Link from 'next/link';
+import { C, FS, SP } from './theme';
 
 export default function NotFound() {
   return (
-    <div style={{ padding: 40, textAlign: 'center' }}>
-      <h2 style={{ fontSize: 20, fontWeight: 600, color: '#1f2328' }}>404 — Page Not Found</h2>
-      <Link href="/" style={{ color: '#0969da', fontSize: 13 }}>← Home</Link>
+    <div style={{ padding: 64, textAlign: 'center' }}>
+      <div style={{ fontSize: 32, fontWeight: 700, color: C.mute }} className="tnum">404</div>
+      <p style={{ fontSize: FS.base, color: C.sub, margin: `${SP.sm}px 0 ${SP.lg}px` }}>页面不存在</p>
+      <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>← 返回会话列表</Link>
     </div>
   );
 }
