@@ -8,3 +8,4 @@ trace.db-shm
 .tmp-ui-*
 .codegraph/
 next-env.d.ts
+packages/core/dist/

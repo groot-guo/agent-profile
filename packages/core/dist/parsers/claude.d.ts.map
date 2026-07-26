@@ -1,1 +1,0 @@
-{"version":3,"file":"claude.d.ts","sourceRoot":"","sources":["../../src/parsers/claude.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAEV,aAAa,EAIb,eAAe,EAEhB,MAAM,UAAU,CAAC;AAoFlB,MAAM,WAAW,YAAY;IAC3B,QAAQ,EAAE,MAAM,CAAC;IACjB,KAAK,CAAC,EAAE,MAAM,CAAC;CAChB;AAID,wBAAgB,eAAe,CAC7B,OAAO,EAAE,eAAe,EAAE,EAC1B,IAAI,EAAE,YAAY,GACjB,aAAa,GAAG,IAAI,CAiJtB"}
