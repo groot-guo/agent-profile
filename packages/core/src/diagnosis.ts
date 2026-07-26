@@ -10,6 +10,10 @@ export type DiagnosisType =
   | 'long_thinking'
   | 'repeated_failure'
   | 'read_scope_too_large'
+  | 'same_param_loop'
+  | 'write_then_read'
+  | 'context_compression'
+  | 'model_downgrade'
   | 'thinking_detour'
   | 'ineffective_exploration'
   | 'tool_off_target';
@@ -47,6 +51,10 @@ export interface DiagnosisThresholds {
   repeatedFailureMin: number; // 同工具连续失败几次算重复试错
   bytesPerToken: number; // 字节→token 估算系数
   readScopeBytes: number; // P2: Read 无 limit 且输出超此字节报"范围过大"
+  sameParamLoopMin: number; // 同工具同参数连续调用几次算循环
+  writeThenReadMaxGap: number; // Write/Edit 后多少个工具内 Read 同一文件算冗余
+  contextCompressionRatio: number; // 上下文下降超过此比例算压缩
+  modelDowngradeCostRatio: number; // 模型切换后 input_price 低于此比例算降级
 }
 
 export const DEFAULT_THRESHOLDS: DiagnosisThresholds = {
@@ -61,6 +69,10 @@ export const DEFAULT_THRESHOLDS: DiagnosisThresholds = {
   repeatedFailureMin: 2,
   bytesPerToken: 4,
   readScopeBytes: 20_000,
+  sameParamLoopMin: 3,
+  writeThenReadMaxGap: 3,
+  contextCompressionRatio: 0.5,
+  modelDowngradeCostRatio: 0.5,
 };
 
 export interface DiagnoseOptions {
@@ -163,6 +175,10 @@ export function diagnoseSessionSync(
     ...detectLongThinking(thinkings, t, costOfTokens),
     ...detectRepeatedFailure(tools, turns, t, costOfTokens),
     ...detectReadScope(tools, t, costOfTokens),
+    ...detectSameParamLoop(tools, t, costOfTokens),
+    ...detectWriteThenRead(tools, t, costOfTokens),
+    ...detectContextCompression(turns, t, costOfTokens),
+    ...detectModelDowngrade(turns, t, costOfTokens, pricingLookup),
   ];
 
   // 排序：severity 优先（high>medium>low），同 severity 内 wastedTokens 降序
@@ -491,6 +507,165 @@ function detectRepeatedFailure(
       suggestion: '失败后先读错误输出定位根因再重试，避免盲目改参数；连续失败时停下分析',
       spanIds: run.map((r) => r.id),
     });
+  }
+  return findings;
+}
+
+// ===== 8. 同参数循环 =====
+function detectSameParamLoop(
+  tools: Span[],
+  t: DiagnosisThresholds,
+  costOfTokens: CostFn,
+): DiagnosisFinding[] {
+  const findings: DiagnosisFinding[] = [];
+  let runStart = -1, runLen = 0;
+  let bestStart = -1, bestLen = 0, bestName = '';
+
+  for (let i = 0; i < tools.length; i++) {
+    const prev = i > 0 ? tools[i - 1] : null;
+    const curr = tools[i];
+    const sameName = prev && curr.name === prev.name;
+    const sameInput = prev && JSON.stringify(curr.metadata?.input) === JSON.stringify(prev.metadata?.input);
+    if (sameName && sameInput) {
+      if (runLen === 0) runStart = i - 1;
+      runLen++;
+      if (runLen > bestLen) { bestLen = runLen; bestStart = runStart; bestName = curr.name; }
+    } else {
+      runLen = 0;
+    }
+  }
+  if (bestLen < t.sameParamLoopMin) return findings;
+
+  const run = tools.slice(bestStart, bestStart + bestLen + 1);
+  const estTok = run.reduce((s, r) => s + estTokens(r.outputBytes || 0, t), 0);
+  const wastedTokens = Math.round(estTok * 0.7); // 70% 是浪费
+  const { cost, unknown } = costOfTokens(wastedTokens, run[0].model);
+  findings.push({
+    type: 'same_param_loop',
+    severity: bestLen >= 5 ? 'high' : 'medium',
+    title: `${bestName} 同参数循环 ${bestLen + 1} 次`,
+    detail: `${bestName} 以相同参数连续调用 ${bestLen + 1} 次，输出约 ${fmtTok(estTok)} token，未改变参数说明可能是无效尝试`,
+    wastedTokens,
+    wastedCost: cost,
+    costUnknown: unknown,
+    suggestion: '检查 agent 是否误判了工具行为；失败后应改变参数而非重复相同调用',
+    spanIds: run.map((r) => r.id),
+  });
+  return findings;
+}
+
+// ===== 9. 写后即读 =====
+const WRITE_TOOLS = new Set(['Write', 'Edit', 'write_to_file', 'replace_in_file']);
+
+function detectWriteThenRead(
+  tools: Span[],
+  t: DiagnosisThresholds,
+  costOfTokens: CostFn,
+): DiagnosisFinding[] {
+  const findings: DiagnosisFinding[] = [];
+  const fileOps: { idx: number; path: string; type: 'write' | 'read' }[] = [];
+
+  for (let i = 0; i < tools.length; i++) {
+    const tool = tools[i];
+    if (WRITE_TOOLS.has(tool.name)) {
+      const path = extractFilePath(tool);
+      if (path) fileOps.push({ idx: i, path, type: 'write' });
+    } else if (READ_TOOLS.has(tool.name)) {
+      const path = extractFilePath(tool);
+      if (path) fileOps.push({ idx: i, path, type: 'read' });
+    }
+  }
+
+  const reported = new Set<string>();
+  for (let i = 0; i < fileOps.length; i++) {
+    if (fileOps[i].type !== 'write') continue;
+    // Look for a Read of the same file within maxGap operations
+    for (let j = i + 1; j < Math.min(fileOps.length, i + 1 + t.writeThenReadMaxGap); j++) {
+      if (fileOps[j].type === 'read' && fileOps[j].path === fileOps[i].path) {
+        const key = `${fileOps[i].path}-${fileOps[i].idx}`;
+        if (reported.has(key)) continue;
+        reported.add(key);
+        const readTool = tools[fileOps[j].idx];
+        const estTok = estTokens(readTool.outputBytes || 0, t);
+        const wastedTokens = Math.round(estTok * 0.5);
+        const { cost, unknown } = costOfTokens(wastedTokens, readTool.model);
+        findings.push({
+          type: 'write_then_read',
+          severity: estTok > 3000 ? 'medium' : 'low',
+          title: `Write 后立即 Read: ${shortPath(fileOps[i].path)}`,
+          detail: `${shortPath(fileOps[i].path)} 先被写入，随后在第 ${j - i} 个操作中被读取（${fmtBytes(readTool.outputBytes || 0)}），写入结果已在上下文中无需重新读取`,
+          wastedTokens,
+          wastedCost: cost,
+          costUnknown: unknown,
+          suggestion: '写入后的内容已在上下文中，无需立即 Read 验证；确实验证时可加 limit 收窄',
+          spanIds: [tools[fileOps[i].idx].id, readTool.id],
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+// ===== 10. 上下文压缩检测 =====
+function detectContextCompression(
+  turns: Span[],
+  t: DiagnosisThresholds,
+  costOfTokens: CostFn,
+): DiagnosisFinding[] {
+  const findings: DiagnosisFinding[] = [];
+  for (let i = 1; i < turns.length; i++) {
+    const prevCtx = turns[i - 1].contextTokens || (turns[i - 1].inputTokens + turns[i - 1].cacheCreationTokens + turns[i - 1].cacheReadTokens);
+    const currCtx = turns[i].contextTokens || (turns[i].inputTokens + turns[i].cacheCreationTokens + turns[i].cacheReadTokens);
+    if (prevCtx <= 0) continue;
+    const dropRatio = (prevCtx - currCtx) / prevCtx;
+    if (dropRatio < t.contextCompressionRatio) continue;
+    const dropped = prevCtx - currCtx;
+    const wastedTokens = Math.round(dropped * 0.3); // 30% 的压缩内容可能仍需重读
+    const { cost, unknown } = costOfTokens(wastedTokens, turns[i].model);
+    findings.push({
+      type: 'context_compression',
+      severity: dropRatio > 0.7 ? 'high' : 'medium',
+      title: `上下文压缩: Turn ${i}→${i + 1} 下降 ${(dropRatio * 100).toFixed(0)}%`,
+      detail: `上下文从 ${fmtTok(prevCtx)} 骤降至 ${fmtTok(currCtx)}（下降 ${(dropRatio * 100).toFixed(0)}%，约 ${fmtTok(dropped)} token），可能触发了上下文压缩，压缩内容后续可能需重读`,
+      wastedTokens,
+      wastedCost: cost,
+      costUnknown: unknown,
+      suggestion: '压缩后确认关键信息仍在上下文中；长会话考虑主动分段以控制上下文大小',
+      spanIds: [turns[i - 1].id, turns[i].id],
+    });
+  }
+  return findings;
+}
+
+// ===== 11. 模型降级 =====
+function detectModelDowngrade(
+  turns: Span[],
+  t: DiagnosisThresholds,
+  costOfTokens: CostFn,
+  pricingLookup: (model?: string) => Pricing | undefined,
+): DiagnosisFinding[] {
+  const findings: DiagnosisFinding[] = [];
+  for (let i = 1; i < turns.length; i++) {
+    const prevModel = turns[i - 1].model;
+    const currModel = turns[i].model;
+    if (!prevModel || !currModel || prevModel === currModel) continue;
+    const prevPricing = pricingLookup(prevModel);
+    const currPricing = pricingLookup(currModel);
+    if (!prevPricing || !currPricing) continue;
+    if (currPricing.inputPrice >= prevPricing.inputPrice * t.modelDowngradeCostRatio) continue;
+    // 模型降级
+    findings.push({
+      type: 'model_downgrade',
+      severity: 'low',
+      title: `模型降级: ${prevModel} → ${currModel}`,
+      detail: `从 ${prevModel}（input ¥${prevPricing.inputPrice}/1M）切换到 ${currModel}（input ¥${currPricing.inputPrice}/1M），后续 ${turns.length - i} 轮使用低价模型`,
+      wastedTokens: 0,
+      wastedCost: 0,
+      costUnknown: false,
+      suggestion: '模型降级为正常 cost 优化手段；确认降级后任务质量无显著下降即可',
+      spanIds: [turns[i - 1].id, turns[i].id],
+    });
+    break; // 只报首次
   }
   return findings;
 }
