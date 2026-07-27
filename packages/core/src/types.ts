@@ -178,6 +178,8 @@ export interface Pricing {
 }
 
 // ===== scan 结果 =====
+export type ScanSkipReason = 'unchanged_revision' | 'not_importable';
+
 export interface ScanResult {
   scanned: number;
   imported: number;
@@ -185,6 +187,7 @@ export interface ScanResult {
   updated: number;
   failed: number;
   sessionIds: string[];
+  skipReasons: Record<ScanSkipReason, number>;
 }
 
 // ===== 效率指标 =====

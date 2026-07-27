@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { type CodexEntry, parseCodexTranscript } from '../parsers/codex';
 
-function rollout(meta: Record<string, unknown>): CodexEntry[] {
+function rollout(
+  meta: Record<string, unknown>,
+  lastTokenUsage: Record<string, number> = {
+    input_tokens: 100,
+    cached_input_tokens: 40,
+    output_tokens: 20,
+    reasoning_output_tokens: 5,
+    total_tokens: 165,
+  },
+): CodexEntry[] {
   return [
     {
       timestamp: '2026-07-26T08:00:00.000Z',
@@ -24,12 +33,7 @@ function rollout(meta: Record<string, unknown>): CodexEntry[] {
       payload: {
         type: 'token_count',
         info: {
-          last_token_usage: {
-            input_tokens: 100,
-            cached_input_tokens: 40,
-            output_tokens: 20,
-            reasoning_output_tokens: 5,
-          },
+          last_token_usage: lastTokenUsage,
         },
       },
     },
@@ -47,6 +51,12 @@ describe('parseCodexTranscript', () => {
     expect(parsed?.spans).toHaveLength(1);
     expect(parsed?.spans[0].sessionId).toBe('thread-top');
     expect(parsed?.spans[0].isSidechain).toBe(false);
+    expect(parsed?.spans[0]).toMatchObject({
+      inputTokens: 100,
+      cacheReadTokens: 40,
+      outputTokens: 25,
+    });
+    expect(parsed?.spans[0].metadata).toBeUndefined();
   });
 
   it('keeps a child rollout distinct and marks every span as Sidechain', () => {
@@ -73,4 +83,32 @@ describe('parseCodexTranscript', () => {
     expect(parsed?.sessionId).toBe('legacy-session');
     expect(parsed?.spans[0].isSidechain).toBe(false);
   });
+
+  it('uses total_tokens when Codex reports no classified token fields', () => {
+    const parsed = parseCodexTranscript(
+      rollout(
+        { id: 'thread-total-only', session_id: 'thread-total-only' },
+        {
+          input_tokens: 0,
+          cached_input_tokens: 0,
+          output_tokens: 0,
+          reasoning_output_tokens: 0,
+          total_tokens: 1_234,
+        },
+      ),
+      { filePath: '/codex/rollout-total-only.jsonl' },
+    );
+
+    expect(parsed?.spans).toHaveLength(1);
+    expect(parsed?.spans[0]).toMatchObject({
+      inputTokens: 1_234,
+      cacheReadTokens: 0,
+      outputTokens: 0,
+      metadata: {
+        tokenUsageSource: 'total_tokens_fallback',
+        tokenUsageClassified: false,
+      },
+    });
+  });
+
 });

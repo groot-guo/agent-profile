@@ -178,6 +178,7 @@ export function parseCodexTranscript(
     let inputTokens = 0,
       cacheReadTokens = 0,
       outputTokens = 0;
+    let tokenUsageFallback = false;
     for (let i = turnEntries.length - 1; i >= 0; i--) {
       const e = turnEntries[i];
       if (e.type === 'event_msg' && e.payload && e.payload.type === 'token_count') {
@@ -188,6 +189,17 @@ export function parseCodexTranscript(
           inputTokens = lastUsage.input_tokens || 0;
           cacheReadTokens = lastUsage.cached_input_tokens || 0;
           outputTokens = (lastUsage.output_tokens || 0) + (lastUsage.reasoning_output_tokens || 0);
+          // codex 某些 turn 的分类 token 全 0 但 total_tokens 有值（未分类的累计量），
+          // 回退到 total 作为 input，避免该 turn 被记成零 token
+          if (
+            inputTokens === 0 &&
+            cacheReadTokens === 0 &&
+            outputTokens === 0 &&
+            lastUsage.total_tokens
+          ) {
+            inputTokens = lastUsage.total_tokens;
+            tokenUsageFallback = true;
+          }
         }
         break;
       }
@@ -207,6 +219,9 @@ export function parseCodexTranscript(
         outputTokens,
         model,
         isSidechain,
+        metadata: tokenUsageFallback
+          ? { tokenUsageSource: 'total_tokens_fallback', tokenUsageClassified: false }
+          : undefined,
       }),
     );
 
@@ -293,6 +308,7 @@ export function parseCodexTranscript(
     }
   }
 
+  if (spans.length === 0) return null;
   return {
     sessionId,
     meta: {

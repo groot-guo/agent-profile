@@ -230,6 +230,7 @@ export function parseTranscript(
     }
   }
 
+  if (spans.length === 0) return null;
   return {
     sessionId: sid,
     meta: {

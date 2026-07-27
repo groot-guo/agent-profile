@@ -227,6 +227,7 @@ export function parseMiMoSession(
     }
   }
 
+  if (spans.length === 0) return null;
   return {
     sessionId: sid,
     meta: {

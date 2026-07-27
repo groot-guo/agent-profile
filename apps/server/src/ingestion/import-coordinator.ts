@@ -14,18 +14,24 @@ export async function importFromSource(
     updated: 0,
     failed: 0,
     sessionIds: [],
+    skipReasons: { unchanged_revision: 0, not_importable: 0 },
+  };
+
+  const skip = (reason: keyof ScanResult['skipReasons']) => {
+    result.skipped++;
+    result.skipReasons[reason]++;
   };
 
   for (const item of items) {
     try {
       if (item.sessionId && repository.isCurrent(item.sessionId, item.revision)) {
-        result.skipped++;
+        skip('unchanged_revision');
         continue;
       }
 
       const loaded = await item.load();
       if (!loaded) {
-        result.skipped++;
+        skip('not_importable');
         continue;
       }
 
@@ -36,7 +42,7 @@ export async function importFromSource(
         stored.kind === item.revision.kind &&
         stored.fingerprint === item.revision.fingerprint
       ) {
-        result.skipped++;
+        skip('unchanged_revision');
         continue;
       }
 

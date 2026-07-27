@@ -81,12 +81,14 @@ describe('session ingestion boundary', () => {
       updated: 0,
       skipped: 0,
       failed: 0,
+      skipReasons: { unchanged_revision: 0, not_importable: 0 },
     });
     expect(await importFromSource(adapter, repository)).toMatchObject({
       imported: 0,
       updated: 0,
       skipped: 1,
       failed: 0,
+      skipReasons: { unchanged_revision: 1, not_importable: 0 },
     });
     expect(loads).toBe(1);
 
@@ -117,6 +119,26 @@ describe('session ingestion boundary', () => {
       updated: 0,
       skipped: 0,
       failed: 1,
+      skipReasons: { unchanged_revision: 0, not_importable: 0 },
+    });
+
+    const notImportableAdapter: SourceAdapter = {
+      kind: 'fixture',
+      discover: async () => [
+        {
+          key: 'empty',
+          revision: { kind: 'fixture', updatedAt: 4, fingerprint: 'empty' },
+          load: async () => null,
+        },
+      ],
+    };
+    expect(await importFromSource(notImportableAdapter, repository)).toMatchObject({
+      scanned: 1,
+      imported: 0,
+      updated: 0,
+      skipped: 1,
+      failed: 0,
+      skipReasons: { unchanged_revision: 0, not_importable: 1 },
     });
     database.close();
   });
@@ -297,7 +319,18 @@ function createZedFixture(path: string): void {
       '2026-07-26T00:00:00Z',
       '2026-07-26T00:00:00Z',
       'opaque',
-      Buffer.from('not-ndjson'),
+      Buffer.from(
+        JSON.stringify({
+          model: { provider: 'fixture', model: 'fixture-model' },
+          request_token_usage: {
+            'zed-request': { input_tokens: 10, output_tokens: 5 },
+          },
+          messages: [
+            { User: { id: 'zed-request', content: [{ Text: 'fixture prompt' }] } },
+            { Agent: { content: [{ Text: 'fixture answer' }], tool_results: {} } },
+          ],
+        }),
+      ),
     );
   database.close();
 }
