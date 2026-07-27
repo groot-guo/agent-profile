@@ -27,6 +27,8 @@ interface StatsData {
   byProject: { cwd: string; sessions: number; totalTokens: number; totalCost: number }[];
   byModel: {
     model: string;
+    kind: 'model' | 'provider_only' | 'unknown';
+    rawModels: string[];
     sessions: number;
     totalInputTokens: number;
     totalOutputTokens: number;
@@ -35,7 +37,13 @@ interface StatsData {
   distribution: {
     costBins: { bin: string; min: number; max: number | null; count: number }[];
     tokenBins: { bin: string; min: number; max: number | null; count: number }[];
-    modelDistribution: { model: string; count: number; tokens: number }[];
+    modelDistribution: {
+      model: string;
+      kind: 'model' | 'provider_only' | 'unknown';
+      rawModels: string[];
+      count: number;
+      tokens: number;
+    }[];
     agentDistribution: { agent: string; count: number; tokens: number }[];
   };
   baseline?: {
@@ -269,7 +277,7 @@ export default function StatsPage() {
               >
                 <span
                   className="clamp1"
-                  title={m.model}
+                  title={m.rawModels.join('\n')}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -279,6 +287,11 @@ export default function StatsPage() {
                   }}
                 >
                   {getModelIcon(m.model, 14)} {m.model}
+                  {m.kind !== 'model' && (
+                    <span style={{ color: C.mute, fontSize: FS.cap }}>
+                      {m.kind === 'provider_only' ? 'provider' : '未归一'}
+                    </span>
+                  )}
                 </span>
                 <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
                   {m.sessions} 轮 · {fmtTokens(m.totalInputTokens)} · ¥{m.totalCost.toFixed(4)}

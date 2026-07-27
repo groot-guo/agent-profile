@@ -2323,18 +2323,58 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T68 canonical model identity and statistics grouping
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
 - purpose: make model identification, pricing lookup, and statistics grouping
   use a stable source-faithful canonical identity without merging materially
   distinct models or treating provider-only evidence as a specific model
-- scope: normalize observed aliases at ingestion/aggregation boundaries; expose
-  unknown/provider-only coverage explicitly; add grouped-statistics regressions
+- scope:
+  1. add a pure model-identity contract that distinguishes a canonical model,
+     a safe known alias, a provider-only value, and an unknown/raw value
+  2. aggregate Stats model groups by that contract while retaining source raw
+     labels/alias coverage for inspection
+  3. ensure pricing continues to use only the observed source model string;
+     statistics normalization must not create a trusted cost for an unpriced
+     alias or provider-only identity
+  4. add model grouping regressions for case/provider-prefix aliases, distinct
+     versions, provider-only evidence, and unknown values
+- assumptions and risks:
+  - only explicit equivalences supported by observed source/vendor naming are
+    canonicalized; version/date/mode suffixes remain distinct unless proven
+  - persisted raw Span model values remain source evidence; this Task does not
+    rewrite historical Sessions or alter pricing rows
 - acceptance: model tables and distributions have deterministic non-duplicated
-  labels, unknown identities remain visible, and pricing remains source/time
-  faithful
+  labels, provider-only/unknown identities remain visible, and pricing remains
+  source/time faithful
 - verification plan: core/server aggregation tests, representative source
-  fixtures, build/lint, and documentation update
+  fixtures, API response inspection, build/lint, and documentation update
 - documentation plan: update `ARCHITECTURE.md`, `docs/stats.md`, and this Task
+- implementation:
+  - added the pure `identifyModel` presentation contract with explicit aliases
+    only; it groups case/provider-prefix DeepSeek aliases and observed GLM
+    hyphen aliases, while version/mode values such as `glm-5-2-origin` remain
+    raw unknown identities
+  - changed the set-based dashboard/Stats model aggregation to group by that
+    contract and return `kind` plus `rawModels` for inspectable alias coverage
+  - updated the Stats model table to label provider-only and unnormalized groups
+    without hiding their raw source values in the tooltip
+  - pricing and persisted Span model strings remain unchanged
+- verification:
+  - model-identity tests — passed: explicit aliases group; provider-only,
+    unknown, and absent identities remain distinct
+  - Server aggregation tests — passed: 9 files / 29 tests; verifies alias
+    grouping and provider/unknown separation while retaining the two-query path
+  - `pnpm --filter trace-server build` and
+    `pnpm --filter agent-profile-web build` — passed
+- completion:
+  - changed files: `packages/core/src/model-identity.ts`, its test and export,
+    `apps/server/src/routes/stats.ts`, statistics aggregation tests,
+    `apps/web/app/stats/page.tsx`, `ARCHITECTURE.md`, `docs/stats.md`, and
+    `docs/roadmap.md`
+  - result: Stats no longer displays safe aliases as separate models, provider
+    names are not presented as concrete models, and unknown pricing remains
+    visibly unknown
 
 ### T69 statistics trend inspection and profile-card layout consistency
 

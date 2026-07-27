@@ -27,6 +27,14 @@ calling `/api/recompute-cost` recalculates them with calculator `v1`.
 
 ## Grouped statistics
 
+Model groups use a presentation-only identity contract. Explicit case and
+provider-prefix aliases such as `DeepSeek-V4-Flash` and
+`deepseek-ai/DeepSeek-V4-Pro` are grouped with their canonical model and retain
+their observed raw labels in the API response. Provider-only values (for
+example `litellm`) are labeled as not providing a concrete model; unrecognized
+versions/modes remain separate. This grouping never changes the persisted Span
+model or makes an unpriced raw label eligible for a canonical model's price.
+
 | Dimension | Current metrics |
 | --- | --- |
 | Agent | session count, tokens, cost, average cache-hit rate |

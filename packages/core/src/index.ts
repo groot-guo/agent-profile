@@ -20,6 +20,8 @@ export type {
   Severity,
 } from './diagnosis';
 export { DEFAULT_THRESHOLDS, diagnoseSession, diagnoseSessionSync } from './diagnosis';
+export type { ModelIdentity, ModelIdentityKind } from './model-identity';
+export { identifyModel } from './model-identity';
 export type { ParseOptions } from './parsers/claude';
 export { parseTranscript } from './parsers/claude';
 export type { CodexEntry, CodexParseOptions } from './parsers/codex';

@@ -1,3 +1,4 @@
+import { identifyModel, type ModelIdentityKind } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { db } from '../db';
@@ -31,6 +32,8 @@ interface ProjectStats {
 
 interface ModelStats {
   model: string;
+  kind: ModelIdentityKind;
+  rawModels: string[];
   sessions: number;
   totalInputTokens: number;
   totalOutputTokens: number;
@@ -46,7 +49,13 @@ interface ToolFrequency {
 interface DistributionData {
   costBins: { bin: string; min: number; max: number | null; count: number }[];
   tokenBins: { bin: string; min: number; max: number | null; count: number }[];
-  modelDistribution: { model: string; count: number; tokens: number }[];
+  modelDistribution: {
+    model: string;
+    kind: ModelIdentityKind;
+    rawModels: string[];
+    count: number;
+    tokens: number;
+  }[];
   agentDistribution: { agent: string; count: number; tokens: number }[];
 }
 
@@ -86,8 +95,30 @@ export function loadDashboardSpanAggregates(database: StatsQueryConnection = db)
        LIMIT 15`,
     )
     .all() as ToolFrequency[];
+  const modelMap = new Map<
+    string,
+    (typeof modelRows)[number] & { model: string; kind: ModelIdentityKind; rawModels: string[] }
+  >();
+  for (const row of modelRows) {
+    const identity = identifyModel(row.model);
+    const existing = modelMap.get(identity.key);
+    if (existing) {
+      existing.count += row.count;
+      existing.inputTokens += row.inputTokens;
+      existing.outputTokens += row.outputTokens;
+      existing.cost += row.cost;
+      if (!existing.rawModels.includes(row.model)) existing.rawModels.push(row.model);
+    } else {
+      modelMap.set(identity.key, {
+        ...row,
+        model: identity.label,
+        kind: identity.kind,
+        rawModels: [row.model],
+      });
+    }
+  }
   return {
-    modelMap: new Map(modelRows.map((row) => [row.model, row])),
+    modelMap,
     recentTools,
   };
 }
@@ -236,6 +267,8 @@ export function registerStatsRoutes(app: FastifyInstance) {
     const byModel: ModelStats[] = [...modelMap.entries()]
       .map(([model, e]) => ({
         model,
+        kind: e.kind,
+        rawModels: e.rawModels,
         sessions: e.count,
         totalInputTokens: e.inputTokens,
         totalOutputTokens: e.outputTokens,
@@ -274,6 +307,8 @@ export function registerStatsRoutes(app: FastifyInstance) {
     const modelDist = [...modelMap.entries()]
       .map(([model, e]) => ({
         model,
+        kind: e.kind,
+        rawModels: e.rawModels,
         count: e.count,
         tokens: e.inputTokens + e.outputTokens,
       }))

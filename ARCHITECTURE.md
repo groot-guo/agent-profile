@@ -158,6 +158,10 @@ from available source histories when recovery is necessary.
   `costCurrency`, `pricingEffectiveFrom`, `costCalculatedAt`, and
   `costCalculatorVersion` make the derived value reproducible. Unknown pricing
   is surfaced as unknown rather than silently estimated as a known bill.
+- Statistics may derive a presentation-only canonical model group for explicit
+  aliases while retaining raw source labels. Provider-only and unknown model
+  values remain distinct; this grouping never rewrites stored evidence or
+  changes the raw-model pricing lookup.
 - Cost attribution distributes an LLM turn's cost across tool categories used
   by that turn and shows tool-free turns separately. It is an analytical
   allocation, not a provider invoice.
