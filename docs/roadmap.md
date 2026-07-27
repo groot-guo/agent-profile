@@ -1661,14 +1661,38 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T58 window context limits alignment with official sources
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
 - purpose: `db.ts` seeds `model_context` with built-in window sizes, but some
   may be outdated (e.g. `qwen-max` 32K while latest is 128K); the UI now labels
   these as "内置估算" (T57), so the values should match official vendor specs
 - scope: audit each seeded model's `context_window` against official docs and
-  update the seed; add a source comment per model
-- affected: `apps/server/src/db.ts`
-- acceptance: seeded window limits match official vendor specs as of the update
+  update the seed; add a source comment per model; preserve user-edited rows
+  through the existing `INSERT OR IGNORE` behavior
+- affected: `apps/server/src/db.ts`, pricing/configuration tests,
+  `ARCHITECTURE.md`, `docs/roadmap.md`
+- acceptance: seeded window limits match official vendor specs as of the update;
+  every non-obvious seed has an auditable source/version note; no existing
+  user-edited model-context row is overwritten by startup seeding
+- verification plan: focused seed/database test, source/version review,
+  Server build, full test/lint, and `git diff --check`
+- documentation plan: record final values, source dates, and the difference
+  between built-in seed data and source-observed context in architecture docs
+- implementation:
+  - audited the 20 built-in rows against the vendor model catalog entry points
+    referenced beside the seed; corrected `qwen-max` from 32,768 to 131,072
+  - retained `INSERT OR IGNORE`, so startup only seeds missing rows and never
+    overwrites a user-managed model context setting
+- verification:
+  - source/version review — completed against the vendor catalog entry points
+    recorded with the seed, as of 2026-07-27
+  - `pnpm --filter trace-server build` — passed
+  - focused Biome and `git diff --check` — passed
+- completion:
+  - changed files: `apps/server/src/db.ts`, `ARCHITECTURE.md`,
+    `docs/roadmap.md`
+  - result: newly initialized databases seed `qwen-max` at 131,072 tokens;
+    existing local values remain unmodified and therefore user-configurable
 
 ### T59 opencode session scan adapter
 

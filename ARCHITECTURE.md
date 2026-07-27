@@ -122,7 +122,10 @@ Codex rollouts with runtime turn context remain unaffected.
   truncation-safe content.
 - `pricing` — per-model CNY prices for the four token classes, with unit and
   effective time.
-- `model_context` — per-model context-window limits.
+- `model_context` — per-model context-window limits. Built-in rows are
+  conservative vendor-specification seeds, audited on 2026-07-27; they are not
+  transcript-observed values and user edits take precedence because startup uses
+  `INSERT OR IGNORE`.
 - `schema_migrations` — ordered, idempotent schema changes and their application
   time.
 

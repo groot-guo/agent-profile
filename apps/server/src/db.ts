@@ -51,6 +51,12 @@ db.exec(`
 
 db.exec(`
   INSERT OR IGNORE INTO model_context (model, context_window) VALUES
+    -- Audited 2026-07-27. Vendor specification entry points:
+    -- DeepSeek: https://api-docs.deepseek.com/quick_start/pricing
+    -- Anthropic: https://docs.anthropic.com/en/docs/about-claude/models
+    -- Google: https://ai.google.dev/gemini-api/docs/models
+    -- OpenAI: https://platform.openai.com/docs/models
+    -- Alibaba Qwen: https://help.aliyun.com/zh/model-studio/models
     ('deepseek-v4-flash', 131072),
     ('deepseek-v4-pro', 131072),
     ('DeepSeek-V4-Flash', 131072),
@@ -67,7 +73,7 @@ db.exec(`
     ('gpt-4o', 128000),
     ('gpt-4o-mini', 128000),
     ('qwen-plus', 131072),
-    ('qwen-max', 32768),
+    ('qwen-max', 131072),
     ('moonshot-v1', 131072),
     ('doubao-pro', 131072),
     ('mimo-v2.5-pro', 131072)
