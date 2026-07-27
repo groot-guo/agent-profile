@@ -374,7 +374,7 @@ export default function SessionPage() {
               title="上下文怎样增长，成本花在哪里"
               description="把上下文曲线、四类 Token 和成本归因放在同一条分析路径里，避免在互不相邻的卡片之间来回对照。"
             />
-            <Card title="上下文窗口增长曲线">
+            <Card title="上下文窗口增长曲线" meta="窗口上限·内置估算">
               <ContextChart points={ctx} tools={mainTools} />
             </Card>
             <Card title="Token 拆解" meta={`合计 ${fmtTokens(totalTokens)}`}>
@@ -904,14 +904,21 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
         <Legend color={C.input} label="input" />
         <Legend color={C.cc} label="cache_creation" />
         <Legend color={C.cr} label="cache_read" />
-        <span>
+        <span
+          data-tip={
+            window
+              ? '利用率 = 峰值上下文 ÷ 模型窗口上限（内置估算，非 transcript 实测）'
+              : '该模型未在内置 model_context 表中，无法计算利用率'
+          }
+          data-tip-align="end"
+        >
           峰值 <span className="tnum">{fmtTokens(peak)}</span>
           {window ? (
             <>
               ,利用率 <span className="tnum">{((peak / window) * 100).toFixed(1)}%</span>
             </>
           ) : (
-            '(窗口未配置)'
+            '（该模型未内置窗口上限）'
           )}
         </span>
       </div>
