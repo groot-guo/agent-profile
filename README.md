@@ -47,19 +47,22 @@ The Web development server writes `apps/web/.next-dev`; production builds write
 
 ## First import
 
-On startup, the Server begins background imports. The page remains usable while
-this happens.
+On startup, the Server begins one observable background import job. Returning
+users keep their existing Sessions visible while synchronization runs. A first
+run shows source availability, per-source progress, recovery actions, and a
+completion summary instead of a stale generic empty list.
 
 | Source | Default local location | When it is imported |
 | --- | --- | --- |
 | Claude Code | `~/.claude/projects` | startup and “重新扫描” |
 | Codex | `~/.codex/sessions` | startup and “重新扫描” |
-| Zed | local Zed `threads.db` | startup when present |
-| MiMo | local `mimocode.db` | startup when present |
+| Zed | local Zed `threads.db` | startup and “重新扫描” when present |
+| MiMo | local `mimocode.db` | startup and “重新扫描” when present |
 
-If the list is empty, click **重新扫描**. It scans the default Claude Code and
-Codex directories and reports how many files were imported, updated, skipped,
-or failed. Zed and MiMo are discovered at startup when their databases exist.
+If the list is empty, use the source-aware first-run panel or click
+**重新扫描**. The same deduplicated job used at startup checks all four sources
+and reports imported, updated, skipped, and failed counts. The status API and UI
+do not expose transcript text, full local paths, or source Session identifiers.
 
 Sessions are grouped by project path. Use the Agent chips, search, and sort
 controls to narrow the list.
@@ -79,6 +82,13 @@ controls to narrow the list.
 The Session evidence view contains every *stored normalized Span*, not every
 line of the original transcript. Content previews are off by default; when
 requested, previews are redacted and bounded.
+
+Codex Desktop external-history materializations are excluded when they contain
+`external-import-turn-*` records without normal runtime context and only
+text-wrapped tool history. Their project and tool evidence is not trustworthy,
+so they do not create mystery project folders or inflate Codex/tool aggregates.
+Previously generated unannotated copies are cleaned up during import; annotated
+rows are retained instead of silently deleting user notes.
 
 ## Configuration
 
@@ -113,8 +123,8 @@ AUTO_SCAN_DIR="" pnpm dev
 ### No sessions appear
 
 1. Confirm that a supported source exists at one of the default locations.
-2. Wait for startup import to finish, then click **重新扫描** for Claude Code
-   and Codex.
+2. Follow the per-source startup status; use **重新扫描** to retry any available
+   source.
 3. For a custom transcript directory, start with
    `AUTO_SCAN_DIR=/absolute/path pnpm dev`.
 4. Read the scan result and error notice; an unavailable source does not erase

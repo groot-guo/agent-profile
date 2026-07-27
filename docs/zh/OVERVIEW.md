@@ -35,13 +35,23 @@ MiMo SQLite ────────┘                           分析 + 会�
 每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新
 和失败；会话仓储在同一事务中替换 Session/Span，并保留用户标签与备注。Zed 与 MiMo
 的来源版本变化后会重新导入，不再因为 Session 已存在而永久跳过。
+启动导入与首页“重新扫描”共享同一个按来源去重的任务状态；同一来源不会并发重复扫描，
+单个来源失败也不会阻断其他来源。状态接口只返回来源名称、可用性、已存数量、阶段、
+汇总计数和时间，不返回原始内容、完整本地路径或来源 Session ID。
 Codex 使用 rollout 的 `session_meta.id` 作为线程级 Session 身份；旧格式缺少 `id`
 时才回退到 `session_id`。子线程保留自己的 ID，其 Span 标记为 Sidechain，不再覆盖父
 Session。
+Codex Desktop 物化的外部 Agent 历史可通过 `external-import-turn-*`、缺少普通
+`turn_context`、共享迁移时间以及文本形式的 `external_agent_tool_*` 记录识别。因为其
+原始项目、模型、Token 分类和结构化工具证据不可信，导入器将其报告为
+`excluded_non_actionable`，不生成 Session。Codex 解析版本指纹会让旧文件重新经过一次
+判断；仓储只清理没有标签或备注的旧派生 Session，有用户标注时保留并报告失败。
 
 ## 当前能力
 
 - 分别保留 input、cache creation、cache read、output 四类 token。
+- 首次使用时展示四个数据源的发现、导入、失败与重试状态；已有数据在后台同步期间仍可
+  浏览，同步完成后只刷新一次。
 - 按项目和 Agent 浏览、搜索、排序和筛选 Session，并支持标签、备注和多会话对比。
 - Session 详情固定展示身份、Token 指纹和主要 KPI，再拆分为“概览”“上下文与成本”
   “工具与链路”“运行证据”四个视图，避免把所有分析卡片一次性纵向堆叠。
@@ -136,7 +146,7 @@ Task 标记为 `completed`。
 - web 默认 `3001`，可通过 `NEXT_PUBLIC_API` 修改 API 地址。
 - Web 开发产物写入 `apps/web/.next-dev`，生产构建仍写入 `apps/web/.next`，因此
   运行中的 `pnpm dev` 不会再被 `pnpm build` 替换 chunk。
-- 首页“重新扫描”会依次扫描 `~/.claude/projects` 和 `~/.codex/sessions`，并汇总
-  两个来源的新增、更新、跳过与失败数量。
+- 首页“重新扫描”与启动导入共享任务管理器，检查 Claude Code、Codex、Zed 和 MiMo，
+  并按来源展示新增、更新、跳过与失败数量。
 - LLM 诊断使用 `LLM_API_KEY`，以及可选的 `LLM_PROVIDER`、`LLM_MODEL` 和
   `LLM_BASE_URL`。

@@ -34,12 +34,18 @@ Scanning is revision-based. Each source item provides a source kind, source
 update time, and stable fingerprint. The coordinator skips matching revisions,
 reports additions/updates/failures separately, and asks the repository to
 atomically replace changed normalized sessions. Legacy rows without a
-fingerprint refresh once on their next scan. The server starts background
-imports for configured Claude/Codex directories and available Zed/MiMo
-databases so startup is not blocked by a large local history. The scan API
-supports manual import of a selected transcript directory. The Web manual-scan
-action calls it once for Claude Code and once for Codex, then reports combined
-source-aware totals.
+fingerprint refresh once on their next scan. One in-memory import-job manager
+owns both startup and Web-triggered synchronization for configured
+Claude/Codex directories and available Zed/MiMo databases. It deduplicates each
+source, isolates failures, and exposes per-source state without blocking server
+startup. The compatibility scan API still supports a selected transcript
+directory; the Web uses the shared multi-source job instead.
+
+Scan results also expose structured `skipReasons`: `unchanged_revision` means a
+matching source fingerprint required no work, while `not_importable` means the
+source item did not produce a normalized Session (for example, a metadata-only
+history with no usable LLM turn). These remain skipped items rather than import
+failures; malformed items that throw are counted separately as failures.
 
 ## Components
 
@@ -48,6 +54,7 @@ source-aware totals.
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
 | `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
+| `apps/server/src/ingestion/import-job-manager.ts` | Deduplicated startup/manual job state, availability, progress, failure isolation, and bounded public status |
 | `apps/server/src/ingestion/session-repository.ts` | Normalized analysis and atomic session/span persistence |
 | `apps/server/src/routes/scan.ts` | Thin manual/startup scan entry points; contains no import persistence SQL |
 | `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
@@ -58,18 +65,45 @@ source-aware totals.
 The API is split by domain under `apps/server/src/routes/`; it is not a single
 monolithic routes file.
 
+The Home page owns the initial Sessions, Stats, and import-status requests and
+passes data into the Dashboard. Dashboard model totals and recent-tool
+frequency use two set-based Span queries; the browser does not fetch tools once
+per recent Session. Existing data remains interactive during a job. The browser
+polls only while `active=true`, stops in terminal states or on unmount, and
+refreshes Sessions/Stats once after completion.
+
 ## Current data sources
 
 | Agent | Local source | Import model |
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
 | Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), project metadata, response items, events, and call IDs |
-| Zed | threads SQLite database with compressed payloads | `updated_at` plus payload metadata fingerprint; changed payloads are decoded lazily |
+| Zed | threads SQLite database with zstd-compressed JSON payloads | `updated_at` plus payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `time_updated` plus message/part counts; changed session records are loaded lazily |
 
 All adapters emit the same session/span shape so downstream metrics and UI do
 not need agent-specific logic for basic analysis. Coverage can still vary by
 source: a missing field means “not captured”, not zero or failure.
+
+The current Zed payload contains one JSON object rather than Claude-compatible
+NDJSON. Tool calls are paired with Agent `tool_results` by tool-use ID. Zed does
+not currently expose cache-token classes, per-message timestamps, sidechain
+links, or a portable cost field in this payload, so the importer leaves that
+evidence uncaptured instead of estimating it. Malformed or unsupported payloads
+are reported as `not_importable`; thread summaries are not converted into
+synthetic answer or token evidence.
+
+Codex Desktop can materialize Claude or other external-Agent history as rollout
+JSONL with `external-import-turn-*` IDs, no ordinary `turn_context`, a shared
+migration timestamp, and tool activity embedded only as
+`external_agent_tool_*` text. Those records do not provide trustworthy original
+project, model, token-class, or structural tool evidence, so the adapter reports
+them as `excluded_non_actionable` rather than creating profiler Sessions. A
+Codex parser fingerprint revision makes existing files pass through this rule
+once. The coordinator removes a previously generated excluded Session and its
+Spans only when it has no tags or notes; annotated rows are retained and the
+cleanup is reported as failed. Import results expose the number removed. Normal
+Codex rollouts with runtime turn context remain unaffected.
 
 ## Persistence model
 
@@ -107,6 +141,13 @@ from available source histories when recovery is necessary.
 - `contextTokens = input + cacheCreation + cacheRead`
 - `windowUtilization = contextTokens / configuredContextWindow`
 - `cacheHitRate = cacheRead / (input + cacheCreation + cacheRead)`
+- Some Codex token-count events expose a non-zero `total_tokens` while every
+  classified token field is zero. Those turns retain the total in
+  `inputTokens` so the observed usage is not discarded, but their Span metadata
+  sets `tokenUsageSource=total_tokens_fallback` and
+  `tokenUsageClassified=false`. The input/cache/output split and resulting
+  input-priced cost for such a turn are fallback approximations, not
+  source-classified usage.
 - Span cost uses all four token classes and the model price effective at the
   span's `startTime`. The current contract is `CNY` per million tokens.
   `costCurrency`, `pricingEffectiveFrom`, `costCalculatedAt`, and
@@ -252,6 +293,8 @@ page exposes the same contract and privacy boundaries.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/health` | Service health |
+| `GET` | `/api/imports/status` | Privacy-bounded source availability, stored counts, and current/last import state |
+| `POST` | `/api/imports` | Start or join a deduplicated multi-source background import |
 | `POST` | `/api/scan` | Scan/import a selected transcript directory |
 | `GET` | `/api/sessions` | Session list |
 | `PATCH` | `/api/session/:id` | Update session tags/notes |

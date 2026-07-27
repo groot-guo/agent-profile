@@ -37,13 +37,25 @@ require deleting the local database.
 - `session_meta.cwd` supplies project metadata;
 - response messages/reasoning become LLM evidence;
 - custom tool calls pair with their outputs by call ID;
-- token-count events provide available token aggregates.
+- token-count events provide available token aggregates. When Codex reports all
+  classified fields as zero but a non-zero `total_tokens`, the parser retains
+  that total in `inputTokens` and marks the Span with
+  `tokenUsageSource=total_tokens_fallback` and
+  `tokenUsageClassified=false`; downstream input/cache/output and cost analysis
+  must treat that turn as an explicitly identified fallback approximation.
 
 ### Zed
 
 - the source database is opened read-only;
-- compressed thread records are decoded and mapped to session/span evidence;
-- thread folder paths provide project grouping.
+- each zstd record decodes to one JSON object with tagged User/Agent messages;
+- User request IDs create LLM turns and join to observed input/output totals in
+  `request_token_usage`; Agent Text and ToolUse entries create answer and
+  tool-call Spans, with tool results paired by tool-use ID;
+- raw-string and legacy JSON-array `folder_paths` provide project grouping;
+- cache-token classes, per-message timing, and sidechain evidence are not
+  present in the current payload and remain uncaptured rather than estimated;
+- malformed or unsupported records are `not_importable`; summaries never
+  become synthetic answer or token evidence.
 
 ### MiMo
 
@@ -53,11 +65,19 @@ require deleting the local database.
 
 ## Scanning behavior
 
-At startup, configured Claude/Codex transcript directories are imported in the
-background and the Zed/MiMo database adapters run when those databases exist.
-`POST /api/scan` imports a selected transcript directory, which covers the
-file-based adapter. The Web “重新扫描” action invokes this endpoint for both
-`~/.claude/projects` and `~/.codex/sessions` and aggregates their results.
+At startup, configured Claude/Codex transcript directories and available
+Zed/MiMo databases enter one background import-job manager. The Web “重新扫描”
+action starts the same four-source job. A source already scanning is joined
+rather than started concurrently; failure in one source does not stop another.
+`POST /api/scan` remains available for compatibility when importing an explicit
+transcript directory.
+
+`GET /api/imports/status` returns source label, availability, stored Session
+count, idle/scanning/completed/failed state, bounded result counts, and
+timestamps. It does not return transcript text, full local source paths, or
+source Session IDs. `POST /api/imports` starts a job and returns immediately so
+the UI can retain existing data, poll only while active, and refresh once on
+completion.
 File-based sources fingerprint file mtime and size. Zed fingerprints
 `updated_at` plus payload metadata; MiMo fingerprints
 `time_updated` plus message/part counts. Matching database-source revisions are
@@ -67,7 +87,12 @@ double count. A legacy row with no fingerprint refreshes once.
 
 All adapters emit lazy source items to one import coordinator. The coordinator
 reports scanned/imported/updated/skipped/failed counts and isolates an item
-failure from unrelated items. One session repository performs analysis and
+failure from unrelated items. Its `skipReasons` distinguish
+`unchanged_revision` from `not_importable`, so an unchanged fingerprint is not
+conflated with a source item that produced no normalized Session. Metadata-only
+Claude/Codex histories and MiMo histories without an assistant turn are counted
+as `not_importable`; captured LLM turns are not rejected merely because their
+reported token usage is zero. One session repository performs analysis and
 transactional session/span replacement for every source while preserving
 user-authored tags and notes. Scan routes contain no persistence SQL. A failure
 to access one optional local source must not make the health endpoint or

@@ -1263,13 +1263,15 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - add source health, first-run recovery, stable local launch, and safe
     operational defaults after the documentation baseline is complete
 - planned scope:
-  - source-status API and UI for configured Claude Code, Codex, Zed, and MiMo
-    availability and imported-session counts
-  - first-run/empty-state recovery and scan progress feedback
   - non-watch local start mode, local backup/recovery guidance, and safe
     local-only network defaults
   - retain API compatibility for explicit directory scans or document a safe
     migration path
+- decomposition:
+  - source-status, initial loading, first-run onboarding, and active import
+    progress are implemented and verified independently under T62
+  - safe forced rebuild and destructive reset semantics are implemented and
+    verified independently under T63
 - dependencies and risks:
   - source-path metadata is locally sensitive and must never include transcript
     content; unavailable sources must not prevent API health or existing data
@@ -1299,8 +1301,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     Session relationships without inventing missing evidence
   - append-only transcript parsing, scan progress/retry, and virtualized or
     downsampled rendering for large histories
-  - responsive dashboard navigation that replaces the fixed desktop sidebar at
-    narrow widths and preserves accessible Session selection
+  - responsive dashboard-shell navigation that replaces the fixed desktop
+    sidebar at narrow widths; Session discovery and project filtering inside the
+    sidebar are implemented independently under T64
   - reviewed local network/API defaults, documented backup/export workflow,
     and authentication/directory-access controls before any remote exposure
 - dependencies and risks:
@@ -1376,11 +1379,810 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     mobile viewports; the responsive navigation redesign remains explicitly
     owned by T50
 
+### T52 schema migration consistency guard
+
+- status: completed
+- purpose: prevent base-schema column additions from shipping without a matching
+  migration. The `agent` column gap fixed by migration v4 left existing
+  `trace.db` databases unable to start because `CREATE TABLE IF NOT EXISTS` does
+  not retrofit columns; v4 also broke the existing migration-order assertion,
+  which had no guard catching the omission
+- scope:
+  1. add a database test asserting a fresh `createDatabase(':memory:')` and a
+     legacy baseline upgraded through all migrations reach the same column set
+     for `sessions`, `spans`, `pricing`, and `model_context`
+  2. expand `createLegacyDatabase` to represent the real pre-migration schema
+     (current base schema minus every migration-added column) instead of an
+     unrelated minimal table, so the consistency check is meaningful
+  3. update the existing migration-order and idempotency assertions to include
+     migration v4 and the `agent` column default
+- affected:
+  - `apps/server/src/__tests__/database.test.ts`
+  - `docs/roadmap.md`
+- acceptance:
+  - fresh and migrated-legacy databases produce identical column sets for every
+    base-schema table
+  - adding a column to `createBaseSchema` without a matching migration, or
+    adding a migration without updating `createBaseSchema`, fails the test
+  - existing migration tests reflect v1–v4 and remain green
+- verification:
+  - `pnpm --filter trace-server test` — passed: 6 files / 21 tests; the new
+    consistency guard is the 21st test
+  - probe check — temporarily adding a column to `createBaseSchema` without a
+    matching migration made the consistency test fail with a column-set diff,
+    confirming the guard catches the regression class that migration v4 fixed
+- risks:
+  - the consistency test only guards column presence, not column types, defaults,
+    or constraints; documented as a known limitation rather than expanded here
+- completion:
+  - changed files: `apps/server/src/__tests__/database.test.ts`, `docs/roadmap.md`
+  - the consistency test compares a fresh database against a legacy baseline
+    upgraded through every migration for all four base-schema tables; the
+    legacy baseline was expanded to the real pre-migration column set so the
+    comparison is meaningful
+- audit (2026-07-27): confirmed completed; migration v4 is present in the
+  current database, the fresh-versus-legacy consistency test passes, and the
+  full Server suite passes 21/21 tests
+
+### T53 claude transcript cwd and metadata extraction fix
+
+- status: completed
+- purpose: `parseTranscript` read `cwd`, `gitBranch`, and `claudeVersion` from
+  `sorted[0]`, but entries without a `timestamp` (such as `mode` and
+  `file-history-snapshot`) sort to the front and never carry these fields, so
+  most Claude Code sessions lost their cwd. The UI then fell back to
+  `decodeProject`, which decodes the encoded project directory by replacing
+  every `-` with `/` and mis-decodes `agent-profile` to `agent/profile`,
+  splitting one project into "agent-profile" and "profile"
+- scope:
+  1. take `cwd`, `gitBranch`, and `claudeVersion` from the first entry that
+     actually carries each field, not from `sorted[0]`
+  2. document the `decodeProject` lossy fallback as a known limitation; it is
+     not the primary fix because Claude Code's project-directory encoding is
+     lossy and cannot be reversed without the original cwd
+- affected:
+  - `packages/core/src/parsers/claude.ts`
+  - `docs/roadmap.md`
+- acceptance:
+  - Claude Code sessions whose transcript contains a cwd now store it
+  - the agent-profile project appears as a single project after re-import
+  - existing core tests remain green
+- verification:
+  - `pnpm --filter @agent-profile/core test` — passed: 7 files / 77 tests
+  - transcript probe — the 4 agent-profile transcripts that previously produced
+    empty cwd now return cwd=/Users/guogenyuan/Desktop/GitHub/agent-profile,
+    gitBranch, and claudeVersion=2.1.218
+  - re-import — deleted 158 claude-code sessions with empty cwd; POST
+    /api/scan rescanned ~/.claude/projects: 159 imported, 321 updated, 0 failed
+  - agent-profile project — all 5 sessions now share
+    cwd=/Users/guogenyuan/Desktop/GitHub/agent-profile, no longer split into
+    "agent-profile" and "profile"
+- completion:
+  - changed files: `packages/core/src/parsers/claude.ts`, `docs/roadmap.md`
+  - remaining: 7 claude-code sessions still have empty cwd because their
+    transcripts contain only metadata rows (mode/permission-mode/last-prompt)
+    with no user/assistant turns and no cwd field; these are invalid sessions
+    that should be filtered at import, recorded under T56
+- risks:
+  - already-imported sessions keep their empty cwd until their transcript is
+    re-imported; re-import requires a revision change or explicit rescan
+- audit (2026-07-27): confirmed completed; the implementation selects the first
+  entry carrying each metadata field, the full Core suite passes, and the
+  current database has no Claude Code Session with an empty cwd
+
+### T54 session detail right panel overflow and responsive layout
+
+- status: planned
+- purpose: the session detail right panel overflows the viewport on common
+  screen sizes; the overall layout should fit the screen and overflow content
+  should reflow upward instead of being clipped
+- scope: to be diagnosed — identify the overflowing panel, cap it to viewport
+  height with internal scroll or reflow, verify across breakpoints
+- affected: to be determined (likely `apps/web/app/session/`)
+- acceptance: right panel content is fully visible without horizontal overflow
+  on standard laptop widths; long content scrolls within its region
+- verification: to be recorded
+
+### T55 Zed session analysis missing
+
+- status: completed
+- purpose: Zed sessions are imported (9 rows) but their analysis is not
+  surfaced — suspected Zed parser gap; also all 9 rows have empty cwd
+- scope: diagnose the Zed parser pipeline (`packages/core/src/parsers/zed.ts`,
+  `apps/server/src/ingestion/zed-adapter.ts`) against the current local payload
+  shape, confirm why normalized spans and cwd are absent, implement the smallest
+  source-faithful mapping, and add parser/adapter/re-import verification without
+  inventing token or project fields the source does not provide
+- affected:
+  - `packages/core/src/parsers/zed.ts`
+  - `packages/core/src/__tests__/zed-parser.test.ts`
+  - `apps/server/src/ingestion/zed-adapter.ts`
+  - `apps/server/src/__tests__/ingestion.test.ts`
+  - `ARCHITECTURE.md`
+  - `docs/multi-agent.md`
+  - `docs/roadmap.md`
+- acceptance:
+  - the current Zed JSON payload produces LLM-turn, answer, and paired tool-call
+    Spans from captured evidence
+  - `request_token_usage` supplies only observed input/output tokens; the parser
+    does not estimate usage from text length
+  - raw-string and JSON-array `folder_paths` both produce cwd when available
+  - malformed/unsupported payloads return not-importable rather than synthetic
+    summary evidence
+  - parser/adapter tests, real-source probe, Core/Server tests, build, lint, and
+    current-state documentation checks pass
+- verification:
+  - focused Zed parser fixtures — passed for tagged User/Agent messages,
+    request-scoped input/output usage, answer text, tool-result pairing, raw
+    folder paths, legacy JSON-array folder paths, and malformed payload rejection
+  - Server ingestion fixture — passed with the real JSON payload shape rather
+    than the obsolete Claude-compatible NDJSON assumption
+  - real-source read-only probe — 9/9 Zed rows parsed, all 9 recovered cwd,
+    producing 20 LLM-turn, 57 answer, and 114 tool-call Spans with 811,280
+    observed input tokens and 7,924 observed output tokens; 0 rows were
+    not-importable
+  - `pnpm test` — passed: Core 18 files / 168 tests and Server 6 files / 21 tests
+  - `pnpm build` — passed: Core/Server TypeScript and Next.js production build
+  - focused Biome, full repository lint, and `git diff --check` — passed; full
+    lint reported 19 existing warnings and 2 informational diagnostics, with no
+    errors
+- documentation plan:
+  - replace the stale compressed-NDJSON description in `ARCHITECTURE.md` and
+    `docs/multi-agent.md` with the implemented Zed JSON message/token/tool
+    mapping and explicit coverage limits
+- completion:
+  - completed_at: 2026-07-27
+  - changed files: `packages/core/src/parsers/zed.ts`,
+    `packages/core/src/__tests__/zed-parser.test.ts`,
+    `apps/server/src/__tests__/ingestion.test.ts`, `ARCHITECTURE.md`,
+    `docs/multi-agent.md`, and `docs/roadmap.md`
+  - result: current Zed records now produce source-faithful analysis and project
+    grouping; unsupported records remain visibly not importable, and missing
+    token classes/timing are not fabricated
+
+### T56 Codex invalid session filtering
+
+- status: completed
+- purpose: some imported Codex and Claude Code sessions are invalid (empty or
+  non-actionable — e.g. Claude Code transcripts with only
+  mode/permission-mode/last-prompt rows and no LLM turns, or Codex sessions
+  with no usable turns); need to define and enforce a validity filter at
+  import time
+- scope:
+  1. treat a parsed source item with no normalized Span as not importable while
+     retaining zero-token LLM turns when the source genuinely reports no usage
+  2. return structured `skipReasons` that distinguishes an unchanged revision
+     from a source item that produced no importable Session
+  3. add focused Claude, Codex, and MiMo parser fixtures plus coordinator result
+     tests without hiding the separate Zed parser failure owned by T55
+- affected:
+  - `packages/core/src/types.ts`
+  - `packages/core/src/parsers/{claude,codex,mimo}.ts`
+  - `packages/core/src/__tests__/parser-validity.test.ts`
+  - `apps/server/src/ingestion/import-coordinator.ts`
+  - `apps/server/src/__tests__/ingestion.test.ts`
+  - `ARCHITECTURE.md`
+  - `docs/multi-agent.md`
+  - `docs/roadmap.md`
+- acceptance: invalid source items are skipped at import with a counted
+  `not_importable` reason, unchanged revisions are counted separately, and
+  valid Sessions—including captured LLM turns with genuinely zero usage—remain
+  unaffected
+- implementation:
+  - added `if (spans.length === 0) return null` before the return in the
+    claude, codex, and mimo parsers; sessions with no LLM turns now yield null
+    and are skipped by the import coordinator's existing `!loaded` branch
+  - zed is intentionally left out because its span generation is broken (T55);
+    filtering empty zed sessions now would hide that bug instead of fixing it
+- verification:
+  - `pnpm --filter @agent-profile/core test` — passed: 7 files / 77 tests
+  - deletion — removed 51 invalid sessions (claude-code 27, codex 15, mimo 9)
+    that had zero spans; only zed's 9 remain (T55 owns zed)
+  - re-import — POST /api/scan on ~/.claude/projects and ~/.codex/sessions:
+    claude 2 imported / 323 updated, codex 4 imported / 0 updated, 0 failed;
+    the deleted invalid sessions were not re-imported because the parsers now
+    return null on empty spans
+  - remaining message_count=0: only zed 9 (intentionally untouched)
+- implementation:
+  - changed files: `packages/core/src/parsers/claude.ts`, `codex.ts`, `mimo.ts`,
+    `docs/roadmap.md`
+  - the filter is in each parser's return path
+    (`if (spans.length === 0) return null`); the import coordinator's existing
+    `!loaded` branch handles the skip and counts it as `skipped`, not `failed`
+  - Zed was initially excluded from this Task because its separate span mapping
+    was broken; T55 subsequently fixed that parser and applies the same
+    not-importable outcome to unsupported Zed payloads
+- audit before completion (2026-07-27): the original implementation was not
+  complete against the recorded acceptance criteria;
+  `importFromSource` increments the aggregate `skipped` count when a parser
+  returns null but exposes no reason or source-item outcome, so invalid Sessions
+  are not reported with the required counted reason. Focused fixtures for empty
+  Claude/Codex/MiMo inputs and the scan-result reason contract are also still
+  required. Current database evidence confirms only the partial effect: all
+  remaining zero-span Sessions are the 9 known Zed rows owned by T55
+- documentation plan:
+  - update the current scan/import contracts in `ARCHITECTURE.md` and
+    `docs/multi-agent.md` with the structured skip-reason semantics before
+    closing the Task
+- final verification:
+  - parser validity fixtures — passed for metadata-only Claude and Codex inputs
+    and a MiMo history with no assistant turn; all return null
+  - coordinator result tests — passed for imported, updated, unchanged,
+    not-importable, and thrown-failure outcomes; `skipReasons` distinguishes
+    `unchanged_revision` from `not_importable`
+  - `pnpm test` — passed: Core 15 files / 159 tests and Server 6 files / 21 tests
+  - `pnpm build` — passed: Core/Server TypeScript and Next.js production build
+  - focused Biome and `git diff --check` — passed; repository lint retains its
+    existing warning/info baseline with no errors
+- completion:
+  - completed_at: 2026-07-27
+  - changed files: `packages/core/src/types.ts`,
+    `packages/core/src/parsers/{claude,codex,mimo}.ts`,
+    `packages/core/src/__tests__/parser-validity.test.ts`,
+    `apps/server/src/ingestion/import-coordinator.ts`,
+    `apps/server/src/__tests__/ingestion.test.ts`, `ARCHITECTURE.md`,
+    `docs/multi-agent.md`, and `docs/roadmap.md`
+  - result: invalid source items remain non-fatal skipped imports but now expose
+    a machine-readable reason distinct from unchanged revisions; valid captured
+    turns are not rejected solely because token usage is zero
+
+### T57 context window utilization clarity and data provenance
+
+- status: completed
+- purpose: the "窗口利用率" metric is shown without a definition, and the
+  window limit comes from a built-in `model_context` seed rather than the
+  transcript, but that provenance is not surfaced — users may mistake the
+  limit for measured data; the "(窗口未配置)" fallback also lacks explanation
+- scope:
+  1. add an inline definition for window utilization
+     (contextTokens ÷ model context window) where it appears
+  2. label the window limit as a built-in estimate with its source
+  3. reword "(窗口未配置)" to explain why and how to configure it
+- affected:
+  - `apps/web/app/session/[id]/page.tsx`
+  - `docs/roadmap.md`
+- acceptance:
+  - window utilization has a visible definition in the UI
+  - window limit is labeled as built-in estimate, not measured
+  - "(窗口未配置)" explains the cause and points to configuration
+- verification:
+  - `biome check apps/web/app/session/[id]/page.tsx` — passed, no issues
+  - `pnpm --filter agent-profile-web build` — passed; /session/[id] route built
+- completion:
+  - changed files: `apps/web/app/session/[id]/page.tsx`, `docs/roadmap.md`
+  - the Card meta now labels the window limit as "窗口上限·内置估算"; the
+    legend "利用率" has a data-tip defining it as peak context ÷ model window
+    (built-in estimate, not transcript-measured); "(窗口未配置)" now reads
+    "（该模型未内置窗口上限）" with a tip explaining the model is not in
+    `model_context`
+- audit (2026-07-27): confirmed completed; all three UI acceptance points are
+  present in the current Session page, the focused lint check is clean, and the
+  current Web production build includes `/session/[id]`
+
+### T58 window context limits alignment with official sources
+
+- status: planned
+- purpose: `db.ts` seeds `model_context` with built-in window sizes, but some
+  may be outdated (e.g. `qwen-max` 32K while latest is 128K); the UI now labels
+  these as "内置估算" (T57), so the values should match official vendor specs
+- scope: audit each seeded model's `context_window` against official docs and
+  update the seed; add a source comment per model
+- affected: `apps/server/src/db.ts`
+- acceptance: seeded window limits match official vendor specs as of the update
+
+### T59 opencode session scan adapter
+
+- status: planned
+- purpose: opencode stores sessions in `~/.local/share/opencode/opencode.db`
+  (SQLite), but no adapter or scan path exists — 0 opencode sessions imported
+- scope: add an `OpenCodeSourceAdapter` reading `opencode.db`, register it in
+  the startup scan alongside MiMo and Zed
+- affected: `apps/server/src/ingestion/`, `apps/server/src/index.ts`,
+  `apps/server/src/routes/scan.ts`
+- acceptance: opencode sessions are discovered, parsed, and imported like other
+  sources
+
+### T60 codex token extraction fallback
+
+- status: completed
+- purpose: the codex parser reads `last_token_usage.input_tokens` /
+  `output_tokens`, but some turns have those classified fields as 0 while
+  `total_tokens > 0`; 47 of 61 codex sessions ended up zero-token because of
+  this
+- scope: when classified tokens are all zero but `total_tokens` exists, fall
+  back to `total_tokens` as input so the turn is not recorded as zero-token;
+  mark the Span metadata as an unclassified `total_tokens` fallback so callers
+  can distinguish the approximation from source-classified input
+- affected:
+  - `packages/core/src/parsers/codex.ts`
+  - `packages/core/src/__tests__/codex-parser.test.ts`
+  - `ARCHITECTURE.md`
+  - `docs/multi-agent.md`
+  - `docs/roadmap.md`
+- acceptance: codex turns with only `total_tokens` now record non-zero tokens;
+  existing non-zero turns are unaffected; fallback turns carry explicit
+  provenance and are not presented as source-classified usage
+- verification:
+  - focused Codex fixture — passed for a turn with zero classified fields and
+    `total_tokens=1234`; the Span records 1234 fallback input tokens plus
+    `tokenUsageSource=total_tokens_fallback` and
+    `tokenUsageClassified=false`
+  - classified-token regression fixture — passed; input=100, cache-read=40,
+    output+reasoning=25 remain in their original classes and carry no fallback
+    metadata
+  - real-source parser probe — 80 rollout files produced 64 valid Sessions; 47
+    Sessions/47 turns used the explicit fallback, 74 classified turns remained
+    classified, and only one Session with a source token-count event still had
+    zero usage outside this Task's fallback condition
+  - `pnpm test` — passed: Core 14 files / 156 tests and Server 6 files / 21 tests
+  - `pnpm build` — passed: Core/Server TypeScript and Next.js production build
+  - focused Biome check and `git diff --check` — passed; repository lint retains
+    its existing 21 warnings and 2 informational diagnostics with no errors
+- documentation plan:
+  - document the fallback's unclassified provenance and its cost/context
+    interpretation limits in the current architecture and multi-source
+    normalization contract before closing the Task
+- completion:
+  - completed_at: 2026-07-27
+  - changed files: `packages/core/src/parsers/codex.ts`,
+    `packages/core/src/__tests__/codex-parser.test.ts`, `ARCHITECTURE.md`,
+    `docs/multi-agent.md`, and `docs/roadmap.md`
+  - result: real Codex total-only token usage is retained instead of becoming a
+    zero-token turn, while classified usage remains unchanged and fallback
+    provenance stays machine-readable
+  - operational note: existing persisted Sessions keep their previous token
+    totals until their source revision changes or T63 provides a safe forced
+    rebuild; deleting the generated database is not required or recommended
+
+### T61 current-task completion audit and data-UX task decomposition
+
+- status: completed
+- purpose: verify that the most recently completed Tasks satisfy their recorded
+  acceptance criteria and completion gate, correct stale lifecycle claims, and
+  turn the identified loading/onboarding, rebuild/reset, and Session-navigation
+  work into explicit independently executable Tasks
+- scope:
+  1. audit T52–T60 against the current diff, database evidence, tests, build,
+     lint, and each Task's stated acceptance criteria
+  2. correct any Task whose recorded status or completion evidence does not
+     match the implementation
+  3. remove contradictory current execution-order claims
+  4. add separate planned Tasks for initial loading/onboarding, safe data
+     rebuild/reset, and Session navigation without mixing their acceptance gates
+- affected:
+  - `docs/roadmap.md`
+- acceptance:
+  - every T52–T60 status matches the evidence available in the current working
+    tree
+  - incomplete acceptance criteria remain explicitly open rather than being
+    reported as completed
+  - the three UX workstreams have independent purpose, scope, risks,
+    acceptance criteria, verification plans, and documentation plans
+  - the execution-order summary agrees with the detailed Task bodies
+- verification:
+  - current implementation audit — T52 migration/test guard, T53 metadata
+    extraction, and T57 window-provenance UI each satisfy their recorded
+    acceptance criteria; T54, T55, T58, and T59 have no completion claim and
+    correctly remain planned
+  - T56 audit — parser-level empty-span filtering exists, but the coordinator
+    returns only an undifferentiated `skipped` count and has no focused reason
+    contract tests; status corrected from `completed` to `in_progress`
+  - T60 audit — fallback code exists, but the branch lacks a focused fixture and
+    47 current Codex Sessions remain zero-token; status remains `in_progress`
+  - `pnpm test` — passed: Core 14 files / 154 tests and Server 6 files / 21 tests
+  - `pnpm lint` — passed with the existing 21 warnings and 2 informational
+    diagnostics, no errors
+  - `pnpm build` — passed: Core and Server TypeScript plus the Next.js production
+    build including `/session/[id]`
+  - database evidence — migrations v1–v4 are applied; no current Claude Code
+    Session has an empty cwd; the only zero-span rows are the 9 Zed Sessions
+    already assigned to T55
+  - Task-ID uniqueness/status scan and `git diff --check` — passed
+- documentation plan:
+  - update only `docs/roadmap.md`; no runtime behavior, API, schema, generated
+    database, or user-facing current-state claim changes in this audit Task
+- completion:
+  - completed_at: 2026-07-27
+  - changed files: `docs/roadmap.md`
+  - result: recent completion claims now match their acceptance evidence, T56
+    is explicitly reopened, T48/T50 overlapping umbrella scope is decomposed,
+    and T62–T64 independently own loading/onboarding, rebuild/reset, and flat
+    Session navigation
+
+### T62 initial data loading, source status, and first-run onboarding
+
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
+- purpose: make application startup immediately understandable and useful by
+  removing duplicate/N+1 loading work, exposing background-import state, and
+  guiding a first-time user from source discovery through a successful import
+- expected outcome:
+  - returning users see existing Sessions immediately while synchronization runs
+    unobtrusively in the background
+  - first-time users see which supported sources are available, what is being
+    imported, and how to recover from an unavailable or failed source
+- scope:
+  1. introduce one server-owned import-job/source-status model shared by startup
+     and manual scans, with per-source idle/scanning/completed/failed state,
+     discovered/imported/updated/skipped/failed counts, and last completion time
+  2. expose bounded local status APIs without returning transcript content or
+     unnecessarily revealing full source paths
+  3. make the Home page own the initial Session/overview data instead of having
+     Home and Dashboard issue duplicate requests
+  4. replace Stats model extraction and recent-tool loading N+1 requests with
+     set-based server aggregation; the browser must not request tools once per
+     recent Session during initial Dashboard loading
+  5. add reserved-size skeletons and a first-run state flow for source detection,
+     import progress, per-source recovery, and completion summary
+  6. keep existing data interactive during background synchronization, poll
+     only while a job is active, and refresh affected data once on completion
+- dependencies and assumptions:
+  - reuse the current adapter/coordinator/repository ingestion boundary and do
+    not move source-specific logic into the Web application
+  - stage-level and per-source progress are sufficient initially; exact
+    per-record percentage requires coordinator progress callbacks and must not
+    be fabricated
+  - T55 supplies normalized Zed analysis; source-status handling in this Task
+    still needs to represent any future source-specific import failure
+- risks:
+  - concurrent startup and manual scans can race unless the job manager dedupes
+    or serializes the same source
+  - local source availability and paths are sensitive metadata; status responses
+    must expose only what the UI needs
+  - permanent polling would recreate the request churn removed earlier, so
+    polling must stop in every terminal state and on unmount
+- acceptance:
+  - initial Home/Dashboard rendering performs no duplicate Session/Stats fetch
+    and no per-Session tool requests
+  - Stats and dashboard aggregates use bounded set-based database queries rather
+    than one model/tool query per Session
+  - an empty database shows a source-aware onboarding action, not a generic
+    empty Session list that can remain stale while startup import finishes
+  - returning users retain visible existing data and receive accessible,
+    per-source progress and completion/error feedback
+  - startup and manual scans share the same observable job state, cannot run the
+    same source concurrently, and automatically refresh the UI once completed
+  - loading, empty, partial failure, total failure, retry, and success states are
+    covered by Server/Web tests and responsive browser verification
+- implementation:
+  - added one `ImportJobManager` for startup and Web-triggered synchronization;
+    it tracks privacy-bounded per-source availability/state/results/timestamps,
+    deduplicates a source already in flight, isolates failures, and omits paths,
+    transcript content, and source Session IDs from public status
+  - added `GET /api/imports/status` and asynchronous `POST /api/imports`; retained
+    `POST /api/scan` for explicit-directory compatibility and joined known
+    default-source scans to the same in-flight work
+  - replaced the Stats per-Session model loop and the browser's 30 sequential
+    tool requests with two set-based Span queries
+  - made Home the single Sessions/Stats/import-status owner; Dashboard now
+    receives data as props, polling is serialized and exists only while a job is
+    active, and terminal transition refreshes data once
+  - added reserved-size skeletons, source-aware first-run cards, accessible live
+    status, retry/re-detection actions, and stale-while-sync behavior
+  - added a narrow-screen Home layout that stacks the bounded Session browser
+    above the Dashboard instead of leaving the content panel outside the
+    viewport; desktop keeps the existing two-column layout
+- verification completed:
+  - import-job tests — passed for source deduplication, failure isolation,
+    unavailable sources, retry, terminal state, and public Session-ID omission
+  - import-route tests — passed for four-source bounded status, stored counts,
+    local-path omission, and invalid-source rejection
+  - set-based aggregation spy — passed: model and recent-tool data use exactly
+    two queries for a 400-Session logical fixture
+  - Web state/request tests — passed: 2 files / 3 tests cover loading, empty,
+    unavailable, scanning, partial failure, retry labels, success summary, and
+    exactly three initial requests with no `/tools` request
+  - isolated T62 commit verification passed: Core 18 files / 170 tests and
+    Server 9 files / 26 tests; the final tree after T65 passes Core 18 / 170 and
+    Server 9 / 27
+  - `pnpm build` — passed: Core/Server TypeScript and Next.js production build
+  - `pnpm lint` — passed with the existing 19 warnings and 2 informational
+    diagnostics, no errors; `git diff --check` passed
+  - live browser verification passed against the running API/Web services:
+    initial skeletons were visible, an active four-source synchronization
+    disabled the scan action and exposed an accessible live status, and terminal
+    completion refreshed the stored data and showed the aggregate result
+  - responsive browser verification passed at 390×844 and 1280×720. The mobile
+    viewport has no horizontal overflow (`scrollWidth=380`, `innerWidth=390`),
+    exposes both the bounded Session list and Dashboard in document flow, and
+    the desktop viewport retains the two-column layout with
+    `scrollWidth=innerWidth=1280`; browser warning/error logs were empty
+- remaining limitations:
+  - T63 owns forced analysis rebuild and full reset; the T62 refresh action only
+    reloads stored API data, while synchronization imports source revisions
+  - T64 owns flat recent-Session navigation and project filtering; T62 keeps the
+    current project tree but makes it usable without horizontal overflow on
+    narrow screens
+- changed files so far:
+  - `apps/server/src/ingestion/import-job-manager.ts`,
+    `apps/server/src/{config,index}.ts`, `apps/server/src/routes/{scan,stats}.ts`,
+    and focused Server tests
+  - `apps/web/app/config.ts`, `dashboard.tsx`, `home-data.ts`,
+    `import-state.ts`, `page.tsx`, `layout.tsx`, and focused Web tests
+  - `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/multi-agent.md`, `docs/zh/OVERVIEW.md`, and `docs/roadmap.md`
+- verification plan:
+  - Server route/job-manager tests for state transitions, source isolation,
+    deduplication, failure recovery, and privacy-safe responses
+  - query-count or repository-spy tests proving set-based Stats/tool aggregation
+  - Web tests for first-run, returning-user background sync, partial failure,
+    retry, and polling teardown
+  - measure initial request count and render behavior with empty, 400-Session,
+    and active-scan fixtures; run `pnpm test`, `pnpm lint`, and `pnpm build`
+- documentation plan:
+  - update `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/multi-agent.md`, and `docs/zh/OVERVIEW.md` with final source-status,
+    startup, progress, privacy, and recovery behavior
+
+### T63 safe analysis rebuild and local-data reset
+
+- status: planned
+- purpose: let users intentionally regenerate derived analysis after parser,
+  pricing, or metric changes without deleting the database by hand, while
+  keeping destructive reset behavior explicit and recoverable where possible
+- expected outcome:
+  - normal recovery uses a safe forced rebuild that preserves user-authored and
+    configuration data; full local reset is a separate danger-zone operation
+- scope:
+  1. define four distinct operations in API and UI: refresh stored data,
+     incremental synchronization, forced analysis rebuild, and full local reset
+  2. add a coordinator/repository rebuild mode that bypasses matching source
+     fingerprints and atomically replaces generated Session/Span analysis
+  3. preserve Session tags/notes and retain pricing/model-context configuration
+     during forced rebuild; explicitly document what full reset preserves or
+     removes before implementing its transaction
+  4. reuse T62 job state for per-source rebuild progress, failures, retry, and a
+     final source-aware result summary
+  5. add a Data Management surface with a recommended rebuild action and a
+     spatially separated danger zone for destructive reset
+  6. require an explicit confirmation describing affected row counts and offer
+     export/backup guidance before irreversible deletion
+- dependencies and assumptions:
+  - depends on T62's import-job/source-status model
+  - source histories remain the rebuild authority; unavailable sources must not
+    cause already stored Sessions to disappear during a normal rebuild
+  - a rebuild is not a schema downgrade and must not delete migration history
+- risks:
+  - delete-then-import can lose good data on partial source failure; normal
+    rebuild must replace each successfully parsed Session atomically instead
+  - Session annotations can be lost if rows are deleted instead of replaced
+  - an unrestricted directory/reset API would expand the local security surface
+- acceptance:
+  - forced rebuild reprocesses unchanged source revisions and reports per-source
+    imported/updated/skipped/failed outcomes
+  - tags, notes, pricing, model-context configuration, schema migrations, and
+    successfully stored Sessions from unavailable sources survive normal rebuild
+  - rebuild failure leaves the previous normalized Session intact
+  - destructive reset cannot be triggered by the ordinary sync/rebuild action,
+    requires an explicit confirmation, and returns exactly what was deleted and
+    retained
+  - the UI disables conflicting actions while a job is active and provides a
+    clear recovery path for partial and total failure
+- verification plan:
+  - repository/coordinator integration tests for forced revision bypass,
+    atomic replacement, annotation/config preservation, and failure rollback
+  - API validation and destructive-confirmation tests, including concurrent job
+    rejection and unavailable-source behavior
+  - Web interaction tests for rebuild, danger-zone reset, cancellation before
+    confirmation, progress, completion, and retry
+  - backup/recovery smoke check plus `pnpm test`, `pnpm lint`, and `pnpm build`
+- documentation plan:
+  - update `README.md`, `ARCHITECTURE.md`, `AGENTS.md`,
+    `docs/multi-agent.md`, and `docs/zh/OVERVIEW.md` with final rebuild/reset,
+    preservation, security, migration, and recovery semantics
+
+### T64 flat Session navigation and project filtering
+
+- status: planned
+- purpose: remove the need to expand or collapse every project folder when
+  finding a Session, while retaining project context and making large mixed-Agent
+  histories faster to scan
+- expected outcome:
+  - recent Sessions are reachable directly from a flat chronological list;
+    projects become a searchable filter and summary view rather than mandatory
+    accordion navigation
+- scope:
+  1. replace the default all-projects-expanded tree with a flat recent Session
+     list grouped by lightweight time boundaries and showing project as
+     secondary row metadata
+  2. add a searchable project selector with Session counts and an all-projects
+     option; provide a project-summary mode that filters into the same flat list
+  3. retain Agent, search, sort, anomaly, and unpriced discovery as composable
+     filters, with clear active-filter and empty-result recovery states
+  4. preserve project/Agent/query/sort/quick-view state in the URL and restore
+     scroll/selection state when returning from a Session
+  5. keep grouped-by-project display only as an optional view if user testing
+     demonstrates value; it must not default to every group expanded
+  6. virtualize or incrementally render the Session list when measured fixtures
+     exceed the agreed DOM/render budget
+- dependencies and assumptions:
+  - depends on T62's single Home-page data owner so navigation does not create a
+    second loading pipeline
+  - T50 continues to own replacement of the overall fixed desktop sidebar on
+    narrow mobile layouts; this Task owns discovery inside the current shell
+- risks:
+  - removing visible folders can hide project context unless every Session row
+    carries a concise project label and the active project filter remains visible
+  - URL state can become noisy; only stable shareable filters should be encoded
+  - virtualization must preserve keyboard navigation, selection, and restored
+    scroll position
+- acceptance:
+  - a user can open any recent Session without expanding a project folder
+  - selecting or searching a project filters one flat Session list and provides
+    a one-action path back to all projects
+  - the default view never renders all project accordions expanded
+  - search, project, Agent, quick view, and sort compose predictably and survive
+    deep-link/reload/back navigation
+  - keyboard focus, selected state, labels, touch targets, and empty-result
+    recovery meet the existing accessibility conventions
+  - desktop and narrow-width checks with at least 400 Sessions show no page-level
+    horizontal overflow or unbounded DOM growth
+- verification plan:
+  - Web component tests for filter composition, URL restoration, selection,
+    empty-result recovery, and keyboard behavior
+  - browser verification with recent, project-filtered, anomaly, and unpriced
+    flows at desktop and mobile widths
+  - render/DOM measurement with a 400+ Session fixture; run focused lint plus
+    `pnpm test` and `pnpm build`
+- documentation plan:
+  - update `README.md`, `ARCHITECTURE.md`, `docs/ui-guidelines.md`, and
+    `docs/zh/OVERVIEW.md` with the final Session discovery and project-filtering
+    behavior
+
+### T65 Codex Desktop VS Code history rollout compatibility
+
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
+- purpose: prevent Codex Desktop external-history materializations from becoming
+  misleading profiler Sessions when they lack trustworthy project and
+  structural runtime evidence, while retaining normal Codex rollouts
+- expected outcome:
+  - Codex Desktop `external-import-turn-*` histories are reported as excluded
+    source records rather than Codex Sessions, because their project, model,
+    token classes, and structural tool evidence are not trustworthy
+  - no false Codex folder appears under `im` and no projectless migrated history
+    pollutes Agent/tool/session aggregates
+- scope:
+  1. classify the observed Codex Desktop external-history shape using structural
+     evidence: `source=vscode`, `originator=Codex Desktop`, no `turn_context`,
+     and `external-import-turn-*`; do not classify from prompt keywords
+  2. return no ParsedSession for that shape, so raw prompts, text-wrapped tools,
+     guessed cwd, fabricated model/token fields, and duplicate Agent counts do
+     not enter profiler evidence
+  3. retain normal current Codex response-message answer handling without
+     double-counting mirrored `event_msg:agent_message` records
+  4. version the Codex transcript revision fingerprint so already imported
+     unchanged files are reprocessed once through the normal coordinator and
+     atomic repository path after this parser interpretation change
+  5. extend the source/coordinator/repository result contract so a recognized
+     non-actionable source record can remove its prior generated Session/Spans
+     only when it has no user tags or notes, and report the cleanup count
+  6. expose cleanup counts in import status/summary UI and verify parser,
+     coordinator, annotation safety, current-format regression, and all 47 real
+     external-import source files
+- dependencies and assumptions:
+  - T63 remains the owner of a general user-facing forced rebuild; this Task may
+    use a bounded local re-import/revision refresh for verification but must not
+    add or imply a destructive reset workflow
+  - `source=vscode` alone is not enough because normal Codex Desktop sessions
+    use it too; exclusion requires the complete external-import record shape
+  - user-confirmed ground truth is that the local `im` project has no Codex
+    Sessions; the 13 rollouts share a migration timestamp and their embedded
+    histories span unrelated work, so their common `cwd=im` is not project
+    evidence
+- risks:
+  - current live rollouts can expose both response items and event messages;
+    answer extraction must not double count equivalent evidence
+  - external histories may contain useful human-readable conversation text, but
+    without trustworthy runtime/project/tool structure they do not meet the
+    profiler's evidence threshold; source history remains untouched on disk
+  - removing a generated Session can destroy user annotations; cleanup must
+    refuse annotated rows. The current 47 external-import Codex rows have zero
+    tags and zero notes, so the bounded cleanup does not remove user-authored
+    data
+  - unchanged source fingerprints will not automatically replace already stored
+    derived analysis before T63 provides a supported forced-rebuild mode;
+    T65 therefore needs one source-specific parser revision bump, not a general
+    rebuild or destructive reset API
+- acceptance:
+  - an observed external-import fixture is classified as non-actionable and does
+    not produce a ParsedSession, prompt metadata, answer/tool Spans, or cwd
+  - a normal current Codex rollout remains importable with its real cwd,
+    reasoning, tokens, call IDs, Sidechain state, and answer evidence intact
+  - the Codex fingerprint revision changes once, causing existing Codex files to
+    be atomically updated on the next ordinary import while preserving Session
+    annotations; unchanged files skip normally after that successful refresh
+  - current Codex reasoning, token, sidechain, and custom-tool fixtures remain
+    unchanged and no answer is duplicated when both supported answer record
+    forms are present
+  - all 47 local `external-import-turn-*` Codex rollouts are excluded; the 13
+    stamped with `cwd=im` and the other projectless copies disappear from stored
+    Session/project/Agent/tool aggregates after ordinary import
+  - previously stored unannotated excluded Sessions and their Spans are removed
+    atomically and reported; an annotated excluded Session is retained and the
+    cleanup is reported as failed rather than silently deleting annotations
+  - Core tests, the relevant full test/build checks, a restarted API/Web smoke
+    test, and an `im` data check pass; actual files and results are recorded
+- implementation:
+  - added a structural external-history classifier shared by the Codex parser
+    and transcript adapter; classified records produce an explicit excluded
+    source outcome and no ParsedSession
+  - added `removed` and `excluded_non_actionable` import results, with Web
+    completion copy that distinguishes skipped records from cleaned stored rows
+  - added repository cleanup that atomically removes Spans then Session only
+    when tags and notes are empty; annotated rows remain and count as failures
+  - bumped only the Codex transcript fingerprint to `codex-v2`, causing one
+    ordinary re-evaluation while Claude transcript fingerprints remain stable
+  - retained stable same-timestamp ordering and current Codex assistant-message
+    answer extraction; modern context snapshots remain one turn with real cwd
+- verification completed:
+  - Core suite passed: 18 files / 170 tests; external imports return null while
+    current Codex Desktop context/message behavior retains cwd and one turn
+  - Server suite passed: 9 files / 27 tests; fingerprint refresh removes an
+    unannotated prior Session, reports cleanup, and refuses an annotated row
+  - focused Web state suite passed: 1 file / 2 tests, including the visible
+    skipped/cleaned completion summary; focused Biome passed
+  - full `pnpm test` and `pnpm build` passed; full lint completed with zero
+    errors, 19 pre-existing warnings, and 2 pre-existing informational findings;
+    `git diff --check` passed
+  - real source audit found exactly 47 `external-import-turn-1` rollout files;
+    hot-reload startup import removed all 47 unannotated generated Sessions
+  - database post-check: Codex decreased from 67 to 20, projectless Codex from
+    47 to 0, `im` Codex from 13 to 0, and all 20 retained Codex Sessions have an
+    LLM turn
+  - a later ordinary synchronization imported 8 newly created valid Codex
+    Sessions; the final recheck is Codex 28, `im` Codex 0, projectless Codex 0,
+    and 28/28 retained Codex Sessions with an LLM turn
+  - API and Web development processes remained listening on ports 3000 and
+    3001 after hot reload; direct localhost HTTP inspection remained unavailable
+    under the current environment policy and is already tracked by T62's UI
+    runtime verification rather than this parser/data-correctness repair
+- changed files so far:
+  - `packages/core/src/{index,types}.ts`,
+    `packages/core/src/parsers/codex.ts`, and focused parser tests
+  - `apps/server/src/ingestion/{types,transcript-adapter,import-coordinator,
+    import-job-manager,session-repository}.ts` and focused ingestion/job tests
+  - `apps/web/app/{config,import-state}.ts` and focused state tests
+  - `ARCHITECTURE.md`, `README.md`, `README.zh-CN.md`,
+    `docs/zh/OVERVIEW.md`, and `docs/roadmap.md`
+- remaining limitations:
+  - annotated historical copies are intentionally retained rather than deleted;
+    their cleanup is reported as failed so the user can resolve the annotation
+    explicitly
+  - T63 still owns the reusable forced rebuild and full local-reset workflows;
+    T65 only performs the one-time Codex parser fingerprint refresh needed for
+    this evidence correction
+- verification plan:
+  - focused parser/import tests for structural classification, normal Codex
+    regression, one-time fingerprint refresh, atomic cleanup, annotation refusal,
+    result privacy, and Web summary text
+  - audit all local external-import files and stored Codex project/turn counts
+  - run full tests, lint, production build, diff checks, and service health checks
+- documentation plan:
+  - update `ARCHITECTURE.md`, `README.md`, `README.zh-CN.md`,
+    `docs/zh/OVERVIEW.md`, and this roadmap with the implemented compatibility,
+    evidence limits, verification results, and any deferred rebuild requirement
+
 ## Execution Order
 
-T5–T15 and T36–T43 plus T45–T47 and T51 are complete. T48–T50 record the next product
-capabilities. T44 remains a separate planned lint-debt Task and must not be
-folded into feature work.
+T5–T15, T36–T53, T55–T57, T60–T62, and T65 are complete. The next ordered work
+is T63 (safe rebuild/reset), followed by T64 (flat Session navigation). T54,
+T58, and T59 remain separate planned correctness, UI, and source-expansion work
+after this data-experience sequence.
+
+T65 is complete: the correctness repair discovered while auditing the local
+`im` Sessions now excludes non-actionable external-history materializations and
+has removed their unannotated stored copies. T62's loading/onboarding and
+responsive runtime verification are also complete; T63 remains responsible for
+the reusable forced-rebuild operation.
+
+For the newly decomposed data experience, execute T63 next. T64 already has the
+completed T62 single Home-page data owner it depends on and can proceed after
+T63, or independently if priorities change. T48 and T50 remain broader product
+umbrellas whose overlapping loading/rebuild/Session-discovery work is owned by
+T62–T64.
 
 ## Task Lifecycle
 
