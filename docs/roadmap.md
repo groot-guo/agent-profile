@@ -2819,6 +2819,105 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     project selection has one exact behavior, and the shared JSONL scanner no
     longer carries a Claude-only filename
 
+### T75 Session filter console visual redesign
+
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
+- purpose: redesign the Home Session filter/list sidebar so its visual
+  hierarchy, control density, and interaction states feel intentional and
+  consistent with the existing “warm paper log dashboard” UI
+- expected outcome:
+  - Session discovery reads as one coherent filter console instead of a stack
+    of unrelated native controls, chips, and operational actions
+  - search, project/time/sort, quick views, Agent scope, results, and data
+    operations have clear visual priority without changing filter semantics
+- scope and expected files:
+  1. reshape the filter/list sidebar markup and copy in
+     `apps/web/app/page.tsx`, preserving URL-restorable filter behavior,
+     scanning/data-management actions, bounded rendering, and selection
+  2. add focused responsive, dark-theme, hover, and focus styling in
+     `apps/web/app/layout.tsx` using the existing semantic color, spacing,
+     radius, type, and motion contracts
+  3. update `docs/ui-guidelines.md` with the final Session filter-console
+     hierarchy and responsive behavior
+  4. record implementation evidence, exact changed files, and verification in
+     this roadmap before completion
+- dependencies, assumptions, and risks:
+  - refines completed T64/T74 presentation only; Session filtering, sorting,
+    URL state, privacy-safe titles, and API/data contracts remain unchanged
+  - native select semantics remain available; custom styling must keep visible
+    labels, keyboard focus, compact full-path disambiguation, and both themes
+  - the sidebar remains desktop-first but must continue to fit the existing
+    mobile stacked layout without horizontal overflow
+- acceptance:
+  - the sidebar has a clear discovery header/result summary, one dominant
+    search control, labeled project/time/sort controls, unified quick-view and
+    Agent selectors, and visually subordinate operational actions
+  - active filters are immediately visible and clear-all remains available;
+    empty/loading/list/footer states remain readable and structurally stable
+  - light/dark themes, keyboard focus, reduced motion, desktop width, and
+    narrow viewport behavior remain usable with no horizontal overflow
+  - existing Session navigation tests, Web lint, production build, focused
+    browser interaction/visual checks, and `git diff --check` pass
+- verification plan:
+  - run focused Session navigation tests, Web/repository lint, and production
+    build in proportion to the touched Web surface
+  - exercise search/select/quick-view/Agent/clear interactions and inspect
+    light, dark, desktop, and narrow screenshots in the local application
+  - run `git diff --check` and review current UI documentation for stale claims
+- documentation plan:
+  - update `docs/ui-guidelines.md` and this roadmap with implemented hierarchy,
+    responsive behavior, verification results, and any intentional limitations
+- implementation:
+  - replaced the prior control stack with a cohesive Session filter console:
+    a heading and live matched/total count, dominant search field, visibly
+    labeled project/time/sort controls, equal-width quick views, compact Agent
+    scope, and a subordinate three-action local-data toolbar
+  - preserved native select behavior, existing URL/navigation/filter contracts,
+    120-row bounded rendering, scan/rebuild/reset behavior, and the established
+    semantic theme tokens while adding a deliberate local search/control
+    treatment in both themes
+  - added an active-filter count and clear-all affordance, changed list time
+    boundaries into translucent sticky dividers, gave Session rows a quieter
+    selected rail, and split the footer into rendered/matched and project
+    counts
+  - widened the desktop sidebar from 340px to 376px for readable labeled fields;
+    under 760px it becomes a full-width 72vh/520px-minimum discovery region,
+    with all controls fitting without horizontal overflow
+  - shortened only the local Agent-control labels from `Claude Code`/`MiMo Code`
+    to `Claude`/`MiMo` so the complete current source set remains on one
+    intentional row; icons, accessible names, source identity, and all other
+    product labels remain unchanged
+- verification:
+  - focused Session navigation test — passed: 1 file / 5 tests
+  - `pnpm lint` — passed with no errors; 18 pre-existing warnings and 2
+    informational diagnostics remain outside this Task
+  - `pnpm build` — passed: Core and Server TypeScript plus the Next.js
+    production build and static page generation
+  - browser composition check against 74 local Sessions — exact
+    `agent-profile` + recent 7 days + cost sort + anomaly + Codex produced 3
+    matching Sessions and the URL retained `project`, `agent`, `range`, `sort`,
+    and `view`; clear-all restored 74 matches while intentionally preserving
+    the selected sort
+  - light and dark visual checks — filter hierarchy, control states, result
+    rows, local-data toolbar, and Dashboard boundary remained consistent
+  - responsive checks — at 750px the body width was 740px with a 740px sidebar;
+    at 390px the body/sidebar width was 380px and both the Agent row and
+    operation toolbar had 348px width/scroll width, confirming no horizontal
+    overflow
+  - focused Biome checks for the two Web implementation files and
+    `git diff --check` passed
+- completion:
+  - changed files: `apps/web/app/page.tsx`, `apps/web/app/layout.tsx`,
+    `docs/ui-guidelines.md`, and `docs/roadmap.md`
+  - intentional limitation: this Task improves Home Session discovery and list
+    presentation without redesigning the separate Session detail, profiles,
+    prompt-review, or statistics page information architectures
+  - result: the filter/list sidebar now reads as one purpose-built local
+    profiling console, keeps operational controls visually subordinate, and
+    remains usable across both themes and narrow stacked layouts
+
 ## Execution Order
 
 T63 safe rebuild/reset, T64 flat Session navigation, and T74 title/range

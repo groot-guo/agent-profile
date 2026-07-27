@@ -279,6 +279,13 @@ export default function HomePage() {
     agentFilter !== 'all' ||
     timeRange !== 'all' ||
     quickView !== 'all';
+  const activeFilterCount = [
+    Boolean(search),
+    Boolean(projectFilter),
+    agentFilter !== 'all',
+    timeRange !== 'all',
+    quickView !== 'all',
+  ].filter(Boolean).length;
 
   const selectSession = (id: string) => {
     if (sessionListRef.current) {
@@ -312,119 +319,98 @@ export default function HomePage() {
       style={{ display: 'flex', height: 'calc(100vh - var(--header-h))', overflow: 'hidden' }}
     >
       {/* ======== SIDEBAR ======== */}
-      <div
-        className="home-sidebar"
-        style={{
-          width: 340,
-          minWidth: 340,
-          background: C.card,
-          boxShadow: '1px 0 0 var(--c-borderSoft)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          zIndex: 2,
-        }}
-      >
-        {/* 操作区:搜索 + 排序 + 扫描 */}
-        <div
-          style={{
-            padding: `${SP.md}px ${SP.lg}px ${SP.sm}px`,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: SP.sm,
-          }}
-        >
-          <div style={{ display: 'flex', gap: SP.sm }}>
+      <div className="home-sidebar">
+        <div className="session-filter-console">
+          <div className="session-filter-heading">
+            <div>
+              <div className="session-filter-eyebrow">Session index</div>
+              <h1>会话浏览</h1>
+            </div>
+            <div className="session-filter-result" aria-live="polite">
+              <strong className="tnum">{filtered.length}</strong>
+              <span className="tnum">/ {sessions.length}</span>
+              <small>匹配会话</small>
+            </div>
+          </div>
+
+          <label className="session-search">
+            <span className="session-search-icon" aria-hidden="true">
+              <SearchGlyph />
+            </span>
             <input
-              placeholder="搜索标题 / 项目 / id…"
+              aria-label="搜索会话"
+              placeholder="搜索会话、项目或 ID"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '6px 12px',
-                fontSize: FS.sm,
-                minWidth: 0,
-                border: `1px solid ${C.border}`,
-                borderRadius: R.md,
-                background: C.bg,
-                color: C.text,
-                outline: 'none',
-              }}
             />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SessionSort)}
-              data-tip="列表排序方式"
-              style={{
-                padding: '6px 8px',
-                fontSize: FS.sm,
-                border: `1px solid ${C.border}`,
-                borderRadius: R.md,
-                background: C.bg,
-                color: C.text,
-                cursor: 'pointer',
-              }}
-            >
-              <option value="time">按时间</option>
-              <option value="cost">按成本</option>
-              <option value="tokens">按 Token</option>
-              <option value="cache">按 Cache</option>
-              <option value="duration">按耗时</option>
-            </select>
+            {search && (
+              <button type="button" onClick={() => setSearch('')} aria-label="清除搜索">
+                清除
+              </button>
+            )}
+          </label>
+
+          <div className="session-filter-grid">
+            <label className="session-filter-field session-filter-field-wide">
+              <span>项目范围</span>
+              <select
+                aria-label="筛选项目"
+                value={projectFilter}
+                onChange={(event) => setProjectFilter(event.target.value)}
+              >
+                <option value="">全部项目 · {sessions.length}</option>
+                {projects.map(({ project, count }) => (
+                  <option key={project} value={project}>
+                    {projectLabel(project)} · {count} — {project}
+                  </option>
+                ))}
+              </select>
+              <ChevronGlyph />
+            </label>
+            <label className="session-filter-field">
+              <span>时间范围</span>
+              <select
+                aria-label="筛选最近会话"
+                value={timeRange}
+                onChange={(event) => setTimeRange(event.target.value as SessionTimeRange)}
+              >
+                <option value="all">不限时间</option>
+                <option value="1d">最近 24 小时</option>
+                <option value="7d">最近 7 天</option>
+                <option value="30d">最近 30 天</option>
+                <option value="90d">最近 90 天</option>
+              </select>
+              <ChevronGlyph />
+            </label>
+            <label className="session-filter-field">
+              <span>排序方式</span>
+              <select
+                aria-label="会话排序方式"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as SessionSort)}
+              >
+                <option value="time">最近更新</option>
+                <option value="cost">成本最高</option>
+                <option value="tokens">Token 最多</option>
+                <option value="cache">Cache 最低</option>
+                <option value="duration">耗时最长</option>
+              </select>
+              <ChevronGlyph />
+            </label>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 112px', gap: SP.sm }}>
-            <select
-              aria-label="筛选项目"
-              value={projectFilter}
-              onChange={(event) => setProjectFilter(event.target.value)}
-              style={{
-                minWidth: 0,
-                padding: '6px 12px',
-                fontSize: FS.sm,
-                border: `1px solid ${C.border}`,
-                borderRadius: R.md,
-                background: C.bg,
-                color: C.text,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="">全部项目 · {sessions.length}</option>
-              {projects.map(({ project, count }) => (
-                <option key={project} value={project}>
-                  {projectLabel(project)} · {count} — {project}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="筛选最近会话"
-              value={timeRange}
-              onChange={(event) => setTimeRange(event.target.value as SessionTimeRange)}
-              style={{
-                minWidth: 0,
-                padding: '6px 8px',
-                fontSize: FS.sm,
-                border: `1px solid ${C.border}`,
-                borderRadius: R.md,
-                background: C.bg,
-                color: C.text,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="all">不限时间</option>
-              <option value="1d">最近 24 小时</option>
-              <option value="7d">最近 7 天</option>
-              <option value="30d">最近 30 天</option>
-              <option value="90d">最近 90 天</option>
-            </select>
+
+          <div className="session-filter-section-head">
+            <span>结果视图</span>
+            <span className="tnum">
+              {hasActiveFilters ? `${activeFilterCount} 项筛选` : '无额外筛选'}
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <fieldset className="session-quick-view" aria-label="结果视图">
             {(
               [
-                ['all', '全部会话'],
-                ['anomaly', '仅异常'],
-                ['unpriced', '仅未定价'],
+                ['all', '全部'],
+                ['anomaly', '异常'],
+                ['unpriced', '未定价'],
               ] as Array<[SessionQuickView, string]>
             ).map(([value, label]) => {
               const active = quickView === value;
@@ -434,57 +420,62 @@ export default function HomePage() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => setQuickView(value)}
-                  style={{
-                    border: `1px solid ${active ? C.link : C.border}`,
-                    borderRadius: R.pill,
-                    background: active ? `${C.link}14` : C.bg,
-                    color: active ? C.link : C.sub,
-                    cursor: 'pointer',
-                    padding: '3px 9px',
-                    fontSize: FS.cap,
-                  }}
                 >
                   {label}
                 </button>
               );
             })}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                style={{
-                  border: 0,
-                  background: 'transparent',
-                  color: C.link,
-                  cursor: 'pointer',
-                  padding: '3px 4px',
-                  fontSize: FS.cap,
-                }}
-              >
-                清除全部筛选
-              </button>
-            )}
-          </div>
-          <SoftButton
-            onClick={toggleDataManagement}
-            disabled={scanning || resetting}
-            tip="强制重建分析，或在危险区清空本地生成数据"
-            tipAlign="start"
-          >
-            {showDataManagement ? '收起数据管理' : '数据管理'}
-          </SoftButton>
-          {showDataManagement && (
-            <DataManagementPanel
-              summary={dataSummary}
-              scanning={scanning}
-              resetting={resetting}
-              confirmation={resetConfirmation}
-              onConfirmationChange={setResetConfirmation}
-              onRebuild={onRebuild}
-              onReset={onReset}
-            />
+          </fieldset>
+          {hasActiveFilters && (
+            <button type="button" className="session-filter-clear" onClick={clearFilters}>
+              清除全部筛选
+            </button>
           )}
-          <div style={{ display: 'flex', gap: SP.sm }}>
+
+          <div className="session-filter-section-head session-agent-heading">
+            <span>Agent 范围</span>
+            <span className="tnum">{agents.length - 1} 个来源</span>
+          </div>
+          <div className="session-agent-filter">
+            {agents.map((agent) => {
+              const active = agentFilter === agent;
+              const color = agent === 'all' ? C.link : AGENT_COLORS[agent] || AGENT_COLORS.unknown;
+              return (
+                <button
+                  key={agent}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setAgentFilter(agent)}
+                  style={{ '--agent-color': color } as React.CSSProperties}
+                >
+                  {agent !== 'all' && <AgentMark agent={agent} size={18} />}
+                  <span>
+                    {agent === 'all'
+                      ? '全部'
+                      : agent === 'claude-code'
+                        ? 'Claude'
+                        : agent === 'mimo-code'
+                          ? 'MiMo'
+                          : AGENT_LABELS[agent] || agent}
+                  </span>
+                  <span className="tnum">{agentCounts.get(agent)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="session-sidebar-operations">
+          <div className="session-operation-actions">
+            <button
+              className="session-data-management-toggle"
+              type="button"
+              onClick={toggleDataManagement}
+              disabled={scanning || resetting}
+              title="强制重建分析，或在危险区清空本地生成数据"
+            >
+              {showDataManagement ? '收起' : '数据管理'}
+            </button>
             <SoftButton
               variant="primary"
               onClick={onScan}
@@ -509,6 +500,17 @@ export default function HomePage() {
               刷新列表
             </SoftButton>
           </div>
+          {showDataManagement && (
+            <DataManagementPanel
+              summary={dataSummary}
+              scanning={scanning}
+              resetting={resetting}
+              confirmation={resetConfirmation}
+              onConfirmationChange={setResetConfirmation}
+              onRebuild={onRebuild}
+              onReset={onReset}
+            />
+          )}
           {scanResult && (
             <Notice kind="ok" onClose={() => setScanResult('')}>
               {scanResult}
@@ -525,53 +527,8 @@ export default function HomePage() {
             )}
         </div>
 
-        {/* Agent 筛选 */}
-        <div
-          style={{
-            padding: `${SP.xs}px ${SP.lg}px ${SP.sm}px`,
-            display: 'flex',
-            gap: 6,
-            flexWrap: 'wrap',
-          }}
-        >
-          {agents.map((agent) => {
-            const active = agentFilter === agent;
-            const color = agent === 'all' ? C.link : AGENT_COLORS[agent] || AGENT_COLORS.unknown;
-            return (
-              <button
-                key={agent}
-                onClick={() => setAgentFilter(agent)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: '3px 11px',
-                  borderRadius: R.pill,
-                  fontSize: FS.cap,
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: active ? `${color}1F` : C.bg,
-                  color: active ? color : C.sub,
-                  fontWeight: active ? 600 : 400,
-                  transition: 'background .12s ease',
-                }}
-              >
-                {agent !== 'all' && <AgentMark agent={agent} size={18} />}
-                {agent === 'all' ? '全部' : AGENT_LABELS[agent] || agent}
-                <span className="tnum" style={{ opacity: 0.65 }}>
-                  {agentCounts.get(agent)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
         {/* Session 列表 */}
-        <section
-          ref={sessionListRef}
-          aria-label="最近会话列表"
-          style={{ flex: 1, overflowY: 'auto', paddingBottom: SP.sm }}
-        >
+        <section ref={sessionListRef} aria-label="最近会话列表" className="session-list">
           {loading ? (
             <SessionListSkeleton />
           ) : filtered.length === 0 ? (
@@ -582,23 +539,8 @@ export default function HomePage() {
           ) : (
             <>
               {timeGroups.map((group) => (
-                <section key={group.key} aria-label={group.label} style={{ marginBottom: SP.sm }}>
-                  <div
-                    style={{
-                      position: 'sticky',
-                      top: 0,
-                      zIndex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: `6px ${SP.lg}px`,
-                      background: C.bg,
-                      boxShadow: `0 1px 0 ${C.borderSoft}`,
-                      color: C.mute,
-                      fontSize: FS.cap,
-                      fontWeight: 600,
-                    }}
-                  >
+                <section key={group.key} aria-label={group.label} className="session-time-group">
+                  <div className="session-time-heading">
                     <span>{group.label}</span>
                     <span className="tnum">{group.sessions.length}</span>
                   </div>
@@ -629,18 +571,12 @@ export default function HomePage() {
         </section>
 
         {/* 底栏 */}
-        <div
-          style={{
-            padding: `${SP.sm}px ${SP.lg}px`,
-            boxShadow: '0 -1px 0 var(--c-borderSoft)',
-            fontSize: FS.cap,
-            color: C.mute,
-          }}
-        >
-          已显示 <span className="tnum">{visibleSessions.length}</span> / {filtered.length}{' '}
-          个匹配会话
-          {' · '}
-          <span className="tnum">{projects.length}</span> 个项目
+        <div className="session-list-footer">
+          <span>
+            已显示 <strong className="tnum">{visibleSessions.length}</strong> /{' '}
+            <span className="tnum">{filtered.length}</span>
+          </span>
+          <span className="tnum">{projects.length} 个项目</span>
         </div>
       </div>
 
@@ -846,6 +782,36 @@ function SessionListSkeleton() {
   );
 }
 
+function SearchGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronGlyph() {
+  return (
+    <svg
+      className="session-filter-chevron"
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <path
+        d="m7 10 5 5 5-5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // 扁平三行布局:L1 名称;L2 项目;L3 agent · 时间 · 指纹条 · 费用/标记
 function SessionRow({
   s,
@@ -865,20 +831,9 @@ function SessionRow({
     <button
       type="button"
       onClick={() => onSelect(s.id)}
-      className={selected ? undefined : 'ap-row'}
+      className="session-row ap-row"
+      data-selected={selected ? 'true' : 'false'}
       aria-current={selected ? 'true' : undefined}
-      style={{
-        display: 'block',
-        width: 'calc(100% - 16px)',
-        margin: '2px 8px',
-        padding: '7px 10px',
-        border: 0,
-        borderRadius: R.md,
-        cursor: 'pointer',
-        background: selected ? `${C.link}14` : 'transparent',
-        textAlign: 'left',
-        color: C.text,
-      }}
     >
       <div
         className="clamp1"
