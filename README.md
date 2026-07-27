@@ -82,10 +82,15 @@ separate danger-zone action that requires the displayed confirmation phrase.
 
 Sessions appear in one recent-first list with lightweight time boundaries; no
 project folder needs to be expanded before opening a Session. Each row retains
-its project label. Project path search, Agent chips, free-text search,
-anomaly/unpriced quick views, and sorting compose together and remain in the
-URL when a Session is opened or the browser goes back. Large result sets render
-in bounded batches instead of creating every row at once.
+its project label. An exact project selector with counts, all/1/7/30/90-day
+range selection, Agent chips, free-text title/project/path search,
+anomaly/unpriced quick views, and sorting compose together and remain in the URL
+when a Session is opened or the browser goes back. Source-provided Session
+titles remain authoritative; an untitled Session gets a display-only
+Agent/project/start-time label instead of an opaque ID. That fallback is not
+persisted and does not inspect or preview prompt, answer, or reasoning content.
+Large result sets render in bounded batches instead of creating every row at
+once.
 
 ## What the main views do
 

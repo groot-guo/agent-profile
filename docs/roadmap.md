@@ -2685,17 +2685,153 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   cleanup semantics, operational implications, verification evidence, and any
   retained protected records in the listed documents before completion
 
+### T74 Session title fallback and recent-history filter refinement
+
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
+- purpose: make untitled Claude Code and Codex Sessions identifiable without
+  exposing prompt content, and make project/recent-period filtering easier to
+  understand and operate in the flat Session list
+- expected outcome:
+  - every Session row and detail header has a stable, readable display title;
+    project and recent-period filters are explicit, composable, URL-restorable,
+    and easy to clear
+- observed evidence:
+  - the current local database has 7 untitled Claude Code Sessions out of 27
+    and 5 untitled Codex Sessions out of 15
+  - Claude parsing only uses source-provided `ai-title`; Codex parsing only
+    derives a name when suitable reasoning evidence exists; the Web fallback
+    currently exposes only the first eight Session-ID characters
+  - the project control is a free-text datalist with partial-match behavior,
+    while time boundaries are display groups rather than an actual recent-range
+    filter
+- scope and expected files:
+  1. add one privacy-safe Web display-title contract that prefers the stored
+     source title and otherwise combines non-content metadata such as Agent,
+     concise project label, and local start time; use it in both list and detail
+     views without persisting or previewing prompt, answer, or reasoning text
+  2. replace the ambiguous project free-text datalist with an exact project
+     selector carrying counts while retaining the general search field for
+     partial project/path searches
+  3. add an explicit all-time/recent-day range filter, compose it with project,
+     Agent, query, quick-view, and sort filtering, and persist it in the URL
+  4. retain chronological time grouping after filtering and reset the bounded
+     render window whenever the time range changes
+  5. rename the legacy generic JSONL scanner
+     `packages/core/src/scanners/claude.ts` to a source-neutral transcript name
+     and update exports/imports without changing scanning semantics
+  6. add focused title/navigation tests and update current-state documentation
+     after implementation
+- dependencies, assumptions, and risks:
+  - refines completed T64 rather than restoring project accordions or creating a
+    second Session-loading pipeline
+  - source-provided titles remain authoritative; display fallback must not be
+    written to the profiler database or derived from raw prompt/output content
+  - the scanner rename is organizational only and must preserve async recursive
+    JSONL discovery, `journal.jsonl` exclusion, and compatibility sync helpers
+  - exact project selection changes the old partial-match project-field
+    behavior; partial discovery remains available through the existing search
+    field and must be communicated by the UI labels
+- acceptance:
+  - untitled Claude Code and Codex Sessions show distinguishable, readable
+    metadata-derived titles in the list and detail header, with no Session ID as
+    the primary label and no prompt/content persistence
+  - project selection is exact, shows Session counts, has an all-projects
+    option, and composes with a selectable all/1/7/30/90-day recent range
+  - navigation URL parsing/serialization round-trips the new range and safely
+    ignores invalid values; clear-all resets it
+  - time grouping, 120-row bounded rendering, selection/back restoration, and
+    current Agent/quick-view/sort behavior remain intact
+  - the generic transcript scanner has a source-neutral filename and all
+    imports/exports/tests/builds pass
+- verification plan:
+  - focused Core parser/scanner and Web title/navigation tests
+  - Web lint and production build, plus repository tests in proportion to the
+    touched Core/Web surfaces
+  - local database read-only title-coverage check and browser interaction check
+    for project/range composition, URL restoration, empty-state recovery, and
+    untitled Session display
+  - `git diff --check` and stale scanner-name/current-state documentation scan
+- documentation plan:
+  - update `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/ui-guidelines.md`, `docs/zh/OVERVIEW.md`, and this roadmap with the
+    implemented title fallback, exact project/recent-range discovery, scanner
+    naming, changed files, verification evidence, and remaining limitations
+- implementation:
+  - added one Web `sessionDisplayTitle` contract used by the flat Session list,
+    selected-Session header, detail header, Dashboard top lists, and comparison
+    headers; stored source names win, while absent names render as
+    `Agent · project · MM-DD HH:mm` from non-content metadata
+  - retained missing database names as missing rather than manufacturing source
+    titles; the display fallback reads no prompt, answer, or reasoning content
+    and requires no source rebuild or migration
+  - changed the project datalist/partial-match field into an exact native
+    selector with counts and full-path disambiguation; the general search field
+    continues to find titles, projects, paths, and Session IDs
+  - added rolling all/1/7/30/90-day selection, filter composition, `range` URL
+    parsing/serialization with invalid-value fallback, clear-all reset, and
+    render-window reset on range changes
+  - retained the sticky chronological boundaries and 120-row incremental list;
+    the two selection controls share one compact row so the time scope remains
+    visible without adding another toolbar layer
+  - renamed the shared JSONL scanner from `scanners/claude.ts` to
+    `scanners/transcript.ts`, updated the Core export, removed the legacy path,
+    and added direct async/sync discovery and NDJSON-reading coverage
+- verification:
+  - local database read-only check — Claude Code remains 27 total / 7 missing
+    stored names and Codex remains 15 / 5; no source or profiler record was
+    rewritten for the display fallback
+  - focused Web navigation tests — passed: 1 file / 5 tests covering exact
+    project composition, rolling range cutoff, valid/invalid URL state,
+    metadata-only display titles, time grouping, and bounded rendering
+  - full repository tests — passed: Core 22 files / 180 tests and Server 10
+    files / 36 tests; the new transcript-scanner tests cover nested JSONL
+    discovery, `journal.jsonl` exclusion, malformed/untyped-line skipping, and
+    async/sync parity
+  - `pnpm lint` — passed with no errors; 18 pre-existing warnings and 2
+    informational diagnostics remain
+  - `pnpm build` — passed: Core and Server TypeScript plus the Next.js
+    production build
+  - browser check against the 70-Session local dataset — exact project
+    `agent-profile` plus recent 7 days produced 11 rows and URL
+    `?project=%2FUsers%2Fguogenyuan%2FDesktop%2Fagent-profile&range=7d`;
+    clear-all restored the empty project and `all` range values
+  - browser title check — the selected untitled Codex record displayed
+    `Codex · agent-profile · 07-26 20:28` consistently in its row, Home selected
+    header, and embedded detail heading instead of its ID
+  - 750×720 browser check — project and range selectors remained within the
+    viewport (`right` edges 604 and 724), and document/body width stayed 740
+    within the 750-pixel viewport
+  - focused changed-file Biome check, `git diff --check`, removal of the legacy
+    scanner path, and stale current-document scanner-name scan — passed
+- completion:
+  - changed files: Core scanner export, renamed generic transcript scanner and
+    its focused tests; Web Session navigation/helper/tests, Home, Dashboard,
+    comparison, and detail views; `README.md`, `README.zh-CN.md`,
+    `ARCHITECTURE.md`, `docs/ui-guidelines.md`, `docs/zh/OVERVIEW.md`, and this
+    roadmap
+  - intentional limitation: missing stored source titles remain null and
+    exports/API records retain that source truth; this Task improves readable
+    product display without inventing or persisting content-derived titles
+  - result: untitled Claude Code and Codex histories are distinguishable without
+    exposing prompt content, recent-history scope is a real composable filter,
+    project selection has one exact behavior, and the shared JSONL scanner no
+    longer carries a Claude-only filename
+
 ## Execution Order
 
-T63 safe rebuild/reset and T64 flat Session navigation are complete. T58 is also
-complete. Under the current user-authorized sequence, the next work is T48's
-remaining stable local-operation scope, followed by T54, T59, T49, and the
-desktop-first portion of T50. T70, T71, and T73 remain independently planned.
+T63 safe rebuild/reset, T64 flat Session navigation, and T74 title/range
+refinement are complete. T58 is also complete. Under the current
+user-authorized sequence, the next work is T48's remaining stable
+local-operation scope, followed by T54, T59, T49, and the desktop-first portion
+of T50. T70, T71, and T73 remain independently planned.
 
 T65 is complete: the correctness repair discovered while auditing the local
 `im` Sessions excludes non-actionable external-history materializations and has
 removed their unannotated stored copies. T62 owns loading/onboarding, T63 owns
-safe rebuild/reset, and T64 owns flat Session discovery and project filtering.
+safe rebuild/reset, T64 owns flat Session discovery, and T74 refines its
+privacy-safe title plus exact project/recent-range filtering.
 
 T48 and T50 remain broader product umbrellas; their overlapping
 loading/rebuild/Session-discovery pieces are completed by T62–T64 and must not

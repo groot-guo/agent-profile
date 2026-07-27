@@ -61,6 +61,7 @@ failures; malformed items that throw are counted separately as failures.
 | Component | Current responsibility |
 | --- | --- |
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
+| `packages/core/src/scanners/transcript.ts` | Source-neutral async JSONL discovery and NDJSON reading shared by Claude Code and Codex, with compatibility sync helpers |
 | `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
 | `apps/server/src/ingestion/import-job-manager.ts` | Deduplicated startup/manual sync and rebuild state, availability, progress, failure isolation, and bounded public status |
@@ -90,12 +91,17 @@ polls only while `active=true`, stops in terminal states or on unmount, and
 refreshes Sessions/Stats once after completion.
 
 Session discovery uses one flat recent list grouped by today/yesterday/recent
-time boundaries. Project is row metadata and a searchable filter rather than a
-required accordion hierarchy. Project, Agent, text, quick-view, sort, and
-selected-Session state use bounded URL parameters; opening a Session pushes one
+time boundaries. Project is row metadata and an exact counted selector rather
+than a required accordion hierarchy; the free-text field still supports partial
+title/project/path discovery. An all/1/7/30/90-day rolling range composes with
+project, Agent, text, quick-view, and sort filters. These filters and the
+selected Session use bounded URL parameters; opening a Session pushes one
 history entry and browser back restores the filters and saved list scroll.
-Only 120 matching rows render initially, with explicit incremental batches for
-larger result sets.
+Source-provided Session names remain authoritative. When one is absent, the Web
+layer derives a display-only Agent/project/local-start-time label from
+non-content metadata; it does not store a replacement title or inspect prompt,
+answer, or reasoning content. Only 120 matching rows render initially, with
+explicit incremental batches for larger result sets.
 
 ## Current data sources
 
