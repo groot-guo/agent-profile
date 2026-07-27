@@ -587,8 +587,9 @@ export default function HomePage() {
         style={{ flex: 1, overflowY: 'auto', background: C.bg }}
       >
         {selectedId ? (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <div className="session-detail-frame">
             <div
+              className="session-detail-toolbar"
               style={{
                 padding: `${SP.sm}px ${SP.lg}px`,
                 background: C.card,
@@ -603,6 +604,7 @@ export default function HomePage() {
               </SoftButton>
               {selected && (
                 <span
+                  className="session-detail-toolbar-title"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -620,9 +622,10 @@ export default function HomePage() {
               )}
             </div>
             <iframe
+              className="session-detail-iframe"
               title="所选会话详情"
               src={`/session/${selectedId}?embed=1`}
-              style={{ width: '100%', flex: 1, border: 'none', background: C.bg }}
+              style={{ background: C.bg }}
             />
           </div>
         ) : (

@@ -1524,16 +1524,61 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T54 session detail right panel overflow and responsive layout
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
 - purpose: the session detail right panel overflows the viewport on common
   screen sizes; the overall layout should fit the screen and overflow content
   should reflow upward instead of being clipped
-- scope: to be diagnosed — identify the overflowing panel, cap it to viewport
-  height with internal scroll or reflow, verify across breakpoints
-- affected: to be determined (likely `apps/web/app/session/`)
-- acceptance: right panel content is fully visible without horizontal overflow
-  on standard laptop widths; long content scrolls within its region
-- verification: to be recorded
+- scope:
+  - identify the Session detail grid and any minimum-width or viewport-height
+    constraint causing the right-side analysis panel to overflow
+  - make the desktop detail layout fit normal laptop widths, with bounded
+    scrolling for genuinely long panel content and an orderly single-column
+    reflow at narrower widths
+- dependencies and risks:
+  - preserve existing Session tabs, fetch behavior, and evidence visibility;
+    this task changes layout only and must not hide diagnostic content
+  - fixed-height inner scrolling must not trap essential controls or introduce
+    nested horizontal scrolling
+- acceptance:
+  - right-side content is fully reachable without page-level horizontal overflow
+    at standard desktop/laptop viewport widths
+  - long tab content is scrollable within a constrained layout, and narrow
+    desktop/tablet widths reflow without clipped columns
+  - existing Session detail content and navigation behavior remain intact
+- verification plan:
+  - run web lint/build and focused regression checks
+  - use browser screenshots and layout measurements at wide, laptop, and
+    narrow desktop/tablet viewports; inspect scroll width and panel reachability
+- documentation plan:
+  - update current UI-layout behavior and completion evidence in the roadmap;
+    update user-facing architecture/README only if the implemented layout
+    changes their current claims
+- implemented:
+  - made the main right-side content area explicitly shrinkable inside the
+    fixed-width Session sidebar instead of inheriting flexbox min-content width
+  - introduced a bounded detail-frame layout whose toolbar can reflow and whose
+    iframe uses `min-width: 0`, `min-height: 0`, and flex sizing so long Session
+    content scrolls inside the frame without pushing or clipping the page
+  - kept all Session views, fetches, tabs, and analysis content unchanged
+- verification:
+  - `pnpm lint` — passed with the pre-existing 19 warnings and 2 infos
+  - `pnpm --filter agent-profile-web build` — passed, including dynamic
+    `/session/[id]`
+  - in-app browser at `1280x720`, `1024x720`, and `800x720` — document,
+    right-side content, toolbar, and iframe `scrollWidth` never exceeded their
+    `clientWidth`; embedded Session content retained its own vertical scroll
+  - `720x720` responsive check — sidebar and detail reflowed vertically with no
+    document or panel horizontal overflow; the detail toolbar remained reachable
+  - DOM/screenshot review confirmed all four Session analysis tabs, KPI content,
+    diagnosis, performance, and commit evidence remained visible
+  - `git diff --check` — passed
+- completion:
+  - changed files: `apps/web/app/page.tsx`, `apps/web/app/layout.tsx`, and this
+    roadmap
+  - mobile navigation redesign remains intentionally deferred under T50; this
+    task only guarantees the existing detail panel can shrink, reflow, and scroll
 
 ### T55 Zed session analysis missing
 

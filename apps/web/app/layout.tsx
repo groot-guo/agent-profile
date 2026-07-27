@@ -443,6 +443,34 @@ const GLOBAL_CSS = `
   .session-list-footer strong { color: var(--c-text); font-weight: 650; }
 
   /* Session detail:固定摘要 + 仪器式分析视图,长证据按需展开 */
+  .home-content { min-width: 0; }
+  .session-detail-frame {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+  .session-detail-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+  .session-detail-toolbar-title {
+    min-width: 0;
+    flex: 1 1 220px;
+  }
+  .session-detail-iframe {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 0;
+    border: 0;
+  }
   .session-page {
     max-width: 1240px;
     margin: 0 auto;
@@ -627,6 +655,8 @@ const GLOBAL_CSS = `
       height: calc(100vh - var(--header-h));
       overflow: hidden !important;
     }
+    .session-detail-toolbar { flex-wrap: wrap; }
+    .session-detail-toolbar-title { flex-basis: 180px; }
     .prompt-review-grid { grid-template-columns: minmax(0, 1fr) !important; }
     .session-page { padding: 16px; }
     .session-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
