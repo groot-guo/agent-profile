@@ -25,7 +25,8 @@ export async function findTranscriptFiles(root: string): Promise<string[]> {
   }
 
   while (dirs.length > 0) {
-    const dir = dirs.pop()!;
+    const dir = dirs.pop();
+    if (!dir) break;
     let entries: string[];
     try {
       entries = await readdir(dir);

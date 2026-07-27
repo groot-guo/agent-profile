@@ -72,7 +72,7 @@ export {
   findTranscriptFilesSync,
   readTranscript,
   readTranscriptSync,
-} from './scanners/claude';
+} from './scanners/transcript';
 export type { ZedThreadMeta } from './scanners/zed';
 export { hasZedThreadsDb, zedThreadsDbPath } from './scanners/zed';
 export type {
