@@ -84,6 +84,7 @@ export default function ProfilesPage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
           gap: SP.lg,
           alignItems: 'stretch',
+          marginBottom: SP.xl,
         }}
       >
         {report.profiles.map((profile) => (
@@ -193,7 +194,6 @@ function ProfileCard({
         boxShadow: 'var(--shadow-card)',
         overflow: 'hidden',
         border: `1px solid ${C.borderSoft}`,
-        height: '100%',
         display: 'flex',
         flexDirection: 'column',
       }}

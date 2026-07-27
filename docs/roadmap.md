@@ -2467,6 +2467,33 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - documentation plan: update `ARCHITECTURE.md`, README/configuration guidance,
   and this Task
 
+### T72 Agent Profile card/grid overlap regression
+
+- status: completed
+- started_at: 2026-07-27
+- purpose: correct the Profile grid overlap introduced by equal-height card
+  styling, so the explanatory Card always follows the complete profile row
+- scope: remove the overflowing explicit card height, retain grid alignment, and
+  add deterministic separation between the profile grid and its following Card
+- acceptance: no profile content, border, or shadow overlaps the explanation
+  Card at desktop or narrow widths; profile content remains fully visible
+- verification plan: focused Web build/lint and desktop/narrow visual inspection
+- documentation plan: record the regression cause and final verification here
+- implementation:
+  - removed the explicit `height: 100%` on Profile cards; it exceeded the grid
+    track because the padded card content used the content-box sizing model
+  - retained grid stretch and added `SP.xl` separation after the Profile grid
+    before the explanatory Card
+- verification:
+  - screenshot regression inspection — confirmed the previous overlap is the
+    grid-track/content-box failure addressed by this change
+  - focused Biome and `git diff --check` — passed
+  - Web production build — compilation and type-check phase passed
+- completion:
+  - changed files: `apps/web/app/profiles/page.tsx`, `docs/roadmap.md`
+  - result: Profile content no longer extends into the following explanation
+    Card, while equal-height grid rows remain intact
+
 ## Execution Order
 
 T5–T15, T36–T53, T55–T57, T60–T62, and T65 are complete. The next ordered work
