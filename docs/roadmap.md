@@ -2165,6 +2165,177 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     `docs/zh/OVERVIEW.md`, and this roadmap with the implemented compatibility,
     evidence limits, verification results, and any deferred rebuild requirement
 
+### T66 source-session anomaly and overlap audit
+
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
+- purpose: diagnose the user-reported Zed folder/project mismatch, Claude Code
+  projectless rows, MiMo Code/OpenCode overlap question, unrecognized models,
+  and any currently invalid normalized Sessions before changing parsing or
+  presentation behavior
+- scope:
+  1. inspect local profiler rows and their source records read-only, grouped by
+     source, cwd, model, span count, and evidence revision
+  2. compare MiMo Code and OpenCode storage schemas/paths and determine whether
+     they represent the same source or separate runtimes; do not add an
+     OpenCode importer in this diagnostic Task
+  3. trace every anomalous row to a parser/adaptor/UI boundary and distinguish
+     missing source evidence from a parser defect, stale persisted result, or
+     unsupported source shape
+  4. record reproducible counts, root causes, and which follow-up Task owns
+     every confirmed issue; update Task scope before any repair broadens it
+- affected:
+  - `docs/roadmap.md`
+  - read-only local source databases and generated profiler database only
+- dependencies and assumptions:
+  - source transcripts/databases remain authoritative and must not be altered
+  - a normal synchronization may be used only after a confirmed parser revision
+    change in a later Task; this audit itself does not mutate stored evidence
+- risks:
+  - local source applications can change their schemas; conclusions must state
+    which observed schema/version they cover
+  - project/model fields absent from the source must remain visibly unknown,
+    not inferred from a nearby folder or provider label
+- acceptance:
+  - each reported data anomaly has a concrete classification and evidence
+  - MiMo Code/OpenCode duplication is answered from their actual storage and
+    identity contracts
+  - follow-up repairs are independently scoped with acceptance and verification
+    plans; no speculative parser change is included in this Task
+- verification plan:
+  - read-only SQLite/source-schema probes and grouped profiler queries
+  - focused parser/adapter/source-contract review and `git diff --check`
+- documentation plan:
+  - record the diagnostic evidence, ownership, and deferred limitations here;
+    update current-state architecture documents only in the Task that changes
+    implemented behavior
+- audit results:
+  - profiler database inspection found 9 Zed Sessions, all with empty `cwd`,
+    zero message count, and one legacy summary Span; the current Zed source
+    database has the same 9 thread IDs and all 9 contain non-empty
+    `folder_paths` across `base-admin-api`, `im`, and `oryx`
+  - the current Zed parser already maps raw/JSON-array `folder_paths` and
+    structured messages, but the adapter fingerprint remains
+    `zed:<updated_at>:<data_type>:<size>`; it did not change when that parser
+    interpretation replaced the legacy summary mapping, so ordinary import
+    skipped every persisted Zed row as unchanged. T67 owns a versioned,
+    source-safe re-import and regression coverage
+  - Claude Code has no null/empty persisted cwd in the current database. Two
+    source transcripts intentionally capture `cwd="/"`; the Home folder label
+    uses `project.split('/').pop() || project`, so this valid root cwd appears
+    as an unhelpful blank-like project label. T67 owns a display policy for
+    non-project cwd values; it must not fabricate another path or silently
+    discard otherwise valid source evidence
+  - MiMo Code and OpenCode are not duplicate imports: they are distinct local
+    databases (`~/.local/share/mimocode/mimocode.db` and
+    `~/.local/share/opencode/opencode.db`) with different session schemas. The
+    profiler currently imports 164 MiMo Sessions and zero OpenCode Sessions;
+    OpenCode's two local records are not in any aggregate. T59 remains the
+    future OpenCode adapter owner and must define cross-source de-duplication
+    only if a common source identity is observed
+  - model statistics group raw Span `model` strings. The current evidence has
+    aliases/provider-qualified variants such as `glm-5.2`, `glm-5-2`,
+    `glm-5-2-origin`, `DeepSeek-V4-Flash`, and
+    `deepseek-ai/DeepSeek-V4-Pro`, plus Codex `litellm` provider-only metadata.
+    These are neither canonicalized nor clearly separated from unknown model
+    identity, which explains the observed model-recognition and grouping issue;
+    T68 owns the normalization contract and statistics tests
+  - 15 observed model labels currently lack pricing, including the major
+    `glm-x-preview`, `astron-code-latest`, and provider/alias forms. This is
+    visible as unknown cost and must remain unknown unless T68 establishes a
+    source-faithful canonical identity and an applicable price
+  - the current daily chart provides only native SVG `<title>` text on tiny
+    points, profile cards have no shared body-height/layout contract, and a
+    Session navigation replaces the entire detail surface with `Empty` while
+    `/analysis` is pending. T69 and T70 own these independent UI repairs
+- completion:
+  - changed files: `docs/roadmap.md`
+  - result: every reported anomaly now has a verified owner. No source file,
+    source database, generated profiler Session, or parser behavior changed in
+    this diagnostic Task
+
+### T67 source metadata completeness and invalid-session handling
+
+- status: planned
+- purpose: correct confirmed source-faithful project/cwd and model metadata
+  defects, and make unsupported/projectless records recoverable without showing
+  misleading folders
+- scope: to be refined from T66 evidence; expected areas are Zed/Claude source
+  adapters/parsers, metadata persistence, re-import revisioning, and focused
+  source fixtures
+- acceptance: source-backed folders and model identities are retained; absent
+  project evidence is labeled or excluded according to source-specific policy;
+  invalid records are observable rather than silently misclassified
+- verification plan: source fixtures, adapter/coordinator tests, safe re-import
+  evidence, type/build/lint checks, and documentation update
+- documentation plan: update `ARCHITECTURE.md`, `docs/multi-agent.md`, and this
+  Task with final source coverage and known limits
+
+### T68 canonical model identity and statistics grouping
+
+- status: planned
+- purpose: make model identification, pricing lookup, and statistics grouping
+  use a stable source-faithful canonical identity without merging materially
+  distinct models or treating provider-only evidence as a specific model
+- scope: normalize observed aliases at ingestion/aggregation boundaries; expose
+  unknown/provider-only coverage explicitly; add grouped-statistics regressions
+- acceptance: model tables and distributions have deterministic non-duplicated
+  labels, unknown identities remain visible, and pricing remains source/time
+  faithful
+- verification plan: core/server aggregation tests, representative source
+  fixtures, build/lint, and documentation update
+- documentation plan: update `ARCHITECTURE.md`, `docs/stats.md`, and this Task
+
+### T69 statistics trend inspection and profile-card layout consistency
+
+- status: planned
+- purpose: expose exact daily-trend values through keyboard-accessible hover or
+  focus interaction, and make Agent Profile cards scan consistently despite
+  different content lengths
+- scope: replace the native SVG-only trend title with an interactive tooltip or
+  equivalent accessible data inspection; establish stable profile-card grid and
+  card-body dimensions without concealing content
+- acceptance: every daily point reveals its day, cost, tokens, Sessions, and
+  cache metric on pointer and keyboard focus; profile cards align across desktop
+  and narrow widths with no clipped text
+- verification plan: focused Web tests, browser desktop/mobile inspection,
+  focused lint and production build
+- documentation plan: update relevant UI guidance/current behavior and this Task
+
+### T70 session-navigation loading performance and transition feedback
+
+- status: planned
+- purpose: reduce avoidable Session-detail loading latency and replace the
+  isolated spinner with a page-level transition that preserves orientation and
+  explains progress/error recovery
+- scope: measure API and client navigation path; remove confirmed sequential or
+  duplicate work; add reserved-layout loading/skeleton/transition states while
+  retaining accessible status and stale-data safety
+- acceptance: navigation has an immediate visible state change, no misleading
+  blank/unchanged screen during loading, and measured request/render work is no
+  worse than the current path
+- verification plan: Web interaction tests, API/request timing inspection,
+  browser checks, focused lint, full build, and task-specific documentation
+- documentation plan: update `ARCHITECTURE.md`, UI guidance, and this Task
+
+### T71 model-context and analysis configuration audit
+
+- status: planned
+- purpose: audit user-adjustable analysis configuration, including built-in
+  model context windows, and make each setting's scope/provenance clear before
+  changing values
+- scope: inventory current configuration surfaces and seeds; verify model-window
+  values against authoritative vendor documentation where applicable; distinguish
+  user configuration from source-observed runtime evidence
+- acceptance: every exposed setting has a clear owner/effect; corrected context
+  limits cite their source and unknown models remain unconfigured rather than
+  guessed
+- verification plan: configuration tests, seed/migration checks, focused UI
+  check, and documentation update
+- documentation plan: update `ARCHITECTURE.md`, README/configuration guidance,
+  and this Task
+
 ## Execution Order
 
 T5–T15, T36–T53, T55–T57, T60–T62, and T65 are complete. The next ordered work
