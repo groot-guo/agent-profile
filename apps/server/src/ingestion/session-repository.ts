@@ -6,10 +6,13 @@ type PricingLookup = (model?: string, at?: number) => Pricing | undefined;
 
 export class SessionRepository {
   private readonly getRevisionStatement;
+  private readonly getAnnotationsStatement;
   private readonly upsertSessionStatement;
   private readonly deleteSpansStatement;
+  private readonly deleteSessionStatement;
   private readonly insertSpanStatement;
   private readonly replaceTransaction;
+  private readonly removeTransaction;
 
   constructor(
     database: DatabaseConnection,
@@ -21,6 +24,9 @@ export class SessionRepository {
       FROM sessions
       WHERE id = ?
     `);
+    this.getAnnotationsStatement = database.prepare(
+      'SELECT tags, notes FROM sessions WHERE id = ?',
+    );
     this.upsertSessionStatement = database.prepare(`
       INSERT INTO sessions (
         id, name, file_path, agent, file_mtime, file_size, file_lines,
@@ -70,6 +76,7 @@ export class SessionRepository {
         imported_at = excluded.imported_at
     `);
     this.deleteSpansStatement = database.prepare('DELETE FROM spans WHERE session_id = ?');
+    this.deleteSessionStatement = database.prepare('DELETE FROM sessions WHERE id = ?');
     this.insertSpanStatement = database.prepare(`
       INSERT OR REPLACE INTO spans (
         id, session_id, parent_id, type, name, start_time, end_time,
@@ -124,6 +131,10 @@ export class SessionRepository {
         }
       },
     );
+    this.removeTransaction = database.transaction((sessionId: string) => {
+      this.deleteSpansStatement.run(sessionId);
+      this.deleteSessionStatement.run(sessionId);
+    });
   }
 
   getRevision(sessionId: string): StoredSessionRevision {
@@ -158,6 +169,16 @@ export class SessionRepository {
       importedAt,
     );
     this.replaceTransaction(summary, spans, revision);
+  }
+
+  removeGeneratedIfUnannotated(sessionId: string): 'missing' | 'annotated' | 'removed' {
+    const row = this.getAnnotationsStatement.get(sessionId) as
+      | { tags: string | null; notes: string | null }
+      | undefined;
+    if (!row) return 'missing';
+    if ((row.tags ?? '').trim() || (row.notes ?? '').trim()) return 'annotated';
+    this.removeTransaction(sessionId);
+    return 'removed';
   }
 }
 

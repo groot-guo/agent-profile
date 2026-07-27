@@ -6,6 +6,33 @@ export interface CodexEntry {
   payload: Record<string, unknown>;
 }
 
+export function nonActionableCodexExternalHistoryId(entries: CodexEntry[]): string | undefined {
+  const meta = entries.find((entry) => entry.type === 'session_meta')?.payload;
+  const sessionId =
+    typeof meta?.id === 'string'
+      ? meta.id
+      : typeof meta?.session_id === 'string'
+        ? meta.session_id
+        : undefined;
+  if (
+    !sessionId ||
+    meta?.source !== 'vscode' ||
+    meta?.originator !== 'Codex Desktop' ||
+    entries.some((entry) => entry.type === 'turn_context')
+  ) {
+    return undefined;
+  }
+  return entries.some(
+    (entry) =>
+      entry.type === 'event_msg' &&
+      entry.payload?.type === 'task_started' &&
+      typeof entry.payload.turn_id === 'string' &&
+      entry.payload.turn_id.startsWith('external-import-turn-'),
+  )
+    ? sessionId
+    : undefined;
+}
+
 const METADATA_LIMIT = 10_000;
 
 function truncate(s: string): string {
@@ -26,6 +53,41 @@ function safeStringify(v: unknown): string {
 function toMs(iso: string): number {
   const ms = new Date(iso).getTime();
   return Number.isNaN(ms) ? 0 : ms;
+}
+
+function toCapturedMs(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+  return value >= 1_000_000_000_000 ? value : value * 1_000;
+}
+
+function messageText(entry: CodexEntry): string {
+  if (entry.type !== 'response_item' || entry.payload?.type !== 'message') return '';
+  if (!Array.isArray(entry.payload.content)) return '';
+  return (entry.payload.content as unknown[])
+    .filter(
+      (item): item is { text: string } =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as { text?: unknown }).text === 'string',
+    )
+    .map((item) => item.text)
+    .join('\n');
+}
+
+function isMessage(entry: CodexEntry, role: 'user' | 'assistant'): boolean {
+  return (
+    entry.type === 'response_item' &&
+    entry.payload?.type === 'message' &&
+    entry.payload.role === role
+  );
+}
+
+function isEmbeddedToolTranscript(text: string): boolean {
+  const trimmed = text.trimStart();
+  return (
+    trimmed.startsWith('[external_agent_tool_call:') ||
+    trimmed.startsWith('[external_agent_tool_result]')
+  );
 }
 
 function makeSpan(p: {
@@ -79,8 +141,19 @@ export function parseCodexTranscript(
   opts: CodexParseOptions,
 ): ParsedSession | null {
   if (entries.length === 0) return null;
+  if (nonActionableCodexExternalHistoryId(entries)) return null;
 
-  const sorted = [...entries].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+  // Array.sort is stable in supported runtimes, but retain the source index as
+  // an explicit tie-breaker because migrated VS Code histories batch many
+  // original events under the same rollout timestamp.
+  const sorted = entries
+    .map((entry, sourceIndex) => ({ entry, sourceIndex }))
+    .sort(
+      (a, b) =>
+        (a.entry.timestamp || '').localeCompare(b.entry.timestamp || '') ||
+        a.sourceIndex - b.sourceIndex,
+    )
+    .map(({ entry }) => entry);
 
   // 1. 提取 session_meta
   const meta = sorted.find((e) => e.type === 'session_meta')?.payload;
@@ -93,6 +166,7 @@ export function parseCodexTranscript(
         : undefined;
   if (!sessionId) return null;
 
+  const hasTurnContexts = sorted.some((entry) => entry.type === 'turn_context');
   const cwd = meta.cwd as string | undefined;
   const claudeVersion = meta.cli_version as string | undefined;
   const model = meta.model_provider as string | undefined;
@@ -122,9 +196,22 @@ export function parseCodexTranscript(
     }
   }
 
-  // 4. 按 turn_context 分组
+  // 4. 按 turn_context / task_started 分组。迁移历史没有 turn_context，
+  // 因此 user message 也必须算作回合证据；现代 rollout 的上下文快照里
+  // 会重复 user message，不能把它误建成额外回合。
   const turns: CodexEntry[][] = [];
   let currentTurn: CodexEntry[] = [];
+  const hasTurnContent = (turnEntries: CodexEntry[]): boolean =>
+    turnEntries.some(
+      (entry) =>
+        (entry.type === 'response_item' &&
+          entry.payload &&
+          (entry.payload.type === 'reasoning' ||
+            entry.payload.type === 'custom_tool_call' ||
+            (isMessage(entry, 'assistant') && messageText(entry).length > 0) ||
+            (!hasTurnContexts && isMessage(entry, 'user') && messageText(entry).length > 0))) ||
+        (entry.type === 'event_msg' && entry.payload && entry.payload.type === 'token_count'),
+    );
 
   for (const e of sorted) {
     if (
@@ -134,45 +221,74 @@ export function parseCodexTranscript(
     ) {
       // 新的 turn 开始前，保存当前 turn
       // 仅当有实际内容时才保存（排除孤立的 turn_context）
-      const hasContent = currentTurn.some(
-        (x) =>
-          (x.type === 'response_item' &&
-            x.payload &&
-            (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
-          (x.type === 'event_msg' && x.payload && x.payload.type === 'token_count'),
-      );
-      if (hasContent) turns.push(currentTurn);
+      if (hasTurnContent(currentTurn)) turns.push(currentTurn);
       currentTurn = [];
     }
     currentTurn.push(e);
   }
   // 最后一个 turn
   if (currentTurn.length > 0) {
-    const hasContent = currentTurn.some(
-      (x) =>
-        (x.type === 'response_item' &&
-          x.payload &&
-          (x.payload.type === 'reasoning' || x.payload.type === 'custom_tool_call')) ||
-        (x.type === 'event_msg' && x.payload && x.payload.type === 'token_count'),
-    );
-    if (hasContent) turns.push(currentTurn);
+    if (hasTurnContent(currentTurn)) turns.push(currentTurn);
   }
 
   // 5. 每个 turn → spans
   const spans: Span[] = [];
   const tsRows = sorted.filter((e) => e.timestamp);
-  const sessionStart = tsRows.length ? toMs(tsRows[0].timestamp) : 0;
-  const sessionEnd = tsRows.length ? toMs(tsRows[tsRows.length - 1].timestamp) : undefined;
+  const capturedTaskStarts = !hasTurnContexts
+    ? sorted
+        .filter((entry) => entry.type === 'event_msg' && entry.payload?.type === 'task_started')
+        .map((entry) => toCapturedMs(entry.payload.started_at))
+        .filter((value): value is number => value !== undefined)
+    : [];
+  const capturedTaskEnds = !hasTurnContexts
+    ? sorted
+        .filter((entry) => entry.type === 'event_msg' && entry.payload?.type === 'task_complete')
+        .map((entry) => toCapturedMs(entry.payload.completed_at))
+        .filter((value): value is number => value !== undefined)
+    : [];
+  const sessionStart = capturedTaskStarts.length
+    ? Math.min(...capturedTaskStarts)
+    : tsRows.length
+      ? toMs(tsRows[0].timestamp)
+      : 0;
+  const sessionEnd = capturedTaskStarts.length
+    ? Math.max(...capturedTaskStarts, ...capturedTaskEnds)
+    : tsRows.length
+      ? toMs(tsRows[tsRows.length - 1].timestamp)
+      : undefined;
 
-  for (const turnEntries of turns) {
+  for (let turnIndex = 0; turnIndex < turns.length; turnIndex++) {
+    const turnEntries = turns[turnIndex];
     const firstTs = turnEntries.find((e) => e.timestamp)?.timestamp;
     const lastTs = [...turnEntries].reverse().find((e) => e.timestamp)?.timestamp;
-    const turnStart = firstTs ? toMs(firstTs) : 0;
-    const turnEnd = lastTs ? toMs(lastTs) : undefined;
+    const taskStarted = turnEntries.find(
+      (entry) => entry.type === 'event_msg' && entry.payload?.type === 'task_started',
+    );
+    const taskComplete = [...turnEntries]
+      .reverse()
+      .find((entry) => entry.type === 'event_msg' && entry.payload?.type === 'task_complete');
+    const capturedTurnStart = !hasTurnContexts
+      ? toCapturedMs(taskStarted?.payload.started_at)
+      : undefined;
+    const nextTaskStarted = !hasTurnContexts
+      ? turns[turnIndex + 1]?.find(
+          (entry) => entry.type === 'event_msg' && entry.payload?.type === 'task_started',
+        )
+      : undefined;
+    const capturedTurnEnd = !hasTurnContexts
+      ? (toCapturedMs(taskComplete?.payload.completed_at) ??
+        toCapturedMs(nextTaskStarted?.payload.started_at) ??
+        capturedTurnStart)
+      : undefined;
+    const turnStart = capturedTurnStart ?? (firstTs ? toMs(firstTs) : 0);
+    const turnEnd = capturedTurnEnd ?? (lastTs ? toMs(lastTs) : undefined);
 
     // 找到 turn_id
     const turnContext = turnEntries.find((e) => e.type === 'turn_context');
-    const turnId = (turnContext?.payload.turn_id as string) || `turn-${turnStart}`;
+    const turnId =
+      (turnContext?.payload.turn_id as string) ||
+      (taskStarted?.payload.turn_id as string) ||
+      `turn-${turnIndex + 1}-${turnStart}`;
 
     // token 取该 turn 内最后一个 token_count 的 last_token_usage
     let inputTokens = 0,
@@ -273,6 +389,30 @@ export function parseCodexTranscript(
           );
         }
       }
+    }
+
+    // response_item|message assistant → answer spans. event_msg|agent_message
+    // intentionally remains ignored because migrated histories duplicate the
+    // same assistant content in both forms. Text-wrapped historical tool calls
+    // are not structural tool evidence and are omitted from answer spans.
+    for (let entryIndex = 0; entryIndex < turnEntries.length; entryIndex++) {
+      const entry = turnEntries[entryIndex];
+      if (!isMessage(entry, 'assistant')) continue;
+      const text = messageText(entry);
+      if (!text || isEmbeddedToolTranscript(text)) continue;
+      spans.push(
+        makeSpan({
+          id: `${turnId}-answer-${entryIndex}`,
+          sessionId,
+          parentId: turnId,
+          type: 'answer',
+          name: 'answer',
+          startTime: turnStart,
+          endTime: turnEnd,
+          isSidechain,
+          metadata: { text: truncate(text) },
+        }),
+      );
     }
 
     // custom_tool_call + output → tool_call spans

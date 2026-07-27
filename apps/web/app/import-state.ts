@@ -37,11 +37,12 @@ export function summarizeImport(status: ImportJobStatus): string {
       imported: sum.imported + (source.result?.imported ?? 0),
       updated: sum.updated + (source.result?.updated ?? 0),
       skipped: sum.skipped + (source.result?.skipped ?? 0),
+      removed: sum.removed + (source.result?.removed ?? 0),
       failed: sum.failed + (source.result?.failed ?? 0),
     }),
-    { scanned: 0, imported: 0, updated: 0, skipped: 0, failed: 0 },
+    { scanned: 0, imported: 0, updated: 0, skipped: 0, removed: 0, failed: 0 },
   );
   const sourceFailures = status.sources.filter((source) => source.state === 'failed').length;
   const failures = totals.failed + sourceFailures;
-  return `已检查 ${totals.scanned} 条记录；新增 ${totals.imported}，更新 ${totals.updated}，跳过 ${totals.skipped}${failures > 0 ? `，失败 ${failures}` : ''}`;
+  return `已检查 ${totals.scanned} 条记录；新增 ${totals.imported}，更新 ${totals.updated}，跳过 ${totals.skipped}${totals.removed > 0 ? `，清理 ${totals.removed}` : ''}${failures > 0 ? `，失败 ${failures}` : ''}`;
 }

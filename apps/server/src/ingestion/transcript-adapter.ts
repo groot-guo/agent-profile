@@ -3,11 +3,14 @@ import {
   type CodexEntry,
   detectAgent,
   findTranscriptFiles,
+  nonActionableCodexExternalHistoryId,
   parseCodexTranscript,
   parseTranscript,
   readTranscript,
 } from '@agent-profile/core';
 import type { SourceAdapter, SourceItem } from './types';
+
+const CODEX_PARSER_REVISION = 'codex-v2';
 
 export class TranscriptSourceAdapter implements SourceAdapter {
   readonly kind = 'transcript';
@@ -25,7 +28,10 @@ export class TranscriptSourceAdapter implements SourceAdapter {
       const revision = {
         kind: agent,
         updatedAt: stat.mtimeMs,
-        fingerprint: `file:${stat.mtimeMs}:${stat.size}`,
+        fingerprint:
+          agent === 'codex'
+            ? `file:${CODEX_PARSER_REVISION}:${stat.mtimeMs}:${stat.size}`
+            : `file:${stat.mtimeMs}:${stat.size}`,
       };
 
       return {
@@ -33,6 +39,18 @@ export class TranscriptSourceAdapter implements SourceAdapter {
         revision,
         load: async () => {
           const entries = await readTranscript(file);
+          if (agent === 'codex') {
+            const sessionId = nonActionableCodexExternalHistoryId(
+              entries as unknown as CodexEntry[],
+            );
+            if (sessionId) {
+              return {
+                excluded: true,
+                sessionId,
+                reason: 'non_actionable_external_history' as const,
+              };
+            }
+          }
           const parsed =
             agent === 'codex'
               ? parseCodexTranscript(entries as unknown as CodexEntry[], { filePath: file })

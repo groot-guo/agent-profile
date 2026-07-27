@@ -45,11 +45,11 @@ describe('import experience state', () => {
         status([
           source({
             state: 'completed',
-            result: { scanned: 8, imported: 2, updated: 1, skipped: 5, failed: 0 },
+            result: { scanned: 8, imported: 2, updated: 1, skipped: 5, removed: 3, failed: 0 },
           }),
           source({ id: 'codex', label: 'Codex', state: 'failed' }),
         ]),
       ),
-    ).toBe('已检查 8 条记录；新增 2，更新 1，跳过 5，失败 1');
+    ).toBe('已检查 8 条记录；新增 2，更新 1，跳过 5，清理 3，失败 1');
   });
 });

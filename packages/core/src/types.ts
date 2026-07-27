@@ -178,13 +178,14 @@ export interface Pricing {
 }
 
 // ===== scan 结果 =====
-export type ScanSkipReason = 'unchanged_revision' | 'not_importable';
+export type ScanSkipReason = 'unchanged_revision' | 'not_importable' | 'excluded_non_actionable';
 
 export interface ScanResult {
   scanned: number;
   imported: number;
   skipped: number;
   updated: number;
+  removed: number;
   failed: number;
   sessionIds: string[];
   skipReasons: Record<ScanSkipReason, number>;

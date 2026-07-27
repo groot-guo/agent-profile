@@ -12,9 +12,10 @@ export async function importFromSource(
     imported: 0,
     skipped: 0,
     updated: 0,
+    removed: 0,
     failed: 0,
     sessionIds: [],
-    skipReasons: { unchanged_revision: 0, not_importable: 0 },
+    skipReasons: { unchanged_revision: 0, not_importable: 0, excluded_non_actionable: 0 },
   };
 
   const skip = (reason: keyof ScanResult['skipReasons']) => {
@@ -32,6 +33,16 @@ export async function importFromSource(
       const loaded = await item.load();
       if (!loaded) {
         skip('not_importable');
+        continue;
+      }
+      if ('excluded' in loaded) {
+        const cleanup = repository.removeGeneratedIfUnannotated(loaded.sessionId);
+        if (cleanup === 'annotated') {
+          result.failed++;
+          continue;
+        }
+        if (cleanup === 'removed') result.removed++;
+        skip('excluded_non_actionable');
         continue;
       }
 

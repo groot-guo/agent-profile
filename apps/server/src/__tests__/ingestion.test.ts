@@ -243,6 +243,59 @@ describe('session ingestion boundary', () => {
     ).toEqual({ messageCount: 2 });
     target.close();
   });
+
+  it('excludes migrated external history and safely removes prior generated data', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-codex-revision-'));
+    tempDirectories.push(directory);
+    const transcriptPath = join(directory, 'session.jsonl');
+    writeFileSync(transcriptPath, createMigratedCodexTranscript());
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const legacy = createParsedSession('migrated-codex-session', 'legacy-span');
+    legacy.meta.agent = 'codex';
+    legacy.meta.cwd = '/Users/guogenyuan/Desktop/im';
+    repository.replace(
+      { parsed: legacy },
+      { kind: 'codex', updatedAt: 1, fingerprint: 'file:legacy' },
+    );
+
+    const adapter = new TranscriptSourceAdapter(directory, 'codex');
+    const [item] = await adapter.discover();
+    expect(item.revision.fingerprint).toMatch(/^file:codex-v2:/);
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      skipped: 1,
+      removed: 1,
+      failed: 0,
+      skipReasons: { excluded_non_actionable: 1 },
+    });
+    expect(
+      target.prepare('SELECT id FROM sessions WHERE id = ?').get('migrated-codex-session'),
+    ).toBeUndefined();
+
+    repository.replace(
+      { parsed: legacy },
+      { kind: 'codex', updatedAt: 1, fingerprint: 'file:legacy' },
+    );
+    target
+      .prepare("UPDATE sessions SET tags = 'keep-tag', notes = 'keep-note' WHERE id = ?")
+      .run('migrated-codex-session');
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      removed: 0,
+      failed: 1,
+    });
+    expect(
+      target.prepare('SELECT tags, notes FROM sessions WHERE id = ?').get('migrated-codex-session'),
+    ).toEqual({ tags: 'keep-tag', notes: 'keep-note' });
+    target.close();
+  });
 });
 
 function createAdapter(fingerprint: string, load: () => { parsed: ParsedSession }): SourceAdapter {
@@ -354,6 +407,60 @@ function createClaudeLine(uuid: string, outputTokens: number): string {
       content: [],
     },
   });
+}
+
+function createMigratedCodexTranscript(): string {
+  const timestamp = '2026-07-08T10:05:43.713Z';
+  return [
+    {
+      timestamp,
+      type: 'session_meta',
+      payload: {
+        id: 'migrated-codex-session',
+        cwd: '/Users/guogenyuan/Desktop/im',
+        source: 'vscode',
+        originator: 'Codex Desktop',
+      },
+    },
+    {
+      timestamp,
+      type: 'event_msg',
+      payload: {
+        type: 'task_started',
+        turn_id: 'external-import-turn-1',
+        started_at: 1_780_000_000,
+      },
+    },
+    {
+      timestamp,
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'fixture prompt' }],
+      },
+    },
+    {
+      timestamp,
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'fixture answer' }],
+      },
+    },
+    {
+      timestamp,
+      type: 'event_msg',
+      payload: {
+        type: 'task_complete',
+        turn_id: 'external-import-turn-1',
+        completed_at: 1_780_000_030,
+      },
+    },
+  ]
+    .map((entry) => JSON.stringify(entry))
+    .join('\n');
 }
 
 function createMiMoFixture(path: string): void {

@@ -8,9 +8,10 @@ function result(imported = 1): ScanResult {
     imported,
     updated: 0,
     skipped: 0,
+    removed: 0,
     failed: 0,
     sessionIds: ['private-session-id'],
-    skipReasons: { unchanged_revision: 0, not_importable: 0 },
+    skipReasons: { unchanged_revision: 0, not_importable: 0, excluded_non_actionable: 0 },
   };
 }
 

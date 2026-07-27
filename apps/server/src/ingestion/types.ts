@@ -15,11 +15,19 @@ export interface LoadedSourceSession {
   };
 }
 
+export interface ExcludedSourceSession {
+  excluded: true;
+  sessionId: string;
+  reason: 'non_actionable_external_history';
+}
+
+export type SourceLoadResult = LoadedSourceSession | ExcludedSourceSession | null;
+
 export interface SourceItem {
   key: string;
   sessionId?: string;
   revision: SourceRevision;
-  load: () => Promise<LoadedSourceSession | null>;
+  load: () => Promise<SourceLoadResult>;
 }
 
 export interface SourceAdapter {

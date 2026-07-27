@@ -5,6 +5,7 @@ export interface ImportResult {
   imported: number;
   updated: number;
   skipped: number;
+  removed: number;
   failed: number;
 }
 

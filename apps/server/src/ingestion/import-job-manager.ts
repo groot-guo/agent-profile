@@ -34,9 +34,10 @@ const EMPTY_RESULT: ScanResult = {
   imported: 0,
   updated: 0,
   skipped: 0,
+  removed: 0,
   failed: 0,
   sessionIds: [],
-  skipReasons: { unchanged_revision: 0, not_importable: 0 },
+  skipReasons: { unchanged_revision: 0, not_importable: 0, excluded_non_actionable: 0 },
 };
 
 export class ImportJobManager {
