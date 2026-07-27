@@ -12,7 +12,7 @@ describe('Home data ownership', () => {
         json: async () => {
           if (url.endsWith('/sessions')) return Array.from({ length: 400 }, (_, id) => ({ id }));
           if (url.endsWith('/stats')) return { overview: {}, recentTools: [] };
-          return { jobId: null, active: false, sources: [] };
+          return { jobId: null, active: false, operation: null, sources: [] };
         },
       };
     };

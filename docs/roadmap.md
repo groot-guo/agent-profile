@@ -1271,7 +1271,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - source-status, initial loading, first-run onboarding, and active import
     progress are implemented and verified independently under T62
   - safe forced rebuild and destructive reset semantics are implemented and
-    verified independently under T63
+    verified independently under completed T63; T48 retains stable non-watch
+    launch, local-only defaults, and backup/recovery guidance as its remaining
+    scope
 - dependencies and risks:
   - source-path metadata is locally sensitive and must never include transcript
     content; unavailable sources must not prevent API health or existing data
@@ -1941,7 +1943,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T63 safe analysis rebuild and local-data reset
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
 - purpose: let users intentionally regenerate derived analysis after parser,
   pricing, or metric changes without deleting the database by hand, while
   keeping destructive reset behavior explicit and recoverable where possible
@@ -1995,6 +1999,46 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - update `README.md`, `ARCHITECTURE.md`, `AGENTS.md`,
     `docs/multi-agent.md`, and `docs/zh/OVERVIEW.md` with final rebuild/reset,
     preservation, security, migration, and recovery semantics
+- implementation:
+  - added an explicit `sync`/`rebuild` operation to the shared import-job state;
+    rebuild bypasses equal fingerprints but retains adapter loading, analysis,
+    failure isolation, and per-Session atomic repository replacement
+  - added `POST /api/imports/rebuild`, reset-impact summary, and explicitly
+    confirmed generated-data reset APIs; conflicting active operations return a
+    conflict instead of overlapping
+  - added transactional repository reset for `sessions` and `spans`; pricing,
+    model-context rows, and schema migrations remain intact, while the response
+    reports deleted Sessions, Spans, and annotated Sessions
+  - added a Home-page Data Management panel with recommended forced rebuild,
+    preservation guidance, exact reset impact, file-backup guidance, and a
+    spatially separated danger zone requiring `RESET LOCAL DATA`
+- verification:
+  - `pnpm test` — passed: Core 20 files / 176 tests; Server 9 files / 33 tests
+  - focused rebuild/reset coverage — passed for forced unchanged-revision
+    replacement, annotation preservation, generated-data transaction,
+    configuration/migration retention, operation propagation, failure
+    isolation, and reset confirmation validation
+  - focused Web tests — passed: 2 files / 4 tests, including exact reset-phrase
+    gating and the retained-configuration completion summary
+  - `pnpm lint` — passed with the existing 19 warnings and 2 informational
+    diagnostics, no errors
+  - `pnpm build` — passed: Core and Server TypeScript plus the Next.js
+    production build
+  - browser interaction check at 1280×720 — the real local database summary
+    displayed 385 Sessions and 56,891 Spans; the reset action was disabled by
+    default, enabled only for the full confirmation phrase, disabled again
+    after clearing it, stayed within the sidebar, and produced no page-level
+    horizontal overflow or browser errors; no rebuild/reset mutation was run
+  - `git diff --check` — passed
+- completion:
+  - changed files: import coordinator/job manager/repository and scan routes,
+    focused Server/Web tests, Home data-management UI/types/state helpers,
+    `AGENTS.md`, `ARCHITECTURE.md`, `README.md`, `README.zh-CN.md`,
+    `docs/multi-agent.md`, `docs/zh/OVERVIEW.md`, and this roadmap
+  - result: parser/pricing/metric changes can now use a safe forced rebuild
+    without hand-deleting SQLite, while destructive generated-data reset is a
+    separately confirmed operation with explicit deletion and preservation
+    semantics
 
 ### T64 flat Session navigation and project filtering
 

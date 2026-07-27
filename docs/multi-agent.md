@@ -78,6 +78,14 @@ timestamps. It does not return transcript text, full local source paths, or
 source Session IDs. `POST /api/imports` starts a job and returns immediately so
 the UI can retain existing data, poll only while active, and refresh once on
 completion.
+
+`POST /api/imports/rebuild` uses the same bounded per-source job state but
+forces unchanged available revisions through parsing and atomic replacement.
+It preserves tags/notes and configuration, leaves data from unavailable sources
+untouched, and keeps the previous normalized Session if a source item fails.
+The separate confirmed reset route deletes only generated Sessions/Spans;
+pricing, model-context rows, and migration history remain available for the
+next synchronization.
 File-based sources fingerprint file mtime and size. Zed fingerprints its
 parser-contract revision (`zed-v2` currently), `updated_at`, and payload
 metadata; MiMo fingerprints

@@ -41,6 +41,15 @@ source, isolates failures, and exposes per-source state without blocking server
 startup. The compatibility scan API still supports a selected transcript
 directory; the Web uses the shared multi-source job instead.
 
+The same job manager also owns an explicit forced-rebuild operation. Rebuild
+bypasses matching source fingerprints but keeps the normal lazy load, analysis,
+and per-Session atomic replacement path. A parse/load failure therefore leaves
+the prior normalized Session intact, annotations survive successful
+replacement, and unavailable sources are not deleted. Full generated-data
+reset is deliberately separate: it requires an exact confirmation phrase,
+cannot run during an import job, deletes `spans` and `sessions` in one
+transaction, and retains `pricing`, `model_context`, and `schema_migrations`.
+
 Scan results also expose structured `skipReasons`: `unchanged_revision` means a
 matching source fingerprint required no work, while `not_importable` means the
 source item did not produce a normalized Session (for example, a metadata-only
@@ -54,8 +63,8 @@ failures; malformed items that throw are counted separately as failures.
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
 | `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
-| `apps/server/src/ingestion/import-job-manager.ts` | Deduplicated startup/manual job state, availability, progress, failure isolation, and bounded public status |
-| `apps/server/src/ingestion/session-repository.ts` | Normalized analysis and atomic session/span persistence |
+| `apps/server/src/ingestion/import-job-manager.ts` | Deduplicated startup/manual sync and rebuild state, availability, progress, failure isolation, and bounded public status |
+| `apps/server/src/ingestion/session-repository.ts` | Normalized analysis, atomic session/span replacement, and transactional generated-data reset |
 | `apps/server/src/routes/scan.ts` | Thin manual/startup scan entry points; contains no import persistence SQL |
 | `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
 | `apps/server/src/db.ts` | Default local database instance, pricing/model-context seed data, and current lookup wrappers |
@@ -307,7 +316,10 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/health` | Service health |
 | `GET` | `/api/imports/status` | Privacy-bounded source availability, stored counts, and current/last import state |
 | `POST` | `/api/imports` | Start or join a deduplicated multi-source background import |
+| `POST` | `/api/imports/rebuild` | Force available sources through analysis and atomic replacement despite matching fingerprints |
 | `POST` | `/api/scan` | Scan/import a selected transcript directory |
+| `GET` | `/api/data-management/summary` | Return reset impact counts and the required confirmation phrase |
+| `POST` | `/api/data-management/reset` | Confirm and transactionally delete generated Sessions/Spans while retaining configuration and migrations |
 | `GET` | `/api/sessions` | Session list |
 | `PATCH` | `/api/session/:id` | Update session tags/notes |
 | `GET` | `/api/session/:id` | Session with spans |

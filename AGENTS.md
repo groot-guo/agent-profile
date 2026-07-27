@@ -68,6 +68,12 @@ These rules protect metric correctness and must not change accidentally:
 - The primary scanner path is asynchronous. Keep synchronous helpers only for
   compatibility or focused use; do not move blocking scans into request/startup
   paths without an explicit design Task.
+- Forced rebuild may bypass revision equality, but it must retain the ordinary
+  adapter/coordinator/repository path, preserve annotations and configuration,
+  leave unavailable-source Sessions untouched, and replace each successfully
+  parsed Session atomically. Destructive generated-data reset is a distinct,
+  explicitly confirmed operation and must preserve pricing, model-context, and
+  migration records unless a later Task deliberately changes that contract.
 - Pair tool calls/results using source IDs where available
   (`tool_use.id` ↔ `tool_result.tool_use_id`, Codex call IDs, or equivalent).
 - Preserve parent and sidechain evidence when the source provides it.

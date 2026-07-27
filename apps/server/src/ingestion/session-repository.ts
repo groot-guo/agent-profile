@@ -13,6 +13,7 @@ export class SessionRepository {
   private readonly insertSpanStatement;
   private readonly replaceTransaction;
   private readonly removeTransaction;
+  private readonly resetTransaction;
 
   constructor(
     database: DatabaseConnection,
@@ -135,6 +136,25 @@ export class SessionRepository {
       this.deleteSpansStatement.run(sessionId);
       this.deleteSessionStatement.run(sessionId);
     });
+    this.resetTransaction = database.transaction(() => {
+      const counts = {
+        sessions: (
+          database.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number }
+        ).count,
+        spans: (database.prepare('SELECT COUNT(*) as count FROM spans').get() as { count: number })
+          .count,
+        annotatedSessions: (
+          database
+            .prepare(
+              "SELECT COUNT(*) as count FROM sessions WHERE TRIM(COALESCE(tags, '')) <> '' OR TRIM(COALESCE(notes, '')) <> ''",
+            )
+            .get() as { count: number }
+        ).count,
+      };
+      database.prepare('DELETE FROM spans').run();
+      database.prepare('DELETE FROM sessions').run();
+      return counts;
+    });
   }
 
   getRevision(sessionId: string): StoredSessionRevision {
@@ -179,6 +199,10 @@ export class SessionRepository {
     if ((row.tags ?? '').trim() || (row.notes ?? '').trim()) return 'annotated';
     this.removeTransaction(sessionId);
     return 'removed';
+  }
+
+  resetGeneratedData(): { sessions: number; spans: number; annotatedSessions: number } {
+    return this.resetTransaction();
   }
 }
 

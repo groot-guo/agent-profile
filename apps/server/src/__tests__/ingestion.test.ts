@@ -143,6 +143,83 @@ describe('session ingestion boundary', () => {
     database.close();
   });
 
+  it('forces unchanged revisions through atomic replacement without losing annotations', async () => {
+    const database = createDatabase(':memory:');
+    const repository = new SessionRepository(database, (model, at) =>
+      lookupPricing(database, model, at),
+    );
+    let spanId = 'span-first';
+    const adapter = createAdapter('revision-1', () => ({
+      parsed: createParsedSession('session-1', spanId),
+    }));
+
+    await importFromSource(adapter, repository);
+    database
+      .prepare("UPDATE sessions SET tags = 'important', notes = 'keep me' WHERE id = ?")
+      .run('session-1');
+    spanId = 'span-rebuilt';
+
+    expect(await importFromSource(adapter, repository, { force: true })).toMatchObject({
+      imported: 0,
+      updated: 1,
+      skipped: 0,
+      failed: 0,
+    });
+    expect(
+      database.prepare('SELECT tags, notes FROM sessions WHERE id = ?').get('session-1'),
+    ).toEqual({
+      tags: 'important',
+      notes: 'keep me',
+    });
+    expect(database.prepare('SELECT id FROM spans WHERE session_id = ?').all('session-1')).toEqual([
+      { id: 'span-rebuilt' },
+    ]);
+    database.close();
+  });
+
+  it('resets generated analysis while retaining configuration and migration records', () => {
+    const database = createDatabase(':memory:');
+    const repository = new SessionRepository(database, (model, at) =>
+      lookupPricing(database, model, at),
+    );
+    repository.replace(
+      { parsed: createParsedSession('session-1', 'span-1') },
+      { kind: 'fixture', updatedAt: 1, fingerprint: 'revision-1' },
+    );
+    database.prepare("UPDATE sessions SET tags = 'important' WHERE id = ?").run('session-1');
+    database
+      .prepare(
+        `INSERT INTO pricing (
+          model, input_price, cache_creation_price, cache_read_price, output_price,
+          currency, unit, effective_from
+        ) VALUES ('fixture-model', 1, 1, 1, 1, 'CNY', 'per_million_tokens', 0)`,
+      )
+      .run();
+    database
+      .prepare("INSERT INTO model_context (model, context_window) VALUES ('fixture-model', 1000)")
+      .run();
+
+    expect(repository.resetGeneratedData()).toEqual({
+      sessions: 1,
+      spans: 1,
+      annotatedSessions: 1,
+    });
+    expect(database.prepare('SELECT COUNT(*) as count FROM sessions').get()).toEqual({ count: 0 });
+    expect(database.prepare('SELECT COUNT(*) as count FROM spans').get()).toEqual({ count: 0 });
+    expect(database.prepare('SELECT COUNT(*) as count FROM pricing').get()).toEqual({ count: 1 });
+    expect(database.prepare('SELECT COUNT(*) as count FROM model_context').get()).toEqual({
+      count: 1,
+    });
+    expect(
+      (
+        database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
+          count: number;
+        }
+      ).count,
+    ).toBeGreaterThan(0);
+    database.close();
+  });
+
   it('refreshes Zed and MiMo sessions when their source revisions change', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-profile-ingestion-'));
     tempDirectories.push(directory);

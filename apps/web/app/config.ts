@@ -24,5 +24,16 @@ export interface ImportSourceStatus {
 export interface ImportJobStatus {
   jobId: string | null;
   active: boolean;
+  operation: 'sync' | 'rebuild' | null;
   sources: ImportSourceStatus[];
+}
+
+export interface DataManagementSummary {
+  sessions: number;
+  spans: number;
+  annotatedSessions: number;
+  pricingRows: number;
+  modelContextRows: number;
+  migrations: number;
+  resetConfirmation: string;
 }

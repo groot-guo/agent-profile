@@ -1,4 +1,4 @@
-import type { ImportJobStatus, ImportSourceStatus } from './config';
+import type { DataManagementSummary, ImportJobStatus, ImportSourceStatus } from './config';
 
 export type ImportExperienceState =
   | 'loading'
@@ -45,4 +45,12 @@ export function summarizeImport(status: ImportJobStatus): string {
   const sourceFailures = status.sources.filter((source) => source.state === 'failed').length;
   const failures = totals.failed + sourceFailures;
   return `已检查 ${totals.scanned} 条记录；新增 ${totals.imported}，更新 ${totals.updated}，跳过 ${totals.skipped}${totals.removed > 0 ? `，清理 ${totals.removed}` : ''}${failures > 0 ? `，失败 ${failures}` : ''}`;
+}
+
+export function canResetData(confirmation: string, summary: DataManagementSummary | null): boolean {
+  return Boolean(summary && confirmation === summary.resetConfirmation);
+}
+
+export function summarizeReset(deleted: { sessions: number; spans: number }): string {
+  return `已删除 ${deleted.sessions} 个会话、${deleted.spans} 个 Span；定价、模型窗口和迁移记录已保留`;
 }

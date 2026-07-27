@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ImportJobStatus, ImportSourceStatus } from './config';
-import { importExperienceState, sourceStatusText, summarizeImport } from './import-state';
+import {
+  canResetData,
+  importExperienceState,
+  sourceStatusText,
+  summarizeImport,
+  summarizeReset,
+} from './import-state';
 
 function source(overrides: Partial<ImportSourceStatus> = {}): ImportSourceStatus {
   return {
@@ -18,7 +24,7 @@ function source(overrides: Partial<ImportSourceStatus> = {}): ImportSourceStatus
 }
 
 function status(sources: ImportSourceStatus[], active = false): ImportJobStatus {
-  return { jobId: 'job-1', active, sources };
+  return { jobId: 'job-1', active, operation: active ? 'sync' : null, sources };
 }
 
 describe('import experience state', () => {
@@ -51,5 +57,20 @@ describe('import experience state', () => {
         ]),
       ),
     ).toBe('已检查 8 条记录；新增 2，更新 1，跳过 5，清理 3，失败 1');
+  });
+
+  it('requires the exact reset phrase and reports the retained configuration boundary', () => {
+    const summary = {
+      sessions: 4,
+      spans: 12,
+      annotatedSessions: 1,
+      pricingRows: 2,
+      modelContextRows: 3,
+      migrations: 4,
+      resetConfirmation: 'RESET LOCAL DATA',
+    };
+    expect(canResetData('RESET', summary)).toBe(false);
+    expect(canResetData('RESET LOCAL DATA', summary)).toBe(true);
+    expect(summarizeReset({ sessions: 4, spans: 12 })).toContain('定价、模型窗口和迁移记录已保留');
   });
 });

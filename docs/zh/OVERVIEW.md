@@ -38,6 +38,10 @@ MiMo SQLite ────────┘                           分析 + 会�
 启动导入与首页“重新扫描”共享同一个按来源去重的任务状态；同一来源不会并发重复扫描，
 单个来源失败也不会阻断其他来源。状态接口只返回来源名称、可用性、已存数量、阶段、
 汇总计数和时间，不返回原始内容、完整本地路径或来源 Session ID。
+同一个任务管理器支持显式“强制重建”：它绕过相同来源指纹，但仍按 Session 解析并在
+事务中原子替换，因此失败时旧分析保留，成功时标签和备注保留，当前不可用来源也不会被
+清除。独立危险区重置需要完整确认短语，只删除 `sessions` 与 `spans`，保留定价、模型
+窗口和 migration。
 Codex 使用 rollout 的 `session_meta.id` 作为线程级 Session 身份；旧格式缺少 `id`
 时才回退到 `session_id`。子线程保留自己的 ID，其 Span 标记为 Sidechain，不再覆盖父
 Session。
@@ -148,5 +152,8 @@ Task 标记为 `completed`。
   运行中的 `pnpm dev` 不会再被 `pnpm build` 替换 chunk。
 - 首页“重新扫描”与启动导入共享任务管理器，检查 Claude Code、Codex、Zed 和 MiMo，
   并按来源展示新增、更新、跳过与失败数量。
+- 首页“数据管理”提供强制重建和独立确认的本地生成数据清空；重建是 parser/指标变化后
+  的推荐恢复方式，清空前应停止 Server 并备份 `apps/server/trace.db` 或
+  `TRACE_DB_PATH` 指定文件。
 - LLM 诊断使用 `LLM_API_KEY`，以及可选的 `LLM_PROVIDER`、`LLM_MODEL` 和
   `LLM_BASE_URL`。

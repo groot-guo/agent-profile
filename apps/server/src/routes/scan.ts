@@ -25,6 +25,12 @@ interface ImportBody {
   sources?: ImportSourceId[];
 }
 
+interface ResetBody {
+  confirmation?: string;
+}
+
+const RESET_CONFIRMATION = 'RESET LOCAL DATA';
+
 const sessionRepository = new SessionRepository(db, getPricing);
 const claudeDirectory =
   config.autoScanDir && config.autoScanDir !== config.defaultScanDir
@@ -39,25 +45,32 @@ export const importJobManager = new ImportJobManager(
       id: 'claude-code',
       label: 'Claude Code',
       isAvailable: () => pathAvailable(claudeDirectory),
-      run: () => scanTranscriptDirectory(claudeDirectory, 'claude-code'),
+      run: (operation) =>
+        scanTranscriptDirectory(claudeDirectory, 'claude-code', sessionRepository, {
+          force: operation === 'rebuild',
+        }),
     },
     {
       id: 'codex',
       label: 'Codex',
       isAvailable: () => pathAvailable(codexDirectory),
-      run: () => scanTranscriptDirectory(codexDirectory, 'codex'),
+      run: (operation) =>
+        scanTranscriptDirectory(codexDirectory, 'codex', sessionRepository, {
+          force: operation === 'rebuild',
+        }),
     },
     {
       id: 'zed',
       label: 'Zed',
       isAvailable: () => pathAvailable(zedThreadsDbPath()),
-      run: () => scanZedThreads(),
+      run: (operation) => scanZedThreads({}, sessionRepository, { force: operation === 'rebuild' }),
     },
     {
       id: 'mimo-code',
       label: 'MiMo Code',
       isAvailable: () => pathAvailable(mimoDatabasePath),
-      run: () => scanMiMoSessions(mimoDatabasePath),
+      run: (operation) =>
+        scanMiMoSessions(mimoDatabasePath, sessionRepository, { force: operation === 'rebuild' }),
     },
   ],
   (source, error) => {
@@ -78,8 +91,49 @@ export function registerScanRoutes(app: FastifyInstance) {
     ) {
       return reply.status(400).send({ error: 'invalid import source' });
     }
+    const current = importJobManager.snapshot();
+    if (current.active && current.operation !== 'sync') {
+      return reply.status(409).send({ error: 'import job already active' });
+    }
     const status = await importJobManager.start(sourceIds);
     return reply.status(202).send(withStoredCounts(status));
+  });
+
+  app.post<{ Body: ImportBody }>('/api/imports/rebuild', async (request, reply) => {
+    const sourceIds = request.body?.sources ?? importJobManager.sourceIds();
+    if (
+      !Array.isArray(sourceIds) ||
+      sourceIds.some((sourceId) => !importJobManager.sourceIds().includes(sourceId))
+    ) {
+      return reply.status(400).send({ error: 'invalid import source' });
+    }
+    const current = importJobManager.snapshot();
+    if (current.active && current.operation !== 'rebuild') {
+      return reply.status(409).send({ error: 'import job already active' });
+    }
+    const status = await importJobManager.start(sourceIds, 'rebuild');
+    return reply.status(202).send(withStoredCounts(status));
+  });
+
+  app.get('/api/data-management/summary', async () => dataManagementSummary());
+
+  app.post<{ Body: ResetBody }>('/api/data-management/reset', async (request, reply) => {
+    if (request.body?.confirmation !== RESET_CONFIRMATION) {
+      return reply.status(400).send({ error: 'confirmation required' });
+    }
+    if (importJobManager.snapshot().active) {
+      return reply.status(409).send({ error: 'import job already active' });
+    }
+    const before = dataManagementSummary();
+    const deleted = sessionRepository.resetGeneratedData();
+    return {
+      deleted,
+      retained: {
+        pricingRows: before.pricingRows,
+        modelContextRows: before.modelContextRows,
+        migrations: before.migrations,
+      },
+    };
   });
 
   app.post<{ Body: ScanBody }>('/api/scan', async (request, reply) => {
@@ -104,8 +158,9 @@ export function scanTranscriptDirectory(
   directory: string,
   agent?: string,
   repository = sessionRepository,
+  options: { force?: boolean } = {},
 ): Promise<ScanResult> {
-  return importFromSource(new TranscriptSourceAdapter(directory, agent), repository);
+  return importFromSource(new TranscriptSourceAdapter(directory, agent), repository, options);
 }
 
 export function autoScan(directory: string): Promise<ScanResult> {
@@ -115,15 +170,17 @@ export function autoScan(directory: string): Promise<ScanResult> {
 export function scanZedThreads(
   options: ZedSourceAdapterOptions = {},
   repository = sessionRepository,
+  importOptions: { force?: boolean } = {},
 ): Promise<ScanResult> {
-  return importFromSource(new ZedSourceAdapter(options), repository);
+  return importFromSource(new ZedSourceAdapter(options), repository, importOptions);
 }
 
 export function scanMiMoSessions(
   databasePath?: string,
   repository = sessionRepository,
+  options: { force?: boolean } = {},
 ): Promise<ScanResult> {
-  return importFromSource(new MiMoSourceAdapter(databasePath), repository);
+  return importFromSource(new MiMoSourceAdapter(databasePath), repository, options);
 }
 
 async function importStatusWithStoredCounts() {
@@ -163,4 +220,25 @@ function pathAvailable(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+function dataManagementSummary() {
+  const count = (table: string) =>
+    (db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get() as { count: number }).count;
+  const annotatedSessions = (
+    db
+      .prepare(
+        "SELECT COUNT(*) as count FROM sessions WHERE TRIM(COALESCE(tags, '')) <> '' OR TRIM(COALESCE(notes, '')) <> ''",
+      )
+      .get() as { count: number }
+  ).count;
+  return {
+    sessions: count('sessions'),
+    spans: count('spans'),
+    annotatedSessions,
+    pricingRows: count('pricing'),
+    modelContextRows: count('model_context'),
+    migrations: count('schema_migrations'),
+    resetConfirmation: RESET_CONFIRMATION,
+  };
 }

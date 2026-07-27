@@ -5,6 +5,7 @@ import type { SourceAdapter } from './types';
 export async function importFromSource(
   adapter: SourceAdapter,
   repository: SessionRepository,
+  options: { force?: boolean } = {},
 ): Promise<ScanResult> {
   const items = await adapter.discover();
   const result: ScanResult = {
@@ -25,7 +26,7 @@ export async function importFromSource(
 
   for (const item of items) {
     try {
-      if (item.sessionId && repository.isCurrent(item.sessionId, item.revision)) {
+      if (!options.force && item.sessionId && repository.isCurrent(item.sessionId, item.revision)) {
         skip('unchanged_revision');
         continue;
       }
@@ -49,6 +50,7 @@ export async function importFromSource(
       const sessionId = loaded.parsed.sessionId;
       const stored = repository.getRevision(sessionId);
       if (
+        !options.force &&
         stored.exists &&
         stored.kind === item.revision.kind &&
         stored.fingerprint === item.revision.fingerprint

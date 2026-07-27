@@ -2,11 +2,11 @@
 
 import type { SessionSummary } from '@agent-profile/core';
 import { useCallback, useEffect, useState } from 'react';
-import { API, type ImportJobStatus } from './config';
+import { API, type DataManagementSummary, type ImportJobStatus } from './config';
 import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
 import { loadDashboardData, loadImportStatus } from './home-data';
 import { AgentMark } from './icons';
-import { summarizeImport } from './import-state';
+import { canResetData, summarizeImport, summarizeReset } from './import-state';
 import { projectLabel } from './project-label';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtAgo, R, SP } from './theme';
 import { Chip, Empty, Notice, SoftButton, TokenStrip } from './ui';
@@ -36,6 +36,10 @@ export default function HomePage() {
   const [anomalyIds, setAnomalyIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<string>('time');
+  const [showDataManagement, setShowDataManagement] = useState(false);
+  const [dataSummary, setDataSummary] = useState<DataManagementSummary | null>(null);
+  const [resetConfirmation, setResetConfirmation] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
     const { sessions: sessionList, stats } = await loadDashboardData(API);
@@ -109,6 +113,71 @@ export default function HomePage() {
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'scan failed');
+    }
+  };
+
+  const onRebuild = async () => {
+    setError('');
+    setScanResult('');
+    try {
+      const response = await fetch(`${API}/imports/rebuild`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const status = (await response.json()) as ImportJobStatus;
+      setImportStatus(status);
+      if (!status.active) {
+        await fetchDashboardData();
+        setScanResult(summarizeImport(status));
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'rebuild failed');
+    }
+  };
+
+  const loadDataSummary = async () => {
+    const response = await fetch(`${API}/data-management/summary`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const summary = (await response.json()) as DataManagementSummary;
+    setDataSummary(summary);
+    return summary;
+  };
+
+  const toggleDataManagement = async () => {
+    const next = !showDataManagement;
+    setShowDataManagement(next);
+    if (!next || dataSummary) return;
+    try {
+      await loadDataSummary();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '数据摘要加载失败');
+    }
+  };
+
+  const onReset = async () => {
+    if (!canResetData(resetConfirmation, dataSummary)) return;
+    setResetting(true);
+    setError('');
+    try {
+      const response = await fetch(`${API}/data-management/reset`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirmation: resetConfirmation }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = (await response.json()) as {
+        deleted: { sessions: number; spans: number; annotatedSessions: number };
+      };
+      setSelectedId(null);
+      setResetConfirmation('');
+      await Promise.all([fetchDashboardData(), fetchImportStatus(), loadDataSummary()]);
+      setScanResult(summarizeReset(result.deleted));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'reset failed');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -228,6 +297,25 @@ export default function HomePage() {
               <option value="duration">按耗时</option>
             </select>
           </div>
+          <SoftButton
+            onClick={toggleDataManagement}
+            disabled={scanning || resetting}
+            tip="强制重建分析，或在危险区清空本地生成数据"
+            tipAlign="start"
+          >
+            {showDataManagement ? '收起数据管理' : '数据管理'}
+          </SoftButton>
+          {showDataManagement && (
+            <DataManagementPanel
+              summary={dataSummary}
+              scanning={scanning}
+              resetting={resetting}
+              confirmation={resetConfirmation}
+              onConfirmationChange={setResetConfirmation}
+              onRebuild={onRebuild}
+              onReset={onReset}
+            />
+          )}
           <div style={{ display: 'flex', gap: SP.sm }}>
             <SoftButton
               variant="primary"
@@ -408,6 +496,95 @@ export default function HomePage() {
   );
 }
 
+function DataManagementPanel({
+  summary,
+  scanning,
+  resetting,
+  confirmation,
+  onConfirmationChange,
+  onRebuild,
+  onReset,
+}: {
+  summary: DataManagementSummary | null;
+  scanning: boolean;
+  resetting: boolean;
+  confirmation: string;
+  onConfirmationChange: (value: string) => void;
+  onRebuild: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <div
+      style={{
+        padding: SP.md,
+        border: `1px solid ${C.border}`,
+        borderRadius: R.md,
+        background: C.bg,
+        fontSize: FS.cap,
+        color: C.sub,
+        lineHeight: 1.55,
+      }}
+    >
+      <div style={{ fontWeight: 600, color: C.text, marginBottom: SP.xs }}>推荐：强制重建分析</div>
+      <div style={{ marginBottom: SP.sm }}>
+        重新解析所有可用来源，即使来源指纹未变化。原有标签、备注、定价和模型窗口配置会保留；不可用来源的已有数据不会被删除。
+      </div>
+      <SoftButton variant="primary" onClick={onRebuild} disabled={scanning || resetting}>
+        {scanning ? '任务进行中…' : '强制重建'}
+      </SoftButton>
+
+      <div
+        style={{
+          marginTop: SP.md,
+          paddingTop: SP.md,
+          borderTop: `1px solid ${C.high}55`,
+          color: C.high,
+        }}
+      >
+        <div style={{ fontWeight: 600, marginBottom: SP.xs }}>危险区：清空本地分析数据</div>
+        {summary ? (
+          <div style={{ marginBottom: SP.sm }}>
+            将删除 {summary.sessions} 个会话和 {summary.spans} 个 Span
+            {summary.annotatedSessions > 0
+              ? `，其中 ${summary.annotatedSessions} 个带标签或备注`
+              : ''}
+            。定价、模型窗口和数据库迁移保留。操作前请停止 Server 并备份 apps/server/trace.db（或
+            TRACE_DB_PATH 指定文件）。
+          </div>
+        ) : (
+          <div style={{ marginBottom: SP.sm }}>正在读取影响范围…</div>
+        )}
+        {summary && (
+          <>
+            <input
+              aria-label="本地数据重置确认"
+              placeholder={`输入 ${summary.resetConfirmation}`}
+              value={confirmation}
+              onChange={(event) => onConfirmationChange(event.target.value)}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                marginBottom: SP.sm,
+                padding: '6px 8px',
+                border: `1px solid ${C.border}`,
+                borderRadius: R.sm,
+                background: C.card,
+                color: C.text,
+              }}
+            />
+            <SoftButton
+              onClick={onReset}
+              disabled={scanning || resetting || !canResetData(confirmation, summary)}
+            >
+              {resetting ? '正在清空…' : '永久清空生成数据'}
+            </SoftButton>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ImportStatusSummary({ status }: { status: ImportJobStatus }) {
   const activeSources = status.sources.filter((source) => source.state === 'scanning');
   const failedSources = status.sources.filter((source) => source.state === 'failed');
@@ -425,7 +602,9 @@ function ImportStatusSummary({ status }: { status: ImportJobStatus }) {
       }}
     >
       {activeSources.length > 0 &&
-        `正在同步：${activeSources.map((source) => source.label).join('、')}`}
+        `${status.operation === 'rebuild' ? '正在强制重建' : '正在同步'}：${activeSources
+          .map((source) => source.label)
+          .join('、')}`}
       {activeSources.length > 0 && failedSources.length > 0 && <br />}
       {failedSources.length > 0 &&
         `需要重试：${failedSources.map((source) => source.label).join('、')}`}

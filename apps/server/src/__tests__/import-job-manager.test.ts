@@ -40,8 +40,10 @@ describe('ImportJobManager', () => {
 
     const first = await manager.start(['claude-code', 'codex', 'zed']);
     const second = await manager.start(['claude-code']);
+    const conflicting = await manager.start(['claude-code'], 'rebuild');
     expect(first.active).toBe(true);
     expect(second.active).toBe(true);
+    expect(conflicting.operation).toBe('sync');
     expect(claudeRun).toHaveBeenCalledTimes(1);
     expect(first.sources.find((source) => source.id === 'zed')?.available).toBe(false);
 
@@ -91,5 +93,18 @@ describe('ImportJobManager', () => {
       result: { imported: 2 },
       error: null,
     });
+  });
+
+  it('passes the selected operation to every source and exposes it in status', async () => {
+    const run = vi.fn(async () => result());
+    const manager = new ImportJobManager([
+      { id: 'claude-code', label: 'Claude Code', isAvailable: () => true, run },
+    ]);
+
+    const started = await manager.start(undefined, 'rebuild');
+    expect(started.operation).toBe('rebuild');
+    await manager.waitForIdle();
+    expect(run).toHaveBeenCalledWith('rebuild');
+    expect(manager.snapshot()).toMatchObject({ active: false, operation: 'rebuild' });
   });
 });

@@ -2,12 +2,13 @@ import type { ScanResult } from '@agent-profile/core';
 
 export type ImportSourceId = 'claude-code' | 'codex' | 'zed' | 'mimo-code';
 export type ImportSourceState = 'idle' | 'scanning' | 'completed' | 'failed';
+export type ImportOperation = 'sync' | 'rebuild';
 
 export interface ImportSourceDefinition {
   id: ImportSourceId;
   label: string;
   isAvailable: () => boolean | Promise<boolean>;
-  run: () => Promise<ScanResult>;
+  run: (operation: ImportOperation) => Promise<ScanResult>;
 }
 
 type PublicScanResult = Omit<ScanResult, 'sessionIds'>;
@@ -26,6 +27,7 @@ export interface ImportSourceStatus {
 export interface ImportJobStatus {
   jobId: string | null;
   active: boolean;
+  operation: ImportOperation | null;
   sources: ImportSourceStatus[];
 }
 
@@ -45,6 +47,7 @@ export class ImportJobManager {
   private readonly statuses = new Map<ImportSourceId, ImportSourceStatus>();
   private readonly inFlight = new Map<ImportSourceId, Promise<ScanResult>>();
   private jobId: string | null = null;
+  private operation: ImportOperation | null = null;
   private sequence = 0;
 
   constructor(
@@ -85,7 +88,12 @@ export class ImportJobManager {
     return this.snapshot();
   }
 
-  async start(sourceIds: ImportSourceId[] = this.sourceIds()): Promise<ImportJobStatus> {
+  async start(
+    sourceIds: ImportSourceId[] = this.sourceIds(),
+    operation: ImportOperation = 'sync',
+  ): Promise<ImportJobStatus> {
+    if (this.inFlight.size > 0 && this.operation !== operation) return this.snapshot();
+    this.operation = operation;
     let started = false;
     for (const sourceId of [...new Set(sourceIds)]) {
       const definition = this.definitions.get(sourceId);
@@ -100,11 +108,13 @@ export class ImportJobManager {
       if (!status.available || this.inFlight.has(sourceId)) continue;
 
       started = true;
-      const promise = this.launch(definition, status);
+      const promise = this.launch(definition, status, operation);
       void promise.catch(() => undefined);
     }
 
-    if (started) this.jobId = `${Date.now()}-${++this.sequence}`;
+    if (started) {
+      this.jobId = `${Date.now()}-${++this.sequence}`;
+    }
     return this.snapshot();
   }
 
@@ -118,7 +128,8 @@ export class ImportJobManager {
     status.available = await definition.isAvailable();
     if (!status.available) return structuredClone(EMPTY_RESULT);
     this.jobId = `${Date.now()}-${++this.sequence}`;
-    return this.launch(definition, status);
+    this.operation = 'sync';
+    return this.launch(definition, status, 'sync');
   }
 
   async waitForIdle(): Promise<void> {
@@ -131,6 +142,7 @@ export class ImportJobManager {
     return {
       jobId: this.jobId,
       active: this.inFlight.size > 0,
+      operation: this.operation,
       sources: [...this.statuses.values()].map((status) => ({
         ...status,
         result: status.result
@@ -143,6 +155,7 @@ export class ImportJobManager {
   private launch(
     definition: ImportSourceDefinition,
     status: ImportSourceStatus,
+    operation: ImportOperation,
   ): Promise<ScanResult> {
     const existing = this.inFlight.get(definition.id);
     if (existing) return existing;
@@ -152,7 +165,7 @@ export class ImportJobManager {
     status.error = null;
 
     const promise = Promise.resolve()
-      .then(() => definition.run())
+      .then(() => definition.run(operation))
       .then((result) => {
         status.state = 'completed';
         const { sessionIds: _sessionIds, ...publicResult } = result;

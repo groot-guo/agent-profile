@@ -64,6 +64,13 @@ If the list is empty, use the source-aware first-run panel or click
 and reports imported, updated, skipped, and failed counts. The status API and UI
 do not expose transcript text, full local paths, or source Session identifiers.
 
+The Home-page **数据管理** panel separates four operations: refreshing stored
+API data, incremental synchronization, a forced analysis rebuild, and a local
+generated-data reset. Forced rebuild reprocesses unchanged available sources
+while preserving Session tags/notes, pricing, model-context configuration,
+migrations, and Sessions whose source is currently unavailable. Reset is a
+separate danger-zone action that requires the displayed confirmation phrase.
+
 Sessions are grouped by project path. Use the Agent chips, search, and sort
 controls to narrow the list.
 
@@ -113,6 +120,10 @@ AUTO_SCAN_DIR="" pnpm dev
   data to SQLite. It does not upload transcript data by default.
 - The default database is `apps/server/trace.db`. Stop the Server before making
   a file-level backup of it.
+- A forced rebuild is the normal recovery path after parser or metric changes.
+  The danger-zone reset deletes every generated Session/Span, including tags
+  and notes, but retains pricing, model-context configuration, and migration
+  records so the database can be synchronized again from available sources.
 - Prompt review is ephemeral: prompt text is not written to the database and is
   not sent to a semantic provider by that feature.
 - Source data varies. A missing field means “not captured”, not zero, success,

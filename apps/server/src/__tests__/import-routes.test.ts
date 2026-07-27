@@ -45,4 +45,43 @@ describe('import status routes', () => {
     });
     expect(response.statusCode).toBe(400);
   });
+
+  it('requires explicit confirmation and resets only generated analysis data', async () => {
+    const { db } = await import('../db');
+    db.prepare(
+      `INSERT INTO sessions (id, file_path, agent, start_time, imported_at, tags)
+       VALUES ('reset-session', 'fixture://reset', 'fixture', 1, 1, 'important')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO spans (id, session_id, type, name, start_time)
+       VALUES ('reset-span', 'reset-session', 'llm_turn', 'fixture', 1)`,
+    ).run();
+
+    const summary = await app.inject({ method: 'GET', url: '/api/data-management/summary' });
+    expect(summary.statusCode).toBe(200);
+    expect(summary.json()).toMatchObject({ sessions: 1, spans: 1, annotatedSessions: 1 });
+
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/api/data-management/reset',
+      payload: { confirmation: 'RESET' },
+    });
+    expect(rejected.statusCode).toBe(400);
+
+    const reset = await app.inject({
+      method: 'POST',
+      url: '/api/data-management/reset',
+      payload: { confirmation: summary.json().resetConfirmation },
+    });
+    expect(reset.statusCode).toBe(200);
+    expect(reset.json()).toMatchObject({
+      deleted: { sessions: 1, spans: 1, annotatedSessions: 1 },
+      retained: {
+        pricingRows: expect.any(Number),
+        modelContextRows: expect.any(Number),
+        migrations: expect.any(Number),
+      },
+    });
+    expect(db.prepare('SELECT COUNT(*) as count FROM sessions').get()).toEqual({ count: 0 });
+  });
 });
