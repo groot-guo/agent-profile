@@ -78,7 +78,7 @@ refreshes Sessions/Stats once after completion.
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
 | Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), project metadata, response items, events, and call IDs |
-| Zed | threads SQLite database with zstd-compressed JSON payloads | `updated_at` plus payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
+| Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `time_updated` plus message/part counts; changed session records are loaded lazily |
 
 All adapters emit the same session/span shape so downstream metrics and UI do
@@ -92,6 +92,11 @@ links, or a portable cost field in this payload, so the importer leaves that
 evidence uncaptured instead of estimating it. Malformed or unsupported payloads
 are reported as `not_importable`; thread summaries are not converted into
 synthetic answer or token evidence.
+
+The Zed fingerprint includes a parser-contract revision in addition to source
+metadata. When Zed normalization changes, advancing that revision makes the
+ordinary coordinator atomically replace existing derived rows once; it does not
+require deleting the local analysis database or re-importing unrelated sources.
 
 Codex Desktop can materialize Claude or other external-Agent history as rollout
 JSONL with `external-import-turn-*` IDs, no ordinary `turn_context`, a shared

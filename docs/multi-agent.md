@@ -78,12 +78,15 @@ timestamps. It does not return transcript text, full local source paths, or
 source Session IDs. `POST /api/imports` starts a job and returns immediately so
 the UI can retain existing data, poll only while active, and refresh once on
 completion.
-File-based sources fingerprint file mtime and size. Zed fingerprints
-`updated_at` plus payload metadata; MiMo fingerprints
+File-based sources fingerprint file mtime and size. Zed fingerprints its
+parser-contract revision (`zed-v2` currently), `updated_at`, and payload
+metadata; MiMo fingerprints
 `time_updated` plus message/part counts. Matching database-source revisions are
 skipped before payload decompression or row loading. A changed source session
 is re-normalized and replaces its previous generated rows so aggregates do not
-double count. A legacy row with no fingerprint refreshes once.
+double count. Advancing the Zed parser-contract revision refreshes Zed-derived
+rows through that same atomic path without touching unrelated sources. A legacy
+row with no fingerprint refreshes once.
 
 All adapters emit lazy source items to one import coordinator. The coordinator
 reports scanned/imported/updated/skipped/failed counts and isolates an item

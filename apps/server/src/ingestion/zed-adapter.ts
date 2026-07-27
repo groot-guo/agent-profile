@@ -5,6 +5,10 @@ import type { SourceAdapter, SourceItem } from './types';
 
 type Decompress = (input: Buffer) => Promise<Buffer>;
 
+// Bump this only when normalized interpretation changes, so existing source
+// records are rebuilt through the coordinator without requiring a DB reset.
+const ZED_PARSER_REVISION = 'v2';
+
 interface ZedRow {
   id: string;
   summary: string;
@@ -57,7 +61,7 @@ export class ZedSourceAdapter implements SourceAdapter {
       revision: {
         kind: this.kind,
         updatedAt: toTimestamp(row.updatedAt),
-        fingerprint: `zed:${row.updatedAt}:${row.dataType}:${row.dataSize}`,
+        fingerprint: `zed-${ZED_PARSER_REVISION}:${row.updatedAt}:${row.dataType}:${row.dataSize}`,
       },
       load: async () => {
         const source = new Database(this.databasePath, { readonly: true });

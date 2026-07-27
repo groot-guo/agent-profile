@@ -7,6 +7,7 @@ import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
 import { loadDashboardData, loadImportStatus } from './home-data';
 import { AgentMark } from './icons';
 import { summarizeImport } from './import-state';
+import { projectLabel } from './project-label';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtAgo, R, SP } from './theme';
 import { Chip, Empty, Notice, SoftButton, TokenStrip } from './ui';
 
@@ -507,7 +508,7 @@ function ProjectNode({
           title={project}
           style={{ fontSize: FS.base, fontWeight: 600, color: C.text, flex: 1 }}
         >
-          {project.split('/').pop() || project}
+          {projectLabel(project)}
         </span>
         <Chip color={C.mute} tipMode="native" tip={project}>
           {sessions.length}

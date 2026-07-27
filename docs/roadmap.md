@@ -2257,20 +2257,69 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T67 source metadata completeness and invalid-session handling
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
 - purpose: correct confirmed source-faithful project/cwd and model metadata
   defects, and make unsupported/projectless records recoverable without showing
   misleading folders
-- scope: to be refined from T66 evidence; expected areas are Zed/Claude source
-  adapters/parsers, metadata persistence, re-import revisioning, and focused
-  source fixtures
-- acceptance: source-backed folders and model identities are retained; absent
-  project evidence is labeled or excluded according to source-specific policy;
-  invalid records are observable rather than silently misclassified
-- verification plan: source fixtures, adapter/coordinator tests, safe re-import
-  evidence, type/build/lint checks, and documentation update
+- scope:
+  1. version the Zed adapter fingerprint for the already implemented structured
+     parser semantics, so unchanged legacy rows are atomically replaced on the
+     next ordinary import and source-backed `folder_paths` persist as cwd
+  2. add a regression that proves a prior Zed revision is updated rather than
+     skipped, with no manually deleted profiler data
+  3. render valid non-project cwd values such as `/` with a stable human label
+     and retained original path tooltip, rather than deriving an empty folder
+     name from a path basename
+- assumptions and risks:
+  - Zed source rows are authoritative; the revision bump must be source-specific
+    and must not force Claude, Codex, or MiMo re-imports
+  - root cwd is valid captured evidence but not a project name; this Task only
+    changes its display label and does not suppress the Session
+- acceptance:
+  - a current Zed ordinary scan replaces all nine persisted legacy rows and
+    exposes their source `folder_paths`, structured LLM turns, answers, and
+    paired tools
+  - a second unchanged scan skips the refreshed Zed rows normally
+  - a Claude Session with cwd `/` renders an explicit location label while its
+    path remains discoverable; normal project labels are unchanged
+  - no parser guesses a missing cwd or model identity
+- verification plan: focused adapter/coordinator and Home data tests, safe
+  local re-import evidence, core/server/web checks proportionate to the change,
+  and runtime smoke inspection
 - documentation plan: update `ARCHITECTURE.md`, `docs/multi-agent.md`, and this
-  Task with final source coverage and known limits
+  Task with final source coverage and known limits; update UI documentation only
+  if the final label changes a documented navigation behavior
+- implementation:
+  - added the Zed parser-contract fingerprint revision `zed-v2`; source update
+    time, data type, and payload size remain part of the fingerprint
+  - added an adapter/coordinator regression where a persisted legacy Zed
+    revision is updated from an unchanged source row and the next scan skips it
+  - extracted the Home project label formatter; captured `cwd="/"` now renders
+    as `系统根目录` while the raw `/` remains the native path tooltip
+- verification:
+  - focused Server ingestion suite — passed: 9 files / 28 tests, including the
+    legacy Zed revision replacement and repeat-scan skip regression
+  - focused Web project-label suite — passed: 1 file / 2 tests for root and
+    ordinary project paths
+  - focused Biome — passed
+  - real local Zed normal import — the existing 9 rows upgraded without a
+    reset; the resulting rows are 3 each under `base-admin-api`, `im`, and
+    `oryx`, with 20 LLM turns, 57 answers, 114 tools, 811,280 observed input
+    tokens, and 7,924 observed output tokens; a subsequent scan skipped all 9
+    as unchanged
+  - `pnpm --filter trace-server build` and
+    `pnpm --filter agent-profile-web build` — passed
+- completion:
+  - changed files: `apps/server/src/ingestion/zed-adapter.ts`,
+    `apps/server/src/__tests__/ingestion.test.ts`, `apps/web/app/page.tsx`,
+    `apps/web/app/project-label.{ts,test.ts}`, `ARCHITECTURE.md`,
+    `docs/multi-agent.md`, and `docs/roadmap.md`
+  - result: persisted Zed data now refreshes safely when parser semantics
+    advance, current Zed Sessions retain their source project folders and
+    structured evidence, and valid root-cwd Claude Sessions no longer look
+    like pathless project folders
 
 ### T68 canonical model identity and statistics grouping
 

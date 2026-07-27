@@ -211,6 +211,52 @@ describe('session ingestion boundary', () => {
     target.close();
   });
 
+  it('replaces a legacy Zed parser revision without changing the source row', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-zed-revision-'));
+    tempDirectories.push(directory);
+    const zedPath = join(directory, 'threads.db');
+    createZedFixture(zedPath);
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    repository.replace(
+      { parsed: createParsedSession('zed-session', 'legacy-summary') },
+      {
+        kind: 'zed',
+        updatedAt: Date.parse('2026-07-26T00:00:00Z'),
+        fingerprint: 'zed:2026-07-26T00:00:00Z:opaque:0',
+      },
+      Date.now(),
+    );
+
+    const adapter = new ZedSourceAdapter({
+      databasePath: zedPath,
+      decompress: async (input) => input,
+    });
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 1,
+      skipped: 0,
+    });
+    expect(
+      target
+        .prepare('SELECT cwd, message_count as messageCount FROM sessions WHERE id = ?')
+        .get('zed-session'),
+    ).toEqual({ cwd: '/tmp/project', messageCount: 1 });
+    expect(
+      target.prepare('SELECT COUNT(*) as count FROM spans WHERE session_id = ?').get('zed-session'),
+    ).toEqual({ count: 2 });
+
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      skipped: 1,
+    });
+    target.close();
+  });
+
   it('applies the same revision decisions to transcript files', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-profile-transcript-'));
     tempDirectories.push(directory);
