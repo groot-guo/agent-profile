@@ -1,6 +1,27 @@
 export const API = process.env.NEXT_PUBLIC_API || 'http://localhost:3000/api';
 
-export const TRANSCRIPT_SCAN_SOURCES = [
-  { agent: 'claude-code', label: 'Claude Code', dir: '~/.claude/projects' },
-  { agent: 'codex', label: 'Codex', dir: '~/.codex/sessions' },
-] as const;
+export interface ImportResult {
+  scanned: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface ImportSourceStatus {
+  id: 'claude-code' | 'codex' | 'zed' | 'mimo-code';
+  label: string;
+  available: boolean;
+  state: 'idle' | 'scanning' | 'completed' | 'failed';
+  result: ImportResult | null;
+  startedAt: number | null;
+  completedAt: number | null;
+  error: 'source_scan_failed' | null;
+  storedSessions: number;
+}
+
+export interface ImportJobStatus {
+  jobId: string | null;
+  active: boolean;
+  sources: ImportSourceStatus[];
+}

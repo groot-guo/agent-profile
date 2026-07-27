@@ -8,6 +8,4 @@ export const config = {
       ? process.env.AUTO_SCAN_DIR || null
       : '~/.claude/projects',
   defaultScanDir: '~/.claude/projects',
-  // 自动扫描的多源目录（AUTO_SCAN_DIR 未覆盖时使用）
-  autoScanDirs: ['~/.claude/projects', '~/.codex/sessions'],
 };

@@ -2,9 +2,11 @@
 
 import type { SessionSummary } from '@agent-profile/core';
 import { useCallback, useEffect, useState } from 'react';
-import { API, TRANSCRIPT_SCAN_SOURCES } from './config';
-import { DashboardView } from './dashboard';
+import { API, type ImportJobStatus } from './config';
+import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
+import { loadDashboardData, loadImportStatus } from './home-data';
 import { AgentMark } from './icons';
+import { summarizeImport } from './import-state';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtAgo, R, SP } from './theme';
 import { Chip, Empty, Notice, SoftButton, TokenStrip } from './ui';
 
@@ -22,9 +24,11 @@ function decodeProject(p: string): string {
 
 export default function HomePage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [overview, setOverview] = useState<StatsOverview | null>(null);
+  const [toolFreqs, setToolFreqs] = useState<ToolFreq[]>([]);
+  const [importStatus, setImportStatus] = useState<ImportJobStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState('');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -32,80 +36,82 @@ export default function HomePage() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<string>('time');
 
-  const fetchSessions = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/sessions`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setSessions(await res.json());
-      setError('');
-      try {
-        const statsRes = await fetch(`${API}/stats`);
-        if (statsRes.ok) {
-          const stats = await statsRes.json();
-          if (stats.baseline?.anomalySessions) {
-            setAnomalyIds(new Set(stats.baseline.anomalySessions));
-          }
-        }
-      } catch {
-        /* non-critical */
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'fetch failed');
-    } finally {
-      setLoading(false);
-    }
+  const fetchDashboardData = useCallback(async () => {
+    const { sessions: sessionList, stats } = await loadDashboardData(API);
+    setSessions(sessionList);
+    setOverview(stats.overview);
+    setToolFreqs(stats.recentTools ?? []);
+    setAnomalyIds(new Set(stats.baseline?.anomalySessions ?? []));
+    setError('');
+  }, []);
+
+  const fetchImportStatus = useCallback(async () => {
+    const status = await loadImportStatus(API);
+    setImportStatus(status);
+    return status;
   }, []);
 
   useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+    let cancelled = false;
+    Promise.allSettled([fetchDashboardData(), fetchImportStatus()]).then((results) => {
+      if (cancelled) return;
+      const failure = results.find((result) => result.status === 'rejected');
+      if (failure?.status === 'rejected') {
+        setError(failure.reason instanceof Error ? failure.reason.message : '加载失败');
+      }
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchDashboardData, fetchImportStatus]);
+
+  useEffect(() => {
+    if (!importStatus?.active) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const status = await fetchImportStatus();
+        if (!status.active && !cancelled) {
+          await fetchDashboardData();
+          setScanResult(summarizeImport(status));
+        }
+      } catch (reason: unknown) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : '同步状态获取失败');
+      } finally {
+        if (!cancelled) timer = window.setTimeout(poll, 1000);
+      }
+    };
+    timer = window.setTimeout(poll, 1000);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [importStatus?.active, fetchDashboardData, fetchImportStatus]);
 
   const onScan = async () => {
-    setScanning(true);
     setError('');
     setScanResult('');
     try {
-      const total = { scanned: 0, imported: 0, updated: 0, skipped: 0, failed: 0 };
-      const sourceResults: string[] = [];
-      const sourceErrors: string[] = [];
-
-      for (const source of TRANSCRIPT_SCAN_SOURCES) {
-        try {
-          const res = await fetch(`${API}/scan`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ dir: source.dir, agent: source.agent }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-          const result = (await res.json()) as typeof total;
-          total.scanned += result.scanned;
-          total.imported += result.imported;
-          total.updated += result.updated;
-          total.skipped += result.skipped;
-          total.failed += result.failed;
-          sourceResults.push(`${source.label} ${result.scanned}`);
-        } catch (reason: unknown) {
-          total.failed++;
-          sourceResults.push(`${source.label} 扫描失败`);
-          sourceErrors.push(
-            `${source.label}：${reason instanceof Error ? reason.message : '请求失败'}`,
-          );
-        }
+      const response = await fetch(`${API}/imports`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const status = (await response.json()) as ImportJobStatus;
+      setImportStatus(status);
+      if (!status.active) {
+        await fetchDashboardData();
+        setScanResult(summarizeImport(status));
       }
-
-      setScanResult(
-        `${sourceResults.join('、')} 个文件；新增 ${total.imported}，更新 ${total.updated}，未变化 ${total.skipped}` +
-          (total.failed > 0 ? `，失败 ${total.failed}` : ''),
-      );
-      await fetchSessions();
-      if (sourceErrors.length > 0) setError(sourceErrors.join('；'));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'scan failed');
-    } finally {
-      setScanning(false);
     }
   };
+
+  const scanning = importStatus?.active ?? false;
 
   const filtered = sessions
     .filter((s) => agentFilter === 'all' || s.agent === agentFilter)
@@ -156,9 +162,13 @@ export default function HomePage() {
   const selected = sessions.find((x) => x.id === selectedId);
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - var(--header-h))', overflow: 'hidden' }}>
+    <div
+      className="home-shell"
+      style={{ display: 'flex', height: 'calc(100vh - var(--header-h))', overflow: 'hidden' }}
+    >
       {/* ======== SIDEBAR ======== */}
       <div
+        className="home-sidebar"
         style={{
           width: 340,
           minWidth: 340,
@@ -222,7 +232,7 @@ export default function HomePage() {
               variant="primary"
               onClick={onScan}
               disabled={scanning}
-              tip="扫描 Claude Code 与 Codex 会话目录，导入新增或变化的 transcript"
+              tip="检查 Claude Code、Codex、Zed 与 MiMo Code，导入新增或变化的会话"
               tipAlign="start"
               style={{ flex: 1 }}
             >
@@ -231,7 +241,9 @@ export default function HomePage() {
             <SoftButton
               onClick={() => {
                 setLoading(true);
-                fetchSessions();
+                Promise.allSettled([fetchDashboardData(), fetchImportStatus()]).finally(() =>
+                  setLoading(false),
+                );
               }}
               tip="重新加载列表(不扫描文件)"
               tipAlign="end"
@@ -250,6 +262,10 @@ export default function HomePage() {
               {error}
             </Notice>
           )}
+          {importStatus &&
+            (importStatus.active || importStatus.sources.some((s) => s.state === 'failed')) && (
+              <ImportStatusSummary status={importStatus} />
+            )}
         </div>
 
         {/* Agent 筛选 */}
@@ -296,7 +312,7 @@ export default function HomePage() {
         {/* Session 列表 */}
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: SP.sm }}>
           {loading ? (
-            <Empty text="加载中…" />
+            <SessionListSkeleton />
           ) : projectList.length === 0 ? (
             <Empty
               text="没有匹配的会话"
@@ -331,7 +347,11 @@ export default function HomePage() {
       </div>
 
       {/* ======== 内容区 ======== */}
-      <div style={{ flex: 1, overflowY: 'auto', background: C.bg }}>
+      <div
+        className="home-content"
+        data-selected={selectedId ? 'true' : 'false'}
+        style={{ flex: 1, overflowY: 'auto', background: C.bg }}
+      >
         {selectedId ? (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div
@@ -372,9 +392,67 @@ export default function HomePage() {
             />
           </div>
         ) : (
-          <DashboardView onSelectSession={(id) => setSelectedId(id)} />
+          <DashboardView
+            sessions={sessions}
+            overview={overview}
+            toolFreqs={toolFreqs}
+            loading={loading}
+            importStatus={importStatus}
+            onStartImport={onScan}
+            onSelectSession={(id) => setSelectedId(id)}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+function ImportStatusSummary({ status }: { status: ImportJobStatus }) {
+  const activeSources = status.sources.filter((source) => source.state === 'scanning');
+  const failedSources = status.sources.filter((source) => source.state === 'failed');
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        padding: `${SP.sm}px ${SP.md}px`,
+        borderRadius: R.md,
+        background: C.bg,
+        color: failedSources.length > 0 ? C.high : C.sub,
+        fontSize: FS.cap,
+        lineHeight: 1.6,
+      }}
+    >
+      {activeSources.length > 0 &&
+        `正在同步：${activeSources.map((source) => source.label).join('、')}`}
+      {activeSources.length > 0 && failedSources.length > 0 && <br />}
+      {failedSources.length > 0 &&
+        `需要重试：${failedSources.map((source) => source.label).join('、')}`}
+    </div>
+  );
+}
+
+function SessionListSkeleton() {
+  const rows = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label="正在加载会话"
+      style={{ padding: `0 ${SP.lg}px` }}
+    >
+      {rows.map((row, index) => (
+        <div
+          key={row}
+          style={{
+            height: 48,
+            marginBottom: SP.sm,
+            borderRadius: R.md,
+            background: C.borderSoft,
+            opacity: 1 - index * 0.07,
+          }}
+        />
+      ))}
     </div>
   );
 }

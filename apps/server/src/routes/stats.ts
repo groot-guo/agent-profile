@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { DatabaseConnection } from '../database';
 import { db } from '../db';
 import { SESSION_COLS } from './shared';
 
@@ -36,6 +37,12 @@ interface ModelStats {
   totalCost: number;
 }
 
+interface ToolFrequency {
+  name: string;
+  count: number;
+  errors: number;
+}
+
 interface DistributionData {
   costBins: { bin: string; min: number; max: number | null; count: number }[];
   tokenBins: { bin: string; min: number; max: number | null; count: number }[];
@@ -43,37 +50,46 @@ interface DistributionData {
   agentDistribution: { agent: string; count: number; tokens: number }[];
 }
 
-function extractModel(
-  sessions: { id: string }[],
-): Map<string, { count: number; inputTokens: number; outputTokens: number; cost: number }> {
-  const models = new Map<
-    string,
-    { count: number; inputTokens: number; outputTokens: number; cost: number }
-  >();
-  for (const s of sessions) {
-    const rows = db
-      .prepare(
-        `SELECT model, input_tokens + cache_creation_tokens + cache_read_tokens as inputTokens, output_tokens as outputTokens, cost FROM spans WHERE session_id = ? AND type = 'llm_turn'`,
-      )
-      .all(s.id) as { model?: string; inputTokens: number; outputTokens: number; cost: number }[];
-    for (const r of rows) {
-      const m = r.model || 'unknown';
-      const entry = models.get(m);
-      if (entry) {
-        entry.count++;
-        entry.inputTokens += r.inputTokens;
-        entry.outputTokens += r.outputTokens;
-        entry.cost += r.cost;
-      } else
-        models.set(m, {
-          count: 1,
-          inputTokens: r.inputTokens,
-          outputTokens: r.outputTokens,
-          cost: r.cost,
-        });
-    }
-  }
-  return models;
+type StatsQueryConnection = Pick<DatabaseConnection, 'prepare'>;
+
+export function loadDashboardSpanAggregates(database: StatsQueryConnection = db) {
+  const modelRows = database
+    .prepare(
+      `SELECT COALESCE(model, 'unknown') as model,
+        COUNT(DISTINCT session_id) as count,
+        SUM(input_tokens + cache_creation_tokens + cache_read_tokens) as inputTokens,
+        SUM(output_tokens) as outputTokens,
+        SUM(cost) as cost
+       FROM spans
+       WHERE type = 'llm_turn'
+       GROUP BY COALESCE(model, 'unknown')`,
+    )
+    .all() as {
+    model: string;
+    count: number;
+    inputTokens: number;
+    outputTokens: number;
+    cost: number;
+  }[];
+  const recentTools = database
+    .prepare(
+      `WITH recent_sessions AS (
+        SELECT id FROM sessions ORDER BY start_time DESC LIMIT 30
+       )
+       SELECT spans.name as name, COUNT(*) as count,
+         SUM(CASE WHEN spans.is_error = 1 THEN 1 ELSE 0 END) as errors
+       FROM spans
+       INNER JOIN recent_sessions ON recent_sessions.id = spans.session_id
+       WHERE spans.type = 'tool_call'
+       GROUP BY spans.name
+       ORDER BY count DESC, spans.name ASC
+       LIMIT 15`,
+    )
+    .all() as ToolFrequency[];
+  return {
+    modelMap: new Map(modelRows.map((row) => [row.model, row])),
+    recentTools,
+  };
 }
 
 function buildLogBins(
@@ -127,6 +143,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
         byAgent: [] as AgentStats[],
         byProject: [] as ProjectStats[],
         byModel: [] as ModelStats[],
+        recentTools: [] as ToolFrequency[],
         distribution: { costBins: [], tokenBins: [], modelDistribution: [], agentDistribution: [] },
       };
     }
@@ -215,7 +232,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
       .sort((a, b) => b.sessions - a.sessions);
 
     // By model (from spans)
-    const modelMap = extractModel(sessions as { id: string }[]);
+    const { modelMap, recentTools } = loadDashboardSpanAggregates();
     const byModel: ModelStats[] = [...modelMap.entries()]
       .map(([model, e]) => ({
         model,
@@ -375,6 +392,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
       byAgent,
       byProject,
       byModel,
+      recentTools,
       distribution,
       baseline: { projects: baselineProjects, anomalySessions: [...anomalySessions] },
       trends,

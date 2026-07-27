@@ -265,6 +265,30 @@ const GLOBAL_CSS = `
     .session-tool-param-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 760px) {
+    .home-shell {
+      flex-direction: column;
+      height: auto !important;
+      min-height: calc(100vh - var(--header-h));
+      overflow: visible !important;
+    }
+    .home-sidebar {
+      width: 100% !important;
+      min-width: 0 !important;
+      height: min(58vh, 520px);
+      min-height: 380px;
+      flex: 0 0 auto;
+      box-shadow: 0 1px 0 var(--c-borderSoft) !important;
+    }
+    .home-content {
+      min-width: 0;
+      min-height: calc(100vh - var(--header-h));
+      flex: 0 0 auto !important;
+      overflow: visible !important;
+    }
+    .home-content[data-selected="true"] {
+      height: calc(100vh - var(--header-h));
+      overflow: hidden !important;
+    }
     .prompt-review-grid { grid-template-columns: minmax(0, 1fr) !important; }
     .session-page { padding: 16px; }
     .session-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
