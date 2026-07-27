@@ -81,6 +81,14 @@ per recent Session. Existing data remains interactive during a job. The browser
 polls only while `active=true`, stops in terminal states or on unmount, and
 refreshes Sessions/Stats once after completion.
 
+Session discovery uses one flat recent list grouped by today/yesterday/recent
+time boundaries. Project is row metadata and a searchable filter rather than a
+required accordion hierarchy. Project, Agent, text, quick-view, sort, and
+selected-Session state use bounded URL parameters; opening a Session pushes one
+history entry and browser back restores the filters and saved list scroll.
+Only 120 matching rows render initially, with explicit incremental batches for
+larger result sets.
+
 ## Current data sources
 
 | Agent | Local source | Import model |

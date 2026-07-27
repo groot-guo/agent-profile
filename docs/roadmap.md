@@ -2042,7 +2042,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T64 flat Session navigation and project filtering
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
 - purpose: remove the need to expand or collapse every project folder when
   finding a Session, while retaining project context and making large mixed-Agent
   histories faster to scan
@@ -2097,6 +2099,48 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - update `README.md`, `ARCHITECTURE.md`, `docs/ui-guidelines.md`, and
     `docs/zh/OVERVIEW.md` with the final Session discovery and project-filtering
     behavior
+- implementation:
+  - replaced the default expanded project tree with one recent-first Session
+    list grouped by today, yesterday, recent-seven-day, recent-thirty-day, and
+    earlier boundaries; every row retains its source project label
+  - added a searchable project-path control, Agent filters, text search,
+    anomaly/unpriced quick views, sorting, visible active-filter recovery, and
+    one-action clearing that all compose through a pure navigation contract
+  - persisted stable filter and selected-Session state in URL parameters;
+    opening a Session pushes browser history, returning restores the filters and
+    the saved Session-list scroll position
+  - changed Session rows to native keyboard-focusable buttons and bounded the
+    initial render to 120 rows with explicit 120-row incremental batches
+- verification:
+  - focused navigation tests — passed: 1 file / 3 tests for filter composition,
+    invalid/valid URL restoration, time grouping, project counts, and a 400-row
+    fixture bounded to 120 rendered items
+  - focused Web regression tests — passed: 3 files / 7 tests
+  - real browser desktop check at 1280×720 — the 385-Session database rendered
+    exactly 120 Session buttons initially with no page-level horizontal
+    overflow; time groups and project labels were visible
+  - browser composition check — project `agent-profile` plus `unpriced`
+    produced 11 matching rows, every row matched both conditions, and the URL
+    became `?project=agent-profile&view=unpriced`
+  - browser selection/back check — opening a Session added its ID to the URL and
+    showed the detail iframe; returning removed only the Session parameter and
+    restored the project/quick-view state
+  - narrow desktop check at 750×720 — project filtering remained visible and
+    the page had no horizontal overflow; the broader mobile navigation redesign
+    remains deferred to T50 as requested
+  - `pnpm test` — passed: Core 20 files / 176 tests; Server 9 files / 33 tests
+  - `pnpm lint` — passed with the existing 19 warnings and 2 informational
+    diagnostics, no errors
+  - `pnpm build` — passed: Core/Server TypeScript and the Next.js production
+    build; focused changed-file Biome checks and `git diff --check` passed
+- completion:
+  - changed files: `apps/web/app/page.tsx`, new
+    `apps/web/app/session-navigation.{ts,test.ts}`, `README.md`,
+    `README.zh-CN.md`, `ARCHITECTURE.md`, `docs/ui-guidelines.md`,
+    `docs/zh/OVERVIEW.md`, and this roadmap
+  - result: recent Sessions are directly reachable without project accordion
+    expansion, project remains visible/searchable, shareable filter state
+    survives selection/back navigation, and large histories have bounded DOM
 
 ### T65 Codex Desktop VS Code history rollout compatibility
 
@@ -2593,22 +2637,20 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ## Execution Order
 
-T5–T15, T36–T53, T55–T57, T60–T62, and T65 are complete. The next ordered work
-is T63 (safe rebuild/reset), followed by T64 (flat Session navigation). T54,
-T58, and T59 remain separate planned correctness, UI, and source-expansion work
-after this data-experience sequence.
+T63 safe rebuild/reset and T64 flat Session navigation are complete. T58 is also
+complete. Under the current user-authorized sequence, the next work is T48's
+remaining stable local-operation scope, followed by T54, T59, T49, and the
+desktop-first portion of T50. T70, T71, and T73 remain independently planned.
 
 T65 is complete: the correctness repair discovered while auditing the local
-`im` Sessions now excludes non-actionable external-history materializations and
-has removed their unannotated stored copies. T62's loading/onboarding and
-responsive runtime verification are also complete; T63 remains responsible for
-the reusable forced-rebuild operation.
+`im` Sessions excludes non-actionable external-history materializations and has
+removed their unannotated stored copies. T62 owns loading/onboarding, T63 owns
+safe rebuild/reset, and T64 owns flat Session discovery and project filtering.
 
-For the newly decomposed data experience, execute T63 next. T64 already has the
-completed T62 single Home-page data owner it depends on and can proceed after
-T63, or independently if priorities change. T48 and T50 remain broader product
-umbrellas whose overlapping loading/rebuild/Session-discovery work is owned by
-T62–T64.
+T48 and T50 remain broader product umbrellas; their overlapping
+loading/rebuild/Session-discovery pieces are completed by T62–T64 and must not
+be reimplemented. T50's overall mobile navigation redesign is explicitly
+deferred while desktop usage remains the priority.
 
 ## Task Lifecycle
 

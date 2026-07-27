@@ -71,12 +71,16 @@ while preserving Session tags/notes, pricing, model-context configuration,
 migrations, and Sessions whose source is currently unavailable. Reset is a
 separate danger-zone action that requires the displayed confirmation phrase.
 
-Sessions are grouped by project path. Use the Agent chips, search, and sort
-controls to narrow the list.
+Sessions appear in one recent-first list with lightweight time boundaries; no
+project folder needs to be expanded before opening a Session. Each row retains
+its project label. Project path search, Agent chips, free-text search,
+anomaly/unpriced quick views, and sorting compose together and remain in the
+URL when a Session is opened or the browser goes back. Large result sets render
+in bounded batches instead of creating every row at once.
 
 ## What the main views do
 
-- **会话** — browse imported sessions by project and Agent; open a session for
+- **会话** — browse a flat recent Session list by project and Agent; open a session for
   diagnosis, context/cost, tools/chain, or normalized evidence.
 - **画像** — compare observed Agent runtime fingerprints with sample-size and
   coverage limits. “Higher” or “lower” describes behavior, not quality.

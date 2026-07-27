@@ -1,0 +1,158 @@
+import type { SessionSummary } from '@agent-profile/core';
+
+export type SessionSort = 'time' | 'cost' | 'tokens' | 'cache' | 'duration';
+export type SessionQuickView = 'all' | 'anomaly' | 'unpriced';
+
+export interface SessionNavigationState {
+  agent: string;
+  project: string;
+  query: string;
+  sort: SessionSort;
+  quickView: SessionQuickView;
+  selectedId: string | null;
+}
+
+export const DEFAULT_SESSION_NAVIGATION: SessionNavigationState = {
+  agent: 'all',
+  project: '',
+  query: '',
+  sort: 'time',
+  quickView: 'all',
+  selectedId: null,
+};
+
+export function sessionProject(session: SessionSummary): string {
+  if (session.cwd) return session.cwd;
+  const parts = session.filePath.split('/');
+  const projectIndex = parts.indexOf('projects');
+  const encoded =
+    projectIndex >= 0 && parts[projectIndex + 1]
+      ? parts[projectIndex + 1]
+      : parts[parts.length - 2] || 'unknown';
+  return encoded.startsWith('-') ? `/${encoded.slice(1).replace(/-/g, '/')}` : encoded;
+}
+
+export function filterSessions(
+  sessions: SessionSummary[],
+  anomalyIds: Set<string>,
+  state: SessionNavigationState,
+): SessionSummary[] {
+  const query = state.query.trim().toLowerCase();
+  const projectQuery = state.project.trim().toLowerCase();
+  return sessions
+    .filter((session) => state.agent === 'all' || session.agent === state.agent)
+    .filter((session) => {
+      const project = sessionProject(session).toLowerCase();
+      return !projectQuery || project.includes(projectQuery);
+    })
+    .filter((session) => {
+      if (!query) return true;
+      return (
+        (session.name || '').toLowerCase().includes(query) ||
+        sessionProject(session).toLowerCase().includes(query) ||
+        session.id.toLowerCase().includes(query)
+      );
+    })
+    .filter((session) => {
+      if (state.quickView === 'anomaly') return anomalyIds.has(session.id);
+      if (state.quickView === 'unpriced') return session.costUnknownCount > 0;
+      return true;
+    })
+    .sort((a, b) => compareSessions(a, b, state.sort));
+}
+
+export function projectOptions(
+  sessions: SessionSummary[],
+): Array<{ project: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const session of sessions) {
+    const project = sessionProject(session);
+    counts.set(project, (counts.get(project) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([project, count]) => ({ project, count }))
+    .sort((a, b) => b.count - a.count || a.project.localeCompare(b.project));
+}
+
+export function groupSessionsByTime(
+  sessions: SessionSummary[],
+  now = Date.now(),
+): Array<{ key: string; label: string; sessions: SessionSummary[] }> {
+  const groups = new Map<string, { label: string; sessions: SessionSummary[] }>();
+  for (const session of sessions) {
+    const boundary = timeBoundary(session.startTime, now);
+    const group = groups.get(boundary.key);
+    if (group) group.sessions.push(session);
+    else groups.set(boundary.key, { label: boundary.label, sessions: [session] });
+  }
+  return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
+}
+
+export function parseSessionNavigation(search: string): SessionNavigationState {
+  const params = new URLSearchParams(search);
+  const sort = params.get('sort');
+  const quickView = params.get('view');
+  return {
+    agent: params.get('agent') || 'all',
+    project: params.get('project') || '',
+    query: params.get('q') || '',
+    sort: isSessionSort(sort) ? sort : 'time',
+    quickView: isQuickView(quickView) ? quickView : 'all',
+    selectedId: params.get('session'),
+  };
+}
+
+export function serializeSessionNavigation(state: SessionNavigationState): string {
+  const params = new URLSearchParams();
+  if (state.query) params.set('q', state.query);
+  if (state.project) params.set('project', state.project);
+  if (state.agent !== 'all') params.set('agent', state.agent);
+  if (state.sort !== 'time') params.set('sort', state.sort);
+  if (state.quickView !== 'all') params.set('view', state.quickView);
+  if (state.selectedId) params.set('session', state.selectedId);
+  return params.toString();
+}
+
+export function visibleSessionSlice(sessions: SessionSummary[], limit: number): SessionSummary[] {
+  return sessions.slice(0, Math.max(0, limit));
+}
+
+function compareSessions(a: SessionSummary, b: SessionSummary, sort: SessionSort): number {
+  if (sort === 'cost') return b.totalCost - a.totalCost;
+  if (sort === 'tokens') return totalTokens(b) - totalTokens(a);
+  if (sort === 'cache') return a.cacheHitRate - b.cacheHitRate;
+  if (sort === 'duration') {
+    return (b.endTime || 0) - b.startTime - ((a.endTime || 0) - a.startTime);
+  }
+  return b.startTime - a.startTime;
+}
+
+function totalTokens(session: SessionSummary): number {
+  return (
+    session.inputTokens +
+    session.cacheCreationTokens +
+    session.cacheReadTokens +
+    session.outputTokens
+  );
+}
+
+function timeBoundary(timestamp: number, now: number): { key: string; label: string } {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const sessionDay = new Date(timestamp);
+  sessionDay.setHours(0, 0, 0, 0);
+  const daysAgo = Math.floor((today.getTime() - sessionDay.getTime()) / 86_400_000);
+  if (daysAgo <= 0) return { key: 'today', label: '今天' };
+  if (daysAgo === 1) return { key: 'yesterday', label: '昨天' };
+  if (daysAgo <= 7) return { key: 'last-7-days', label: '最近 7 天' };
+  if (daysAgo <= 30) return { key: 'last-30-days', label: '最近 30 天' };
+  return { key: 'earlier', label: '更早' };
+}
+
+function isSessionSort(value: string | null): value is SessionSort {
+  return ['time', 'cost', 'tokens', 'cache', 'duration'].includes(value ?? '');
+}
+
+function isQuickView(value: string | null): value is SessionQuickView {
+  return ['all', 'anomaly', 'unpriced'].includes(value ?? '');
+}

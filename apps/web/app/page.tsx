@@ -1,27 +1,30 @@
 'use client';
 
 import type { SessionSummary } from '@agent-profile/core';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API, type DataManagementSummary, type ImportJobStatus } from './config';
 import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
 import { loadDashboardData, loadImportStatus } from './home-data';
 import { AgentMark } from './icons';
 import { canResetData, summarizeImport, summarizeReset } from './import-state';
 import { projectLabel } from './project-label';
+import {
+  DEFAULT_SESSION_NAVIGATION,
+  filterSessions,
+  groupSessionsByTime,
+  parseSessionNavigation,
+  projectOptions,
+  type SessionQuickView,
+  type SessionSort,
+  serializeSessionNavigation,
+  sessionProject,
+  visibleSessionSlice,
+} from './session-navigation';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtAgo, R, SP } from './theme';
 import { Chip, Empty, Notice, SoftButton, TokenStrip } from './ui';
 
-function projectOf(filePath: string): string {
-  const parts = filePath.split('/');
-  const idx = parts.indexOf('projects');
-  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
-  return parts[parts.length - 2] || 'unknown';
-}
-
-function decodeProject(p: string): string {
-  if (p.startsWith('-')) return `/${p.slice(1).replace(/-/g, '/')}`;
-  return p;
-}
+const SESSION_RENDER_BATCH = 120;
+const SESSION_SCROLL_KEY = 'agent-profile:session-list-scroll';
 
 export default function HomePage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -35,11 +38,16 @@ export default function HomePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [anomalyIds, setAnomalyIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<string>('time');
+  const [sortBy, setSortBy] = useState<SessionSort>('time');
+  const [projectFilter, setProjectFilter] = useState('');
+  const [quickView, setQuickView] = useState<SessionQuickView>('all');
+  const [navigationReady, setNavigationReady] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(SESSION_RENDER_BATCH);
   const [showDataManagement, setShowDataManagement] = useState(false);
   const [dataSummary, setDataSummary] = useState<DataManagementSummary | null>(null);
   const [resetConfirmation, setResetConfirmation] = useState('');
   const [resetting, setResetting] = useState(false);
+  const sessionListRef = useRef<HTMLElement | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     const { sessions: sessionList, stats } = await loadDashboardData(API);
@@ -94,6 +102,48 @@ export default function HomePage() {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [importStatus?.active, fetchDashboardData, fetchImportStatus]);
+
+  useEffect(() => {
+    const applyLocation = () => {
+      const state = parseSessionNavigation(window.location.search);
+      setSearch(state.query);
+      setProjectFilter(state.project);
+      setAgentFilter(state.agent);
+      setSortBy(state.sort);
+      setQuickView(state.quickView);
+      setSelectedId(state.selectedId);
+      setNavigationReady(true);
+    };
+    applyLocation();
+    window.addEventListener('popstate', applyLocation);
+    return () => window.removeEventListener('popstate', applyLocation);
+  }, []);
+
+  useEffect(() => {
+    if (!navigationReady) return;
+    const query = serializeSessionNavigation({
+      query: search,
+      project: projectFilter,
+      agent: agentFilter,
+      sort: sortBy,
+      quickView,
+      selectedId,
+    });
+    const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+    window.history.replaceState(window.history.state, '', nextUrl);
+  }, [agentFilter, navigationReady, projectFilter, quickView, search, selectedId, sortBy]);
+
+  useEffect(() => {
+    setVisibleLimit(SESSION_RENDER_BATCH);
+  }, [agentFilter, projectFilter, quickView, search, sortBy]);
+
+  useEffect(() => {
+    if (selectedId || !navigationReady) return;
+    const saved = Number(window.sessionStorage.getItem(SESSION_SCROLL_KEY) ?? 0);
+    window.requestAnimationFrame(() => {
+      if (sessionListRef.current) sessionListRef.current.scrollTop = saved;
+    });
+  }, [navigationReady, selectedId]);
 
   const onScan = async () => {
     setError('');
@@ -183,46 +233,25 @@ export default function HomePage() {
 
   const scanning = importStatus?.active ?? false;
 
-  const filtered = sessions
-    .filter((s) => agentFilter === 'all' || s.agent === agentFilter)
-    .filter(
-      (s) =>
-        !search ||
-        (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (s.cwd || '').toLowerCase().includes(search.toLowerCase()) ||
-        s.id.toLowerCase().includes(search.toLowerCase()),
-    )
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'cost':
-          return b.totalCost - a.totalCost;
-        case 'tokens':
-          return (
-            b.inputTokens +
-            b.cacheCreationTokens +
-            b.cacheReadTokens +
-            b.outputTokens -
-            (a.inputTokens + a.cacheCreationTokens + a.cacheReadTokens + a.outputTokens)
-          );
-        case 'cache':
-          return a.cacheHitRate - b.cacheHitRate;
-        case 'duration':
-          return (b.endTime || 0) - b.startTime - ((a.endTime || 0) - a.startTime);
-        default:
-          return b.startTime - a.startTime;
-      }
-    });
-
-  const groups = new Map<string, SessionSummary[]>();
-  for (const s of filtered) {
-    const p = s.cwd || decodeProject(projectOf(s.filePath));
-    const arr = groups.get(p);
-    if (arr) arr.push(s);
-    else groups.set(p, [s]);
-  }
-  const projectList = [...groups.entries()].sort(
-    (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
+  const navigationState = useMemo(
+    () => ({
+      ...DEFAULT_SESSION_NAVIGATION,
+      agent: agentFilter,
+      project: projectFilter,
+      query: search,
+      sort: sortBy,
+      quickView,
+      selectedId,
+    }),
+    [agentFilter, projectFilter, quickView, search, selectedId, sortBy],
   );
+  const filtered = useMemo(
+    () => filterSessions(sessions, anomalyIds, navigationState),
+    [anomalyIds, navigationState, sessions],
+  );
+  const projects = useMemo(() => projectOptions(sessions), [sessions]);
+  const visibleSessions = visibleSessionSlice(filtered, visibleLimit);
+  const timeGroups = groupSessionsByTime(visibleSessions);
 
   const agentCounts = new Map<string, number>();
   agentCounts.set('all', sessions.length);
@@ -230,6 +259,33 @@ export default function HomePage() {
   const agents = ['all', ...new Set(sessions.map((s) => s.agent))];
 
   const selected = sessions.find((x) => x.id === selectedId);
+  const hasActiveFilters =
+    Boolean(search || projectFilter) || agentFilter !== 'all' || quickView !== 'all';
+
+  const selectSession = (id: string) => {
+    if (sessionListRef.current) {
+      window.sessionStorage.setItem(SESSION_SCROLL_KEY, String(sessionListRef.current.scrollTop));
+    }
+    const query = serializeSessionNavigation({ ...navigationState, selectedId: id });
+    window.history.pushState(
+      { agentProfileSession: true },
+      '',
+      query ? `${window.location.pathname}?${query}` : window.location.pathname,
+    );
+    setSelectedId(id);
+  };
+
+  const closeSession = () => {
+    if (window.history.state?.agentProfileSession) window.history.back();
+    else setSelectedId(null);
+  };
+
+  const clearFilters = () => {
+    setSearch('');
+    setProjectFilter('');
+    setAgentFilter('all');
+    setQuickView('all');
+  };
 
   return (
     <div
@@ -278,7 +334,7 @@ export default function HomePage() {
             />
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
+              onChange={(e) => setSortBy(e.target.value as SessionSort)}
               data-tip="列表排序方式"
               style={{
                 padding: '6px 8px',
@@ -296,6 +352,86 @@ export default function HomePage() {
               <option value="cache">按 Cache</option>
               <option value="duration">按耗时</option>
             </select>
+          </div>
+          <div style={{ display: 'flex', gap: SP.sm }}>
+            <input
+              list="project-filter-options"
+              aria-label="筛选项目"
+              placeholder="全部项目 · 输入名称或路径"
+              value={projectFilter}
+              onChange={(event) => setProjectFilter(event.target.value)}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                padding: '6px 12px',
+                fontSize: FS.sm,
+                border: `1px solid ${C.border}`,
+                borderRadius: R.md,
+                background: C.bg,
+                color: C.text,
+                outline: 'none',
+              }}
+            />
+            <datalist id="project-filter-options">
+              {projects.map(({ project, count }) => (
+                <option
+                  key={project}
+                  value={project}
+                  label={`${projectLabel(project)} · ${count}`}
+                />
+              ))}
+            </datalist>
+            {projectFilter && (
+              <SoftButton onClick={() => setProjectFilter('')} tip="清除项目筛选">
+                清除
+              </SoftButton>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {(
+              [
+                ['all', '全部会话'],
+                ['anomaly', '仅异常'],
+                ['unpriced', '仅未定价'],
+              ] as Array<[SessionQuickView, string]>
+            ).map(([value, label]) => {
+              const active = quickView === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setQuickView(value)}
+                  style={{
+                    border: `1px solid ${active ? C.link : C.border}`,
+                    borderRadius: R.pill,
+                    background: active ? `${C.link}14` : C.bg,
+                    color: active ? C.link : C.sub,
+                    cursor: 'pointer',
+                    padding: '3px 9px',
+                    fontSize: FS.cap,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                style={{
+                  border: 0,
+                  background: 'transparent',
+                  color: C.link,
+                  cursor: 'pointer',
+                  padding: '3px 4px',
+                  fontSize: FS.cap,
+                }}
+              >
+                清除全部筛选
+              </button>
+            )}
           </div>
           <SoftButton
             onClick={toggleDataManagement}
@@ -399,27 +535,66 @@ export default function HomePage() {
         </div>
 
         {/* Session 列表 */}
-        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: SP.sm }}>
+        <section
+          ref={sessionListRef}
+          aria-label="最近会话列表"
+          style={{ flex: 1, overflowY: 'auto', paddingBottom: SP.sm }}
+        >
           {loading ? (
             <SessionListSkeleton />
-          ) : projectList.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <Empty
               text="没有匹配的会话"
-              hint={search ? '试试更换搜索词或清除筛选' : '点击「重新扫描」导入本地会话'}
+              hint={hasActiveFilters ? '试试清除筛选条件' : '点击「重新扫描」导入本地会话'}
             />
           ) : (
-            projectList.map(([proj, ss]) => (
-              <ProjectNode
-                key={proj}
-                project={proj}
-                sessions={ss}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                anomalyIds={anomalyIds}
-              />
-            ))
+            <>
+              {timeGroups.map((group) => (
+                <section key={group.key} aria-label={group.label} style={{ marginBottom: SP.sm }}>
+                  <div
+                    style={{
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: `6px ${SP.lg}px`,
+                      background: C.bg,
+                      boxShadow: `0 1px 0 ${C.borderSoft}`,
+                      color: C.mute,
+                      fontSize: FS.cap,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>{group.label}</span>
+                    <span className="tnum">{group.sessions.length}</span>
+                  </div>
+                  {group.sessions.map((session) => (
+                    <SessionRow
+                      key={session.id}
+                      s={session}
+                      project={sessionProject(session)}
+                      selected={selectedId === session.id}
+                      anomaly={anomalyIds.has(session.id)}
+                      onSelect={selectSession}
+                    />
+                  ))}
+                </section>
+              ))}
+              {visibleSessions.length < filtered.length && (
+                <div style={{ padding: `${SP.sm}px ${SP.lg}px` }}>
+                  <SoftButton
+                    onClick={() => setVisibleLimit((limit) => limit + SESSION_RENDER_BATCH)}
+                    style={{ width: '100%' }}
+                  >
+                    加载更多 · 尚有 {filtered.length - visibleSessions.length} 个会话
+                  </SoftButton>
+                </div>
+              )}
+            </>
           )}
-        </div>
+        </section>
 
         {/* 底栏 */}
         <div
@@ -430,8 +605,10 @@ export default function HomePage() {
             color: C.mute,
           }}
         >
-          <span className="tnum">{sessions.length}</span> 个会话 ·{' '}
-          <span className="tnum">{projectList.length}</span> 个项目
+          已显示 <span className="tnum">{visibleSessions.length}</span> / {filtered.length}{' '}
+          个匹配会话
+          {' · '}
+          <span className="tnum">{projects.length}</span> 个项目
         </div>
       </div>
 
@@ -453,7 +630,7 @@ export default function HomePage() {
                 gap: SP.md,
               }}
             >
-              <SoftButton variant="ghost" onClick={() => setSelectedId(null)}>
+              <SoftButton variant="ghost" onClick={closeSession}>
                 ← 返回总览
               </SoftButton>
               {selected && (
@@ -637,122 +814,38 @@ function SessionListSkeleton() {
   );
 }
 
-function ProjectNode({
-  project,
-  sessions,
-  selectedId,
-  onSelect,
-  anomalyIds,
-}: {
-  project: string;
-  sessions: SessionSummary[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  anomalyIds: Set<string>;
-}) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div style={{ marginBottom: 4 }}>
-      {/* 项目分组头:暖灰粘性横带,与白色 session 行区隔 */}
-      <div
-        onClick={() => setOpen(!open)}
-        className="ap-row"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: `6px ${SP.lg}px`,
-          cursor: 'pointer',
-          userSelect: 'none',
-          position: 'sticky',
-          top: 0,
-          zIndex: 1,
-          background: C.bg,
-          boxShadow: `0 1px 0 ${C.borderSoft}`,
-        }}
-      >
-        <span
-          style={{
-            color: C.mute,
-            fontSize: 9,
-            transition: 'transform .15s ease',
-            transform: open ? 'none' : 'rotate(-90deg)',
-          }}
-        >
-          ▼
-        </span>
-        <FolderIcon />
-        <span
-          className="clamp1"
-          title={project}
-          style={{ fontSize: FS.base, fontWeight: 600, color: C.text, flex: 1 }}
-        >
-          {projectLabel(project)}
-        </span>
-        <Chip color={C.mute} tipMode="native" tip={project}>
-          {sessions.length}
-        </Chip>
-      </div>
-      {/* 行组:树状引导线 + 缩进,明确归属关系 */}
-      {open && (
-        <div style={{ marginLeft: 15, borderLeft: `1px solid ${C.borderSoft}` }}>
-          {sessions.map((s) => (
-            <SessionRow
-              key={s.id}
-              s={s}
-              selected={selectedId === s.id}
-              anomaly={anomalyIds.has(s.id)}
-              onSelect={onSelect}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FolderIcon({ size = 13 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      style={{ flexShrink: 0, color: C.mute, display: 'block' }}
-    >
-      <path
-        d="M1.8 4.2a1 1 0 0 1 1-1h3.1l1.4 1.8h6a1 1 0 0 1 1 1v6.3a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1V4.2Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// 双行行布局:L1 名称独占整宽;L2 = agent · 时间 · 指纹条 · 费用/标记
+// 扁平三行布局:L1 名称;L2 项目;L3 agent · 时间 · 指纹条 · 费用/标记
 function SessionRow({
   s,
+  project,
   selected,
   anomaly,
   onSelect,
 }: {
   s: SessionSummary;
+  project: string;
   selected: boolean;
   anomaly: boolean;
   onSelect: (id: string) => void;
 }) {
   const name = s.name || s.id.slice(0, 8);
   return (
-    <div
+    <button
+      type="button"
       onClick={() => onSelect(s.id)}
       className={selected ? undefined : 'ap-row'}
+      aria-current={selected ? 'true' : undefined}
       style={{
-        margin: '1px 8px 1px 5px',
-        padding: '6px 10px',
+        display: 'block',
+        width: 'calc(100% - 16px)',
+        margin: '2px 8px',
+        padding: '7px 10px',
+        border: 0,
         borderRadius: R.md,
         cursor: 'pointer',
         background: selected ? `${C.link}14` : 'transparent',
+        textAlign: 'left',
+        color: C.text,
       }}
     >
       <div
@@ -765,6 +858,13 @@ function SessionRow({
         }}
       >
         {name}
+      </div>
+      <div
+        className="clamp1"
+        title={project}
+        style={{ marginTop: 2, color: C.mute, fontSize: FS.cap }}
+      >
+        {projectLabel(project)}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
         <AgentMark agent={s.agent} size={20} />
@@ -793,6 +893,6 @@ function SessionRow({
           </span>
         )}
       </div>
-    </div>
+    </button>
   );
 }
