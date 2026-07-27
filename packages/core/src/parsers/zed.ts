@@ -18,7 +18,8 @@ function safeStringify(v: unknown): string {
 }
 
 function toMs(iso: string): number {
-  return new Date(iso).getTime();
+  const value = new Date(iso).getTime();
+  return Number.isNaN(value) ? 0 : value;
 }
 
 function makeSpan(p: {
@@ -70,94 +71,172 @@ export interface ZedThreadInput {
   dataBuffer: Buffer; // zstd-decompressed
 }
 
-// 解析 Zed thread 的 data BLOB → ParsedSession
-// 格式：NDJSON，每行是 TranscriptEntry（兼容 Claude Code transcript 格式）
+interface ZedToolUse {
+  id: string;
+  name?: string;
+  input?: unknown;
+  raw_input?: unknown;
+}
+
+interface ZedToolResult {
+  tool_use_id?: string;
+  tool_name?: string;
+  is_error?: boolean;
+  content?: unknown;
+  output?: unknown;
+}
+
+interface ZedContentItem {
+  Text?: string;
+  ToolUse?: ZedToolUse;
+}
+
+interface ZedMessage {
+  User?: { id?: string; content?: ZedContentItem[] };
+  Agent?: {
+    content?: ZedContentItem[];
+    tool_results?: Record<string, ZedToolResult>;
+  };
+}
+
+interface ZedThreadPayload {
+  title?: string;
+  messages?: ZedMessage[];
+  request_token_usage?: Record<string, { input_tokens?: number; output_tokens?: number }>;
+  model?: { provider?: string; model?: string };
+}
+
+// Parse the current Zed zstd payload: one JSON object containing tagged User /
+// Agent messages, request-scoped token usage, model identity, and tool results.
 export async function parseZedThread(input: ZedThreadInput): Promise<ParsedSession | null> {
-  const entries: Record<string, unknown>[] = [];
-  const raw = input.dataBuffer.toString('utf8');
-
-  // 尝试按 NDJSON 解析
-  for (const line of raw.split('\n')) {
-    const t = line.trim();
-    if (!t) continue;
-    try {
-      const obj = JSON.parse(t);
-      if (obj && typeof obj === 'object' && 'type' in obj) {
-        entries.push(obj as Record<string, unknown>);
-      }
-    } catch {
-      // 跳过坏行
-    }
-  }
-
-  if (entries.length === 0) {
-    // 非 NDJSON 数据：创建基本 session（无 spans）
-    return createBasicSession(input);
-  }
-
-  // 尝试复用 Claude Code parser（NDJSON 格式）
+  let payload: ZedThreadPayload;
   try {
-    // parseTranscript 在同一 package 内，直接引用
-    const { parseTranscript } = await import('./claude.js');
-    const parsed = parseTranscript(entries as any, {
-      filePath: `zed://threads/${input.id}`,
-      agent: 'zed',
-    });
-    if (parsed) {
-      parsed.meta.name = input.summary || parsed.meta.name;
-      parsed.meta.cwd = extractFirstFolder(input.folderPaths) || parsed.meta.cwd;
-      return parsed;
-    }
+    payload = JSON.parse(input.dataBuffer.toString('utf8')) as ZedThreadPayload;
   } catch {
-    // fall through to basic
+    return null;
   }
+  if (!Array.isArray(payload.messages)) return null;
+  const messages: ZedMessage[] = payload.messages;
 
-  return createBasicSession(input);
-}
-
-function extractFirstFolder(folderPaths: string | null): string | undefined {
-  if (!folderPaths) return undefined;
-  try {
-    const arr = JSON.parse(folderPaths);
-    return Array.isArray(arr) && arr.length > 0 ? String(arr[0]) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function createBasicSession(input: ZedThreadInput): ParsedSession | null {
   const startTime = input.createdAt ? toMs(input.createdAt) : toMs(input.updatedAt);
   const endTime = toMs(input.updatedAt);
-
-  // 尝试从 summary 中提取有意义的行作为 span
-  const spans: Span[] = [];
-  const lines = input.summary.split('\n').filter(Boolean);
-  if (lines.length > 0) {
-    spans.push(
-      makeSpan({
-        id: `${input.id}-summary`,
-        sessionId: input.id,
-        type: 'answer',
-        name: 'summary',
-        startTime,
-        endTime,
-        outputTokens: Math.round(input.summary.length / 4),
-        metadata: { text: truncate(input.summary) },
-      }),
-    );
+  const model = payload.model?.model || payload.model?.provider;
+  const toolResults = new Map<string, ZedToolResult>();
+  for (const message of messages) {
+    for (const [callId, result] of Object.entries(message.Agent?.tool_results ?? {})) {
+      toolResults.set(result.tool_use_id || callId, result);
+    }
   }
 
+  const spans: Span[] = [];
+  let currentTurnId: string | undefined;
+  let messageCount = 0;
+
+  for (let messageIndex = 0; messageIndex < messages.length; messageIndex++) {
+    const message: ZedMessage = messages[messageIndex];
+    if (message.User) {
+      const requestId = message.User.id || `request-${messageIndex}`;
+      currentTurnId = `${input.id}-turn-${requestId}`;
+      const usage = payload.request_token_usage?.[requestId];
+      spans.push(
+        makeSpan({
+          id: currentTurnId,
+          sessionId: input.id,
+          type: 'llm_turn',
+          name: model || 'zed',
+          startTime,
+          inputTokens: usage?.input_tokens,
+          outputTokens: usage?.output_tokens,
+          model,
+          metadata: usage ? { tokenUsageSource: 'request_token_usage' } : undefined,
+        }),
+      );
+      messageCount++;
+      continue;
+    }
+
+    const agent = message.Agent;
+    if (!agent) continue;
+    if (!currentTurnId) {
+      currentTurnId = `${input.id}-turn-${messageIndex}`;
+      spans.push(
+        makeSpan({
+          id: currentTurnId,
+          sessionId: input.id,
+          type: 'llm_turn',
+          name: model || 'zed',
+          startTime,
+          model,
+        }),
+      );
+      messageCount++;
+    }
+
+    for (let contentIndex = 0; contentIndex < (agent.content ?? []).length; contentIndex++) {
+      const content = agent.content?.[contentIndex];
+      if (typeof content?.Text === 'string' && content.Text.length > 0) {
+        spans.push(
+          makeSpan({
+            id: `${currentTurnId}-answer-${messageIndex}-${contentIndex}`,
+            sessionId: input.id,
+            parentId: currentTurnId,
+            type: 'answer',
+            name: 'answer',
+            startTime,
+            metadata: { text: truncate(content.Text) },
+          }),
+        );
+      }
+
+      const tool = content?.ToolUse;
+      if (tool?.id) {
+        const result = toolResults.get(tool.id);
+        const output = result?.output ?? result?.content;
+        spans.push(
+          makeSpan({
+            id: tool.id,
+            sessionId: input.id,
+            parentId: currentTurnId,
+            type: 'tool_call',
+            name: tool.name || result?.tool_name || 'unknown',
+            startTime,
+            isError: result?.is_error,
+            outputBytes: output == null ? 0 : Buffer.byteLength(safeStringify(output), 'utf8'),
+            metadata: {
+              input: truncate(safeStringify(tool.input ?? tool.raw_input)),
+              output: output == null ? undefined : truncate(safeStringify(output)),
+            },
+          }),
+        );
+      }
+    }
+  }
+
+  if (spans.length === 0) return null;
   return {
     sessionId: input.id,
     meta: {
-      name: lines[0]?.slice(0, 80) || input.id.slice(0, 8),
+      name: input.summary || payload.title || input.id.slice(0, 8),
       filePath: `zed://threads/${input.id}`,
       startTime,
       endTime,
       cwd: extractFirstFolder(input.folderPaths),
-      messageCount: 0,
+      messageCount,
       agent: 'zed',
     },
     spans,
   };
+}
+
+function extractFirstFolder(folderPaths: string | null): string | undefined {
+  if (!folderPaths) return undefined;
+  const trimmed = folderPaths.trim();
+  if (!trimmed) return undefined;
+  if (!trimmed.startsWith('[')) return trimmed;
+  try {
+    const arr = JSON.parse(trimmed);
+    return Array.isArray(arr) && arr.length > 0 ? String(arr[0]) : undefined;
+  } catch {
+    return undefined;
+  }
 }
