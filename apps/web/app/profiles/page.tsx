@@ -83,7 +83,7 @@ export default function ProfilesPage() {
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
           gap: SP.lg,
-          alignItems: 'start',
+          alignItems: 'stretch',
         }}
       >
         {report.profiles.map((profile) => (
@@ -193,10 +193,13 @@ function ProfileCard({
         boxShadow: 'var(--shadow-card)',
         overflow: 'hidden',
         border: `1px solid ${C.borderSoft}`,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <div style={{ height: 4, background: color }} />
-      <div style={{ padding: SP.lg }}>
+      <div style={{ padding: SP.lg, flex: 1 }}>
         <div
           style={{
             display: 'flex',

@@ -389,6 +389,7 @@ function TrendChart({
 }: {
   trends: { day: string; tokens: number; cost: number; sessions: number; avgCacheHit: number }[];
 }) {
+  const [activeIndex, setActiveIndex] = useState(0);
   const W = 700,
     H = 200,
     PAD = 45;
@@ -397,6 +398,7 @@ function TrendChart({
   const yCost = (v: number) => H - PAD - (v / maxCost) * (H - PAD * 2);
   const costLine = trends.map((t, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${yCost(t.cost)}`).join(' ');
   const areaPath = `${costLine} L${x(trends.length - 1)},${H - PAD} L${x(0)},${H - PAD} Z`;
+  const active = trends[activeIndex] ?? trends[0];
 
   return (
     <div>
@@ -419,10 +421,14 @@ function TrendChart({
             key={t.day}
             cx={x(i)}
             cy={yCost(t.cost)}
-            r={3.5}
+            r={i === activeIndex ? 5 : 3.5}
             fill={C.out}
             stroke={C.card}
             strokeWidth={1.5}
+            tabIndex={0}
+            aria-label={`${t.day}: 成本 ¥${t.cost.toFixed(4)}，${fmtTokens(t.tokens)} Token，${t.sessions} 会话`}
+            onMouseEnter={() => setActiveIndex(i)}
+            onFocus={() => setActiveIndex(i)}
           >
             <title>
               {t.day}: ¥{t.cost.toFixed(4)}, {fmtTokens(t.tokens)}, {t.sessions} 会话
@@ -447,6 +453,12 @@ function TrendChart({
         <span>
           <span style={{ color: C.out, fontWeight: 600 }}>━</span> 每日成本(¥)
         </span>
+        {active && (
+          <span className="tnum" style={{ color: C.text }}>
+            {active.day} · ¥{active.cost.toFixed(4)} · {fmtTokens(active.tokens)} ·{' '}
+            {active.sessions} 会话 · Cache {(active.avgCacheHit * 100).toFixed(1)}%
+          </span>
+        )}
       </div>
     </div>
   );

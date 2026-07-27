@@ -2378,7 +2378,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T69 statistics trend inspection and profile-card layout consistency
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
 - purpose: expose exact daily-trend values through keyboard-accessible hover or
   focus interaction, and make Agent Profile cards scan consistently despite
   different content lengths
@@ -2391,6 +2393,22 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - verification plan: focused Web tests, browser desktop/mobile inspection,
   focused lint and production build
 - documentation plan: update relevant UI guidance/current behavior and this Task
+- implementation:
+  - daily cost points now respond to pointer hover and keyboard focus, enlarge
+    the active point, and display the selected day, cost, tokens, session count,
+    and cache-hit rate in a stable legend row below the chart
+  - Agent Profile grids stretch each row and each profile card fills its grid
+    cell, removing unequal bottom edges caused by variable content length
+- verification:
+  - focused Biome check — passed with no new errors; the existing Stats
+    `modelColor` non-null assertion remains a warning
+  - `pnpm --filter agent-profile-web build` — passed
+- completion:
+  - changed files: `apps/web/app/stats/page.tsx`,
+    `apps/web/app/profiles/page.tsx`, and `docs/roadmap.md`
+  - result: daily values are directly inspectable without moving the chart or
+    relying on a native SVG title, and profile cards retain content while their
+    grid rows align
 
 ### T70 session-navigation loading performance and transition feedback
 
