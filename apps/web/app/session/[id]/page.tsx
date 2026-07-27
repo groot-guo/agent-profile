@@ -15,6 +15,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
 import { AgentMark } from '../../icons';
+import { sessionDisplayTitle } from '../../session-navigation';
 import {
   C,
   CAT_COLOR,
@@ -199,8 +200,8 @@ export default function SessionPage() {
         }}
       >
         {data.agent ? <AgentMark agent={data.agent} size={26} /> : null}
-        <span className="clamp1" title={data.name || data.id}>
-          {data.name || data.id.slice(0, 8)}
+        <span className="clamp1" title={sessionDisplayTitle(data)}>
+          {sessionDisplayTitle(data)}
         </span>
       </h2>
       <div

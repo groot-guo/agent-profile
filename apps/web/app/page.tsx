@@ -16,7 +16,9 @@ import {
   projectOptions,
   type SessionQuickView,
   type SessionSort,
+  type SessionTimeRange,
   serializeSessionNavigation,
+  sessionDisplayTitle,
   sessionProject,
   visibleSessionSlice,
 } from './session-navigation';
@@ -40,6 +42,7 @@ export default function HomePage() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SessionSort>('time');
   const [projectFilter, setProjectFilter] = useState('');
+  const [timeRange, setTimeRange] = useState<SessionTimeRange>('all');
   const [quickView, setQuickView] = useState<SessionQuickView>('all');
   const [navigationReady, setNavigationReady] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(SESSION_RENDER_BATCH);
@@ -109,6 +112,7 @@ export default function HomePage() {
       setSearch(state.query);
       setProjectFilter(state.project);
       setAgentFilter(state.agent);
+      setTimeRange(state.timeRange);
       setSortBy(state.sort);
       setQuickView(state.quickView);
       setSelectedId(state.selectedId);
@@ -125,17 +129,27 @@ export default function HomePage() {
       query: search,
       project: projectFilter,
       agent: agentFilter,
+      timeRange,
       sort: sortBy,
       quickView,
       selectedId,
     });
     const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState(window.history.state, '', nextUrl);
-  }, [agentFilter, navigationReady, projectFilter, quickView, search, selectedId, sortBy]);
+  }, [
+    agentFilter,
+    navigationReady,
+    projectFilter,
+    quickView,
+    search,
+    selectedId,
+    sortBy,
+    timeRange,
+  ]);
 
   useEffect(() => {
     setVisibleLimit(SESSION_RENDER_BATCH);
-  }, [agentFilter, projectFilter, quickView, search, sortBy]);
+  }, [agentFilter, projectFilter, quickView, search, sortBy, timeRange]);
 
   useEffect(() => {
     if (selectedId || !navigationReady) return;
@@ -239,11 +253,12 @@ export default function HomePage() {
       agent: agentFilter,
       project: projectFilter,
       query: search,
+      timeRange,
       sort: sortBy,
       quickView,
       selectedId,
     }),
-    [agentFilter, projectFilter, quickView, search, selectedId, sortBy],
+    [agentFilter, projectFilter, quickView, search, selectedId, sortBy, timeRange],
   );
   const filtered = useMemo(
     () => filterSessions(sessions, anomalyIds, navigationState),
@@ -260,7 +275,10 @@ export default function HomePage() {
 
   const selected = sessions.find((x) => x.id === selectedId);
   const hasActiveFilters =
-    Boolean(search || projectFilter) || agentFilter !== 'all' || quickView !== 'all';
+    Boolean(search || projectFilter) ||
+    agentFilter !== 'all' ||
+    timeRange !== 'all' ||
+    quickView !== 'all';
 
   const selectSession = (id: string) => {
     if (sessionListRef.current) {
@@ -284,6 +302,7 @@ export default function HomePage() {
     setSearch('');
     setProjectFilter('');
     setAgentFilter('all');
+    setTimeRange('all');
     setQuickView('all');
   };
 
@@ -317,7 +336,7 @@ export default function HomePage() {
         >
           <div style={{ display: 'flex', gap: SP.sm }}>
             <input
-              placeholder="搜索名称 / 路径 / id…"
+              placeholder="搜索标题 / 项目 / id…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{
@@ -353,15 +372,12 @@ export default function HomePage() {
               <option value="duration">按耗时</option>
             </select>
           </div>
-          <div style={{ display: 'flex', gap: SP.sm }}>
-            <input
-              list="project-filter-options"
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 112px', gap: SP.sm }}>
+            <select
               aria-label="筛选项目"
-              placeholder="全部项目 · 输入名称或路径"
               value={projectFilter}
               onChange={(event) => setProjectFilter(event.target.value)}
               style={{
-                flex: 1,
                 minWidth: 0,
                 padding: '6px 12px',
                 fontSize: FS.sm,
@@ -370,22 +386,38 @@ export default function HomePage() {
                 background: C.bg,
                 color: C.text,
                 outline: 'none',
+                cursor: 'pointer',
               }}
-            />
-            <datalist id="project-filter-options">
+            >
+              <option value="">全部项目 · {sessions.length}</option>
               {projects.map(({ project, count }) => (
-                <option
-                  key={project}
-                  value={project}
-                  label={`${projectLabel(project)} · ${count}`}
-                />
+                <option key={project} value={project}>
+                  {projectLabel(project)} · {count} — {project}
+                </option>
               ))}
-            </datalist>
-            {projectFilter && (
-              <SoftButton onClick={() => setProjectFilter('')} tip="清除项目筛选">
-                清除
-              </SoftButton>
-            )}
+            </select>
+            <select
+              aria-label="筛选最近会话"
+              value={timeRange}
+              onChange={(event) => setTimeRange(event.target.value as SessionTimeRange)}
+              style={{
+                minWidth: 0,
+                padding: '6px 8px',
+                fontSize: FS.sm,
+                border: `1px solid ${C.border}`,
+                borderRadius: R.md,
+                background: C.bg,
+                color: C.text,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="all">不限时间</option>
+              <option value="1d">最近 24 小时</option>
+              <option value="7d">最近 7 天</option>
+              <option value="30d">最近 30 天</option>
+              <option value="90d">最近 90 天</option>
+            </select>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {(
@@ -646,7 +678,7 @@ export default function HomePage() {
                 >
                   <AgentMark agent={selected.agent} size={18} />
                   <span className="clamp1" title={selected.name || selected.id}>
-                    {selected.name || selected.id.slice(0, 8)}
+                    {sessionDisplayTitle(selected)}
                   </span>
                 </span>
               )}
@@ -828,7 +860,7 @@ function SessionRow({
   anomaly: boolean;
   onSelect: (id: string) => void;
 }) {
-  const name = s.name || s.id.slice(0, 8);
+  const name = sessionDisplayTitle(s);
   return (
     <button
       type="button"

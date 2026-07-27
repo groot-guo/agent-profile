@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { API } from '../config';
 import { AgentMark } from '../icons';
+import { sessionDisplayTitle } from '../session-navigation';
 import { C, FS, fmtDuration, fmtTokens, SP } from '../theme';
 import { Card, Empty, Notice } from '../ui';
 
@@ -153,10 +154,10 @@ function CompareView() {
             >
               <span
                 className="clamp1"
-                title={s.name || s.id}
+                title={sessionDisplayTitle(s)}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%' }}
               >
-                <AgentMark agent={s.agent} size={18} /> {s.name || s.id.slice(0, 8)}
+                <AgentMark agent={s.agent} size={18} /> {sessionDisplayTitle(s)}
               </span>
             </div>
           ))}

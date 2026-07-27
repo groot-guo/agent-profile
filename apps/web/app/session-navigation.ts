@@ -1,12 +1,16 @@
 import type { SessionSummary } from '@agent-profile/core';
+import { projectLabel } from './project-label';
+import { AGENT_LABELS } from './theme';
 
 export type SessionSort = 'time' | 'cost' | 'tokens' | 'cache' | 'duration';
 export type SessionQuickView = 'all' | 'anomaly' | 'unpriced';
+export type SessionTimeRange = 'all' | '1d' | '7d' | '30d' | '90d';
 
 export interface SessionNavigationState {
   agent: string;
   project: string;
   query: string;
+  timeRange: SessionTimeRange;
   sort: SessionSort;
   quickView: SessionQuickView;
   selectedId: string | null;
@@ -16,12 +20,15 @@ export const DEFAULT_SESSION_NAVIGATION: SessionNavigationState = {
   agent: 'all',
   project: '',
   query: '',
+  timeRange: 'all',
   sort: 'time',
   quickView: 'all',
   selectedId: null,
 };
 
-export function sessionProject(session: SessionSummary): string {
+type SessionLocation = Pick<SessionSummary, 'cwd' | 'filePath'>;
+
+export function sessionProject(session: SessionLocation): string {
   if (session.cwd) return session.cwd;
   const parts = session.filePath.split('/');
   const projectIndex = parts.indexOf('projects');
@@ -32,23 +39,32 @@ export function sessionProject(session: SessionSummary): string {
   return encoded.startsWith('-') ? `/${encoded.slice(1).replace(/-/g, '/')}` : encoded;
 }
 
+export function sessionDisplayTitle(
+  session: Pick<SessionSummary, 'name' | 'agent' | 'startTime' | 'cwd' | 'filePath'>,
+): string {
+  const sourceTitle = session.name?.trim();
+  if (sourceTitle) return sourceTitle;
+  const agent = AGENT_LABELS[session.agent] || session.agent || 'Agent';
+  const project = projectLabel(sessionProject(session));
+  return `${agent} · ${project} · ${formatLocalStart(session.startTime)}`;
+}
+
 export function filterSessions(
   sessions: SessionSummary[],
   anomalyIds: Set<string>,
   state: SessionNavigationState,
+  now = Date.now(),
 ): SessionSummary[] {
   const query = state.query.trim().toLowerCase();
-  const projectQuery = state.project.trim().toLowerCase();
+  const cutoff = timeRangeCutoff(state.timeRange, now);
   return sessions
     .filter((session) => state.agent === 'all' || session.agent === state.agent)
-    .filter((session) => {
-      const project = sessionProject(session).toLowerCase();
-      return !projectQuery || project.includes(projectQuery);
-    })
+    .filter((session) => !state.project || sessionProject(session) === state.project)
+    .filter((session) => cutoff === null || session.startTime >= cutoff)
     .filter((session) => {
       if (!query) return true;
       return (
-        (session.name || '').toLowerCase().includes(query) ||
+        sessionDisplayTitle(session).toLowerCase().includes(query) ||
         sessionProject(session).toLowerCase().includes(query) ||
         session.id.toLowerCase().includes(query)
       );
@@ -92,10 +108,12 @@ export function parseSessionNavigation(search: string): SessionNavigationState {
   const params = new URLSearchParams(search);
   const sort = params.get('sort');
   const quickView = params.get('view');
+  const timeRange = params.get('range');
   return {
     agent: params.get('agent') || 'all',
     project: params.get('project') || '',
     query: params.get('q') || '',
+    timeRange: isTimeRange(timeRange) ? timeRange : 'all',
     sort: isSessionSort(sort) ? sort : 'time',
     quickView: isQuickView(quickView) ? quickView : 'all',
     selectedId: params.get('session'),
@@ -107,6 +125,7 @@ export function serializeSessionNavigation(state: SessionNavigationState): strin
   if (state.query) params.set('q', state.query);
   if (state.project) params.set('project', state.project);
   if (state.agent !== 'all') params.set('agent', state.agent);
+  if (state.timeRange !== 'all') params.set('range', state.timeRange);
   if (state.sort !== 'time') params.set('sort', state.sort);
   if (state.quickView !== 'all') params.set('view', state.quickView);
   if (state.selectedId) params.set('session', state.selectedId);
@@ -155,4 +174,23 @@ function isSessionSort(value: string | null): value is SessionSort {
 
 function isQuickView(value: string | null): value is SessionQuickView {
   return ['all', 'anomaly', 'unpriced'].includes(value ?? '');
+}
+
+function isTimeRange(value: string | null): value is SessionTimeRange {
+  return ['all', '1d', '7d', '30d', '90d'].includes(value ?? '');
+}
+
+function timeRangeCutoff(range: SessionTimeRange, now: number): number | null {
+  if (range === 'all') return null;
+  return now - Number.parseInt(range, 10) * 86_400_000;
+}
+
+function formatLocalStart(timestamp: number): string {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(timestamp) || Number.isNaN(date.getTime())) return '时间未知';
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  return `${month}-${day} ${hour}:${minute}`;
 }

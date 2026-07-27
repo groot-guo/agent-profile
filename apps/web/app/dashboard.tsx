@@ -4,6 +4,7 @@ import type { SessionSummary } from '@agent-profile/core';
 import type { ImportJobStatus } from './config';
 import { AgentMark } from './icons';
 import { importExperienceState, sourceStatusText } from './import-state';
+import { sessionDisplayTitle } from './session-navigation';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtTokens, R, SP } from './theme';
 import { BarRow, Card, SectionTitle, SoftButton, StatCard, TokenStrip } from './ui';
 
@@ -363,7 +364,7 @@ function TopList({
   return (
     <div>
       {sessions.map((s, i) => {
-        const name = s.name || s.id.slice(0, 8);
+        const name = sessionDisplayTitle(s);
         return (
           <div
             key={s.id}

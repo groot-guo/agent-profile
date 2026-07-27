@@ -7,6 +7,7 @@ import {
   parseSessionNavigation,
   projectOptions,
   serializeSessionNavigation,
+  sessionDisplayTitle,
   visibleSessionSlice,
 } from './session-navigation';
 
@@ -20,7 +21,7 @@ describe('flat Session navigation', () => {
     const result = filterSessions(sessions, new Set(['a']), {
       ...DEFAULT_SESSION_NAVIGATION,
       agent: 'codex',
-      project: 'alpha',
+      project: '/repo/alpha',
       query: 'session',
       quickView: 'anomaly',
       sort: 'cost',
@@ -37,15 +38,46 @@ describe('flat Session navigation', () => {
 
   it('round-trips stable URL state and ignores invalid enum values', () => {
     const state = parseSessionNavigation(
-      '?q=cache&project=%2Frepo%2Falpha&agent=codex&sort=tokens&view=unpriced&session=a',
+      '?q=cache&project=%2Frepo%2Falpha&agent=codex&range=7d&sort=tokens&view=unpriced&session=a',
     );
     expect(serializeSessionNavigation(state)).toBe(
-      'q=cache&project=%2Frepo%2Falpha&agent=codex&sort=tokens&view=unpriced&session=a',
+      'q=cache&project=%2Frepo%2Falpha&agent=codex&range=7d&sort=tokens&view=unpriced&session=a',
     );
-    expect(parseSessionNavigation('?sort=invalid&view=invalid')).toMatchObject({
+    expect(parseSessionNavigation('?sort=invalid&view=invalid&range=invalid')).toMatchObject({
       sort: 'time',
       quickView: 'all',
+      timeRange: 'all',
     });
+  });
+
+  it('uses exact project and rolling recent-range filters', () => {
+    const now = new Date('2026-07-27T12:00:00+08:00').getTime();
+    const sessions = [
+      session('recent-alpha', '/repo/alpha', 'codex', now - 2 * 86_400_000, 0),
+      session('old-alpha', '/repo/alpha', 'codex', now - 8 * 86_400_000, 0),
+      session('recent-alpha-tools', '/repo/alpha-tools', 'codex', now - 86_400_000, 0),
+    ];
+    const result = filterSessions(
+      sessions,
+      new Set(),
+      {
+        ...DEFAULT_SESSION_NAVIGATION,
+        project: '/repo/alpha',
+        timeRange: '7d',
+      },
+      now,
+    );
+    expect(result.map((item) => item.id)).toEqual(['recent-alpha']);
+  });
+
+  it('prefers source titles and gives untitled Sessions a metadata-only display title', () => {
+    const titled = session('named', '/repo/alpha', 'codex', 100, 0);
+    expect(sessionDisplayTitle(titled)).toBe('session named');
+
+    const untitled = { ...session('opaque-session-id', '/repo/alpha', 'codex', 100, 0), name: '' };
+    const title = sessionDisplayTitle(untitled);
+    expect(title).toContain('Codex · alpha ·');
+    expect(title).not.toContain('opaque-session-id');
   });
 
   it('groups recent Sessions by time and bounds a 400-row render', () => {
