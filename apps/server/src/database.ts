@@ -60,6 +60,13 @@ const MIGRATIONS: Migration[] = [
       database.exec('CREATE INDEX IF NOT EXISTS idx_sessions_source_kind ON sessions(source_kind)');
     },
   },
+  {
+    version: 4,
+    name: 'agent_column',
+    up(database) {
+      addColumn(database, 'sessions', 'agent', "TEXT NOT NULL DEFAULT 'unknown'");
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
