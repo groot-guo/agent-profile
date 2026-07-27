@@ -1258,7 +1258,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T48 product-ready local operation and first-run onboarding
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-27
 - purpose:
   - add source health, first-run recovery, stable local launch, and safe
     operational defaults after the documentation baseline is complete
@@ -1278,6 +1280,54 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - source-path metadata is locally sensitive and must never include transcript
     content; unavailable sources must not prevent API health or existing data
     access
+  - the API has no authentication or directory authorization, so safe defaults
+    must remain loopback-only and any broader bind must be an explicit operator
+    decision
+- acceptance:
+  - root `pnpm start` builds and starts both Server and production Web without a
+    file watcher
+  - Server and Web bind to loopback by default, API CORS accepts only documented
+    local origins, and environment overrides remain explicit
+  - backup/restore and forced-rebuild guidance distinguish healthy derived-data
+    refresh from file-level database recovery
+  - `POST /api/scan` continues accepting an explicit transcript directory and
+    optional Agent hint
+- verification plan:
+  - unit-test configuration defaults, invalid-value fallback, and explicit
+    host/origin/scan overrides
+  - run Server tests and type-check, full lint/build, and a production-launch
+    smoke test on isolated ports with startup scanning disabled
+- documentation plan:
+  - update both READMEs, architecture, and Chinese overview with the final
+    launch, network, backup/recovery, and compatibility behavior
+- implemented:
+  - added root `prestart`/`start`, a non-watch Server start script, and
+    loopback-bound Next development/production scripts; root `pnpm start`
+    builds first and then launches both local services
+  - made Server configuration testable through `loadConfig()`: default API host
+    is `127.0.0.1`, default CORS origins are local Web addresses, and `HOST` /
+    comma-separated `WEB_ORIGIN` are explicit overrides; non-loopback API binds
+    emit an unauthenticated-network warning
+  - documented start modes, backup and restore while stopped, rebuild versus
+    reset recovery choices, local network limits, and the unchanged explicit-
+    directory `POST /api/scan` contract in both READMEs, architecture, and the
+    Chinese overview
+- verification:
+  - `pnpm test` — passed: core 20 files / 176 tests; Server 10 files / 36 tests
+  - `pnpm --filter trace-server build` — passed
+  - `pnpm lint` — passed with the pre-existing 19 warnings and 2 infos
+  - `pnpm build` — passed
+  - isolated non-watch Server smoke test with `AUTO_SCAN_DIR=""`, temporary DB,
+    and `127.0.0.1:4310` — health endpoint passed; allowed local Origin received
+    CORS header and an untrusted Origin did not
+  - isolated production Next smoke test on `127.0.0.1:4311` — root page passed
+  - `git diff --check` — passed
+- completion:
+  - changed files: root/package `package.json` scripts, Server configuration and
+    configuration tests, Server startup, both READMEs, `ARCHITECTURE.md`,
+    `docs/zh/OVERVIEW.md`, and this roadmap
+  - remaining limitation: the product is still an unauthenticated local tool;
+    remote/shared deployment and a desktop installer remain out of scope
 
 ### T49 Task/Outcome, cohort, and experiment foundations
 

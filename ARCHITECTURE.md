@@ -74,6 +74,14 @@ failures; malformed items that throw are counted separately as failures.
 The API is split by domain under `apps/server/src/routes/`; it is not a single
 monolithic routes file.
 
+The supported non-watch local launcher is root `pnpm start`: its `prestart`
+builds the workspace, then the Server and production Next.js process run
+together. API and Web listeners default to `127.0.0.1`; API CORS accepts only
+the local `localhost:3001` and `127.0.0.1:3001` Web origins. `HOST` and
+comma-separated `WEB_ORIGIN` are explicit overrides. Because the API has no
+authentication or directory authorization, a non-loopback `HOST` is an
+operator opt-in for trusted networks and emits a startup warning.
+
 The Home page owns the initial Sessions, Stats, and import-status requests and
 passes data into the Dashboard. Dashboard model totals and recent-tool
 frequency use two set-based Span queries; the browser does not fetch tools once

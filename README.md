@@ -42,6 +42,15 @@ port `3000`; the Web application runs on port `3001`.
 Run package-level `dev` commands only when you deliberately need to debug one
 process in isolation.
 
+For normal local use without file watching, run:
+
+```bash
+pnpm start
+```
+
+The root command builds the workspace first, then starts the API and production
+Web server together. Both services bind to `127.0.0.1` by default.
+
 The Web development server writes `apps/web/.next-dev`; production builds write
 `apps/web/.next`. You can safely run `pnpm build` while development is running.
 
@@ -106,6 +115,8 @@ rows are retained instead of silently deleting user notes.
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | API port; default `3000` |
+| `HOST` | API bind host; default `127.0.0.1` |
+| `WEB_ORIGIN` | Comma-separated browser origins allowed by API CORS; defaults to the local Web origins on port `3001` |
 | `NEXT_PUBLIC_API` | Web API origin; default `http://localhost:3000/api` |
 | `AUTO_SCAN_DIR` | Unset: scan default Claude Code and Codex directories. Empty: disable transcript auto-scan. A path: scan that one transcript directory. |
 | `TRACE_DB_PATH` | Override the local SQLite database path; default `apps/server/trace.db` |
@@ -132,6 +143,23 @@ AUTO_SCAN_DIR="" pnpm dev
   not sent to a semantic provider by that feature.
 - Source data varies. A missing field means “not captured”, not zero, success,
   or failure.
+
+For a file-level backup, stop `pnpm dev` or `pnpm start`, then copy the database
+(or the path selected by `TRACE_DB_PATH`):
+
+```bash
+cp apps/server/trace.db apps/server/trace.db.backup-YYYYMMDD
+```
+
+To restore, keep the Server stopped, preserve the current database if needed,
+then copy the selected backup over `apps/server/trace.db` and start the app.
+Use **强制重建** instead when the database is healthy and only derived parser
+or metric results need refreshing.
+
+The compatibility `POST /api/scan` endpoint remains available for scripts that
+import one explicit transcript directory. Send JSON such as
+`{"dir":"/absolute/history/path","agent":"codex"}`; the normal UI uses the
+multi-source import job instead.
 
 ## Troubleshooting
 
@@ -162,8 +190,8 @@ pnpm dev
 
 ## Current product boundaries
 
-- There is no packaged desktop application or non-watch production launcher
-  yet; today the supported entry point is the local developer workflow above.
+- There is no packaged desktop application yet. `pnpm start` is the supported
+  non-watch local launcher.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
   not implemented. The product can explain observed process behavior but cannot
   prove whether a session delivered a correct result.
@@ -175,6 +203,9 @@ pnpm dev
   improvements.
 - The application is designed for local use. Do not expose its API to an
   untrusted network without adding authentication and directory-access controls.
+  Setting `HOST=0.0.0.0` is an explicit opt-in that exposes the unauthenticated
+  API beyond loopback; pair it with a narrow `WEB_ORIGIN` only on a trusted
+  network.
 
 ## Development checks
 

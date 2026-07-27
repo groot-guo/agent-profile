@@ -35,6 +35,15 @@ pnpm dev
 `pnpm dev` 会同时启动 API 和 Web；修改 Server 源码后 API 会自动重启。只有需要单独
 排查某一进程时，才分别运行各 package 的 `dev` 命令。
 
+日常本地使用如果不需要文件监听，可运行：
+
+```bash
+pnpm start
+```
+
+根命令会先构建整个 workspace，再同时启动 API 与生产 Web Server。两者默认只绑定
+`127.0.0.1`。
+
 Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web/.next`，因此运行
 `pnpm build` 不会破坏正在运行的开发服务。
 
@@ -86,6 +95,8 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 | 变量 | 作用 |
 | --- | --- |
 | `PORT` | API 端口，默认 `3000` |
+| `HOST` | API 绑定地址，默认 `127.0.0.1` |
+| `WEB_ORIGIN` | API CORS 允许的浏览器来源，多个值用逗号分隔；默认仅允许本机 `3001` Web 来源 |
 | `NEXT_PUBLIC_API` | Web 请求的 API 地址，默认 `http://localhost:3000/api` |
 | `AUTO_SCAN_DIR` | 未设置：扫描默认 Claude Code 与 Codex 目录；空字符串：关闭 transcript 自动扫描；路径：只扫描该一个 transcript 目录。 |
 | `TRACE_DB_PATH` | 覆盖本地 SQLite 路径；默认 `apps/server/trace.db` |
@@ -108,6 +119,20 @@ AUTO_SCAN_DIR="" pnpm dev
   当前可用来源重新同步。
 - 提示词审查是临时计算：提示词文本不会写入数据库，也不会由该功能发送给语义模型服务。
 - 不同来源的数据覆盖度不同。字段缺失表示“未采集”，不表示零、成功或失败。
+
+文件级备份时，先停止 `pnpm dev` 或 `pnpm start`，再复制数据库（如果配置了
+`TRACE_DB_PATH`，则复制对应文件）：
+
+```bash
+cp apps/server/trace.db apps/server/trace.db.backup-YYYYMMDD
+```
+
+恢复时保持 Server 停止；如有需要先保留当前数据库，再把选中的备份复制覆盖
+`apps/server/trace.db`，然后重新启动。若数据库本身健康，只需刷新 parser 或指标派生
+结果，应优先使用页面的**强制重建**。
+
+兼容接口 `POST /api/scan` 继续支持脚本按一个显式 transcript 目录导入，例如发送
+`{"dir":"/absolute/history/path","agent":"codex"}`。正常页面使用多来源导入任务。
 
 ## 常见问题
 
@@ -134,8 +159,7 @@ pnpm dev
 
 ## 当前产品边界
 
-- 目前没有桌面安装包，也没有非 watch 的生产启动器；当前支持的入口是上面的本地开发者
-  工作流。
+- 目前没有桌面安装包；`pnpm start` 是受支持的非 watch 本地启动入口。
 - Task、Configuration Snapshot、Outcome、cohort、experiment 尚未实现。因此它能解释
   过程行为，但不能证明某次会话是否正确完成了任务。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化
@@ -143,7 +167,8 @@ pnpm dev
 - 历史很大时，仍需发现文件并整体替换发生变化的 Session；append-only 解析和超大 Session
   虚拟化尚未完成。
 - 产品设计为本地使用。不要把 API 暴露到不可信网络；如要这样做，需要先补认证和目录访问
-  控制。
+  控制。设置 `HOST=0.0.0.0` 会显式把无认证 API 暴露到回环地址之外；只能在可信网络中
+  使用，并通过 `WEB_ORIGIN` 严格限制浏览器来源。
 
 ## 开发检查
 

@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "next dev -H 127.0.0.1 -p 3001",
     "build": "next build",
-    "start": "next start"
+    "start": "next start -H 127.0.0.1 -p 3001"
   },
   "dependencies": {
     "@agent-profile/core": "workspace:*",

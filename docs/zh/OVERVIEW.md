@@ -148,8 +148,13 @@ Task 标记为 `completed`。
 
 - 根目录 `pnpm dev` 会并行启动 server 与 web，server 源码变化后会自动重启，不再需要
   分别打开两个终端。
+- 根目录 `pnpm start` 会先构建 workspace，再以非 watch 模式并行启动生产 Web 与 API，
+  作为日常本地运行入口。
 - server 默认 `3000`，可通过 `PORT` 修改。
 - web 默认 `3001`，可通过 `NEXT_PUBLIC_API` 修改 API 地址。
+- Server 与 Web 默认只绑定 `127.0.0.1`；API CORS 默认只接受本机 `3001` 来源。
+  `HOST` 和逗号分隔的 `WEB_ORIGIN` 可显式覆盖。由于 API 没有认证与目录授权，非回环
+  `HOST` 只适合可信网络，启动时会输出警告。
 - Web 开发产物写入 `apps/web/.next-dev`，生产构建仍写入 `apps/web/.next`，因此
   运行中的 `pnpm dev` 不会再被 `pnpm build` 替换 chunk。
 - 首页“重新扫描”与启动导入共享任务管理器，检查 Claude Code、Codex、Zed 和 MiMo，
@@ -157,5 +162,8 @@ Task 标记为 `completed`。
 - 首页“数据管理”提供强制重建和独立确认的本地生成数据清空；重建是 parser/指标变化后
   的推荐恢复方式，清空前应停止 Server 并备份 `apps/server/trace.db` 或
   `TRACE_DB_PATH` 指定文件。
+- 文件级恢复必须在 Server 停止时把备份复制回数据库路径；健康数据库的派生分析刷新应
+  使用强制重建。兼容的 `POST /api/scan` 仍接受 `dir` 与可选 `agent`，供脚本按显式目录
+  导入；页面继续使用多来源任务。
 - LLM 诊断使用 `LLM_API_KEY`，以及可选的 `LLM_PROVIDER`、`LLM_MODEL` 和
   `LLM_BASE_URL`。

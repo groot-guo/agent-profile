@@ -7,13 +7,18 @@ import { startStartupImports } from './routes/scan';
 
 const app = Fastify({ logger: true });
 
-await app.register(cors, { origin: true });
+await app.register(cors, { origin: config.webOrigins });
 
 registerRoutes(app);
 
 try {
-  await app.listen({ port: config.port });
-  console.log(`Trace Server running at http://localhost:${config.port}`);
+  await app.listen({ port: config.port, host: config.host });
+  console.log(`Trace Server running at http://${config.host}:${config.port}`);
+  if (!['127.0.0.1', 'localhost', '::1'].includes(config.host)) {
+    app.log.warn(
+      'The API is listening beyond loopback without authentication; use only on a trusted network.',
+    );
+  }
 
   // All startup imports use the same observable, deduplicated job state as the UI.
   await startStartupImports();

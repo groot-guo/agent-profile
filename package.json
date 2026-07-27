@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --parallel --stream --filter trace-server --filter agent-profile-web dev",
+    "prestart": "pnpm build",
+    "start": "pnpm --parallel --stream --filter trace-server --filter agent-profile-web start",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "biome check .",
