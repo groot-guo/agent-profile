@@ -2494,6 +2494,59 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - result: Profile content no longer extends into the following explanation
     Card, while equal-height grid rows remain intact
 
+### T73 MiMo external Claude Code history exclusion
+
+- status: planned
+- purpose: restore source-faithful Agent attribution by preventing Claude Code
+  histories copied into the MiMo database from being analyzed as native
+  `mimo-code` Sessions or counted twice in aggregate evidence
+- scope:
+  - query MiMo's read-only `external_import` metadata by Session ID during
+    source discovery
+  - classify an entry as an excluded external Claude Code history only when
+    the structural evidence is exact: `source = 'cc'` and `source_path` is
+    under the canonical `~/.claude/projects` directory
+  - return an explicit excluded-source outcome instead of generating a
+    `mimo-code` Session for that entry; do not infer source identity from
+    model names, transcript text, prompts, or incidental project paths
+  - version the MiMo source revision so a normal synchronization re-evaluates
+    previously imported copies
+  - atomically remove only existing generated copies with neither a user label
+    nor a user note; retain annotated copies and report them explicitly as
+    protected cleanup failures requiring user action
+  - preserve genuine native MiMo Sessions, including checkpoint-writer
+    messages, without source-name or model-keyword heuristics
+- expected files: `apps/server/src/ingestion/mimo-adapter.ts`,
+  `packages/core/src/parsers/mimo.ts` if required,
+  `apps/server/src/ingestion/types.ts`,
+  `apps/server/src/ingestion/import-coordinator.ts`,
+  `apps/server/src/ingestion/session-repository.ts`, focused ingestion/parser
+  tests, `ARCHITECTURE.md`, `docs/multi-agent.md`, and this roadmap
+- dependencies and risks:
+  - `external_import` is read-only source evidence; no import code may mutate
+    the MiMo source database
+  - deletion must retain the repository's atomic replacement and user
+    annotation-protection guarantees
+  - direct Claude Code imports and their counts must remain unaffected
+  - any metadata gaps or non-`cc` external imports must stay source-visible
+    rather than being guessed into an Agent identity
+- acceptance:
+  - all locally discovered `cc` entries whose recorded source path is under
+    `~/.claude/projects` are excluded from MiMo Session creation
+  - no genuine native MiMo Session is excluded, and no classification relies
+    on content, model, or keyword guesses
+  - a revision-triggered normal sync removes prior unannotated generated
+    copies, retains annotated copies, and reports protected records clearly
+  - a repeated sync performs normal fingerprint skipping after the refresh
+  - direct Claude Code Session totals are unchanged; tests cover source
+    evidence, cleanup protection, and native-MiMo preservation
+- verification plan: focused parser and ingestion tests, type check/build as
+  required by touched layers, an isolated local sync inspection, repeated-sync
+  check, and documentation consistency review
+- documentation plan: update the current adapter/source-identity behavior,
+  cleanup semantics, operational implications, verification evidence, and any
+  retained protected records in the listed documents before completion
+
 ## Execution Order
 
 T5–T15, T36–T53, T55–T57, T60–T62, and T65 are complete. The next ordered work
