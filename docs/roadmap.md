@@ -2811,12 +2811,16 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - purpose: audit user-adjustable analysis configuration, including built-in
   model context windows, and make each setting's scope/provenance clear before
   changing values
+- dependencies: T97 configuration taxonomy and pricing-semantics design
 - scope: inventory current configuration surfaces and seeds; verify model-window
   values against authoritative vendor documentation where applicable; distinguish
-  user configuration from source-observed runtime evidence
+  user configuration from source-observed runtime evidence; decide whether
+  diagnostic wasted-cost estimates use historical Span-time pricing or current
+  planning-time pricing, and keep model reference data, analysis policy, and
+  Task Configuration Snapshots separate
 - acceptance: every exposed setting has a clear owner/effect; corrected context
-  limits cite their source and unknown models remain unconfigured rather than
-  guessed
+  limits cite their source; cost-estimate time semantics are explicit; unknown
+  models remain unconfigured rather than guessed
 - verification plan: configuration tests, seed/migration checks, focused UI
   check, and documentation update
 - documentation plan: update `ARCHITECTURE.md`, README/configuration guidance,
@@ -3486,7 +3490,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - purpose: make the implemented Task/Outcome model usable for real local
   delivery verification rather than leaving the Task workspace unable to record
   every field required for `verified` Outcome coverage
-- dependencies: T49 data model; no cohort statistics or external CI integration
+- dependencies: T49 data model and T98 module/application foundation; no cohort
+  statistics or external CI integration
 - scope: expose human rating, rework reason, completion time, and bounded
   structured evidence alongside build/test/lint/Git fields; retain explicit
   null/unknown semantics and local-text privacy modes
@@ -3507,7 +3512,7 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - purpose: expose the existing guarded local Cohort/Experiment records so users
   can define comparable Task scope and control/candidate configurations before
   any automatic result calculation exists
-- dependencies: T80; T49 persistence contracts
+- dependencies: T80, T98, and T49 persistence contracts
 - scope: create/view/update local Cohort and Experiment definitions, required
   comparison scope, primary metric, guardrails, evidence status, and constrained
   keep/rollback decisions; omit automatic distributions, winners, and causality
@@ -3601,8 +3606,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   navigation state, so compatibility and exact filter semantics are central
 - purpose: remove the all-summary transfer and browser-wide filtering/sorting
   path while preserving flat time navigation and URL-restorable discovery
-- dependencies: T82; coordinate with T70 so loading feedback and API changes do
-  not duplicate the same Web transition work
+- dependencies: T82 and T98; coordinate with T70 so loading feedback and API
+  changes do not duplicate the same Web transition work
 - scope: design a cursor/page and server-side filter/sort contract with total or
   facet coverage where needed; add measured SQLite indexes such as start-time
   and filter-supporting composites; move statistics work to bounded or set-based
@@ -3623,8 +3628,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   coverage language, API contracts, and browser state
 - purpose: prevent one large Session or project from creating avoidable API and
   browser memory peaks while retaining complete, explicitly scoped evidence
-- dependencies: T82; must coordinate endpoint changes with T70 and the existing
-  privacy-safe evidence contract
+- dependencies: T82 and T98; must coordinate endpoint changes with T70 and the
+  existing privacy-safe evidence contract
 - scope: separate summary/analysis from paged or cursor-addressable evidence;
   avoid parsing/serializing metadata that is unnecessary for a selected view;
   replace project-relative-score full-Span loading with equivalent bounded or
@@ -3645,8 +3650,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   equivalence make a safe fallback/checkpoint design mandatory
 - purpose: reduce repeated parsing work for growing transcript sources without
   weakening the cross-source revision and atomic-replacement guarantees
-- dependencies: T82; source-specific design review for Claude Code and Codex
-  JSONL append, truncation, rewrite, sidechain, and legacy-ID behavior
+- dependencies: T82, T87's stable relationship/replacement contract, and a
+  source-specific design review for Claude Code and Codex JSONL append,
+  truncation, rewrite, sidechain, and legacy-ID behavior
 - scope: add safe per-source append checkpoints with full-parse fallback; measure
   unchanged, appended, rewritten, truncated, and malformed histories; do not
   apply JSONL assumptions to Zed, MiMo, or OpenCode SQLite adapters
@@ -3667,7 +3673,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - purpose: provide a coverage-aware Project Profile for observed file/tool,
   resource, reliability, and trend evidence without relabelling it as code
   quality or configuration causality
-- dependencies: T73 source-faithful attribution; T83 data-access contract
+- dependencies: T73 source-faithful attribution, T83 data-access contract, and
+  T87 source-native relationship coverage
 - scope: define project identity/scope, cross-Session aggregation, time range,
   sample and source coverage, file/tool trend semantics, and a Project analysis
   surface; retain missing evidence as not captured
@@ -3687,7 +3694,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - purpose: preserve and present parent/child Session relationships only where a
   source supplies stable structural evidence, without manufacturing a universal
   Task graph
-- dependencies: T73 and source-adapter contract review; potential migration plan
+- dependencies: T73, T98, and source-adapter contract review; potential
+  migration plan
 - scope: inventory source-native relation IDs, add an additive relationship
   model only for proven links, retain existing Span sidechain evidence, and show
   unavailable/ambiguous relation coverage explicitly
@@ -4372,23 +4380,240 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - `pnpm test` passed 40 files / 249 tests across Core and Server
   - `git diff --check` passed
 
+### T97 modular architecture and model-configuration design baseline
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- estimated size/risk: medium / low runtime risk; documentation and Task
+  decomposition only, with no application, schema, API, or UI behavior change
+- purpose:
+  - define module boundaries that let contributors change and verify one domain
+    from its public contract without first understanding the entire repository
+  - turn the existing API-configurable pricing and model-context foundations
+    into an implementation-ready Model Catalog design with explicit history,
+    provenance, unknown-data, and recomputation semantics
+- scope:
+  1. document target dependency direction, module ownership, composition,
+     contract-versioning, persistence, and independent-test rules
+  2. document the Model Catalog, pricing schedule, context specification,
+     identity/alias, currency, provenance, and cost-recalculation contracts
+  3. create separately deliverable implementation Tasks for module foundations,
+     Server-side Model Catalog extraction/data work, and the Web configuration
+     workspace
+  4. revise the remaining execution order where the new boundaries or T95's
+     parent/child Session evidence change dependency order
+- dependencies, assumptions, and risks:
+  - `ARCHITECTURE.md` remains current-state documentation and must not describe
+    proposed module behavior before implementation
+  - current `/api/pricing`, `/api/model-context`, `/api/recompute-cost`, exact
+    raw-model pricing, historical effective-time lookup, and unknown-pricing
+    semantics remain unchanged in this Task
+  - the design must support incremental migration rather than a repository-wide
+    rewrite, new framework, microservice split, or destructive schema reset
+- acceptance:
+  - each proposed module has one owner, public contract, allowed dependencies,
+    data ownership, independent verification path, and compatibility boundary
+  - pricing design distinguishes bundled defaults, user overrides, observed raw
+    model identities, historical prices, unsupported pricing schemes, and
+    explicit recalculation
+  - implementation work is split into Tasks with dependencies, acceptance,
+    verification, migration/API compatibility, and documentation plans
+- verification plan:
+  - compare the proposal with current CodeGraph call paths and architecture
+    invariants; review document terminology and Task dependencies; run focused
+    consistency searches and `git diff --check`
+- documentation plan:
+  - add `docs/modular-architecture-design.md` and
+    `docs/model-configuration-design.md`; update this roadmap only
+- implementation:
+  - defined an incremental target dependency direction from versioned contracts
+    through injected Server modules, services, repositories, Core calculations,
+    and module-owned Web features without introducing microservices or changing
+    the local-first stack
+  - assigned initial ownership for ingestion, Model Catalog, Sessions,
+    Analytics, Tasks, and Comparisons; prohibited migrated routes from owning
+    SQL and modules from reading another module's repository/tables directly
+  - specified module README, public-contract, persistence, composition,
+    migration, Web-feature, independent-test, and completion requirements
+  - specified exact/explicit-alias/unknown pricing resolution, flat-four-token
+    scheme boundaries, source/currency/history provenance, context
+    specifications, observed-model inventory, explicit preview/execute
+    recalculation, compatibility APIs, and local configuration import/export
+  - split implementation into T98 application/module foundations, T99 Server
+    Model Catalog and pricing schedules, and T100 Web configuration workspace
+  - made T71 the owner of historical-versus-current diagnosis price semantics;
+    placed T87 before T86 and T85 so relationship-aware aggregation and
+    append-only replacement build on one stable evidence contract
+- changed files:
+  - new proposals: `docs/modular-architecture-design.md` and
+    `docs/model-configuration-design.md`
+  - planning: this roadmap
+- verification:
+  - compared the proposal with current CodeGraph pricing, context, import,
+    Session, statistics, Task, and application-composition call paths
+  - confirmed unique T97–T100 IDs, Proposal/current-state labels, dependency
+    references, and current `ARCHITECTURE.md` ownership
+  - `git diff --check` passed
+- completion:
+  - result: architecture and Model Catalog decisions are reviewable before code
+    implementation, while current schema, APIs, UI, costs, and runtime behavior
+    remain unchanged
+  - limitation: exact schema fields, endpoint version placement, and whether
+    `packages/contracts` is a new package or an equivalent isolated boundary
+    remain implementation decisions for T98/T99
+
+### T98 module contracts and Server application composition
+
+- status: planned
+- estimated size/risk: large / medium-high; behavior should remain compatible,
+  but application construction, dependency injection, test entry points, and
+  package boundaries affect every later module migration
+- purpose:
+  - establish the minimum enforceable module contract so a contributor can
+    change one domain through its documented interfaces and focused tests
+    without tracing the entire Server or Web implementation
+- dependencies:
+  - T97 design baseline; no product feature or schema change is required
+- scope:
+  1. add a framework-neutral versioned contracts package or equivalent isolated
+     contract boundary, starting only with contracts needed by the first module
+  2. introduce a Server application factory and explicit production composition
+     so routes/services receive database, clock, and external providers rather
+     than importing process-global dependencies
+  3. define the module README/ownership template and a lightweight dependency
+     check that prevents forbidden route-to-SQL and cross-module repository
+     imports for migrated modules
+  4. make the documented root test command include Core, Server, and Web tests
+     while preserving the current build/start commands
+- acceptance:
+  - production startup behavior and all current endpoints remain compatible
+  - a migrated module can run route/service/repository tests with in-memory
+    SQLite and fixed dependencies without environment-before-import ordering
+  - dependency checks and module documentation make allowed imports, table
+    ownership, and focused test commands explicit
+- verification:
+  - application-factory and compatibility tests, dependency-rule fixture tests,
+    complete Core/Server/Web tests, root build, lint, startup/health smoke, and
+    `git diff --check`
+- documentation:
+  - update current architecture and contributor commands only for the
+    composition/test behavior actually implemented; keep the proposal updated
+    with any approved deviations
+
+### T99 Model Catalog and pricing-schedule Server module
+
+- status: planned
+- estimated size/risk: extra-large / high; historical pricing, migration,
+  provenance, alias safety, compatibility APIs, and stored-cost reproducibility
+  must remain consistent
+- purpose:
+  - extract the existing pricing/model-context/recomputation foundations into an
+    independently owned Model Catalog module and add implementation-ready
+    history, provenance, coverage, and safe recalculation contracts
+- dependencies:
+  - T98 module/application foundation and T71's decision on historical versus
+    current diagnosis-price semantics
+- scope:
+  1. add ordered additive migrations for Model Catalog provenance/revisions and
+     recalculation audit while preserving existing pricing/model-context rows
+  2. move bundled defaults out of Server startup code and distinguish bundled,
+     manual, and imported records without overwriting user configuration
+  3. implement exact raw-model pricing first; permit alias pricing only through
+     an explicit, audited `pricingEquivalent` contract, never through provider
+     or presentation inference
+  4. add observed-model inventory and versioned recalculation preview/execute
+     services with model/time scope, unknown-before/after coverage, fixed
+     pricing revision, and transactional Session-total rebuild
+  5. keep `/api/pricing`, `/api/model-context`, and `/api/recompute-cost`
+     compatible by adapting them to the same module service
+  6. support versioned local configuration import/export without Session or
+     prompt content
+- acceptance:
+  - all four token classes and effective-time lookup remain correct; unsupported
+    pricing schemes stay explicitly unknown rather than being flattened
+  - existing local rows, generated costs, reset preservation, and old endpoint
+    behavior survive upgrade without source re-import or database deletion
+  - every selected price exposes currency/unit, applicability, source, revision,
+    calculation time, and calculator version sufficient for its documented
+    reproducibility level
+  - preview performs no mutation and execute uses the same scope/revision
+    transactionally with a recorded result
+- verification:
+  - Core resolver/calculator tests; migration, repository, history, provenance,
+    compatibility, import/export, reset, preview/execute, and rollback tests;
+    full build/lint/tests; local configuration and recomputation smoke;
+    `git diff --check`
+- documentation:
+  - update architecture, statistics/cost semantics, configuration guidance,
+    Model Catalog design deviations, and this Task with the shipped schema/API
+    and limitations
+
+### T100 Model Catalog configuration workspace
+
+- status: planned
+- estimated size/risk: large / medium-high; the UI mutates calculator reference
+  data and triggers bounded historical recalculation, so impact disclosure,
+  accessibility, and stale-revision handling are central
+- purpose:
+  - make observed model pricing and context configuration safely usable from the
+    local Web application instead of exposing API-only mutable configuration
+- dependencies:
+  - T99 Server module and versioned contracts
+- scope:
+  1. add a `/settings/models` feature workspace backed only by the public Model
+     Catalog contract
+  2. prioritize observed unpriced/unsupported models and show exact identity,
+     source coverage, latest observation, price history, context specification,
+     provenance, and user-override state
+  3. add four-token-class price and context editors with validation, effective
+     UTC time, source/audit metadata, and non-destructive historical revision
+     behavior
+  4. provide recalculation preview, explicit confirmation, affected
+     Session/Span and unknown-coverage summary, execute progress/result, stale
+     preview recovery, and no automatic mutation after an edit
+  5. add versioned local configuration import/export and navigation entry
+- acceptance:
+  - a user can configure an exact observed raw model, understand the applicable
+    price/context source, preview impact, explicitly recalculate, and see the
+    resulting known/unknown coverage without reading API documentation
+  - unsupported schemes, provider-only identities, stale revisions, and failed
+    execution cannot be presented as successfully priced
+  - existing Session, Stats, import, reset, Task, and Profile workflows retain
+    their current behavior
+- verification:
+  - feature/view-model and interaction tests; compatibility API mocks; desktop
+    and narrow browser checks; keyboard/screen-reader semantics; stale/error
+    recovery; root tests/build/lint and `git diff --check`
+- documentation:
+  - update READMEs, architecture, Chinese overview, UI guidance, configuration
+    design, and this Task with the final workflow and limitations
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded
 Codex non-project classification fix, T73 restored MiMo source attribution, and
 T82 established the representative performance baseline. T93/T94 then completed
 the compact Home synchronization, data-management, project-picker, and responsive
-sidebar interaction layer. The remaining normal desktop-first implementation order is:
+sidebar interaction layer. T95 then established one current primary-Session
+scope while retaining child records, and T97 documented the module and Model
+Catalog target without changing runtime behavior. The remaining normal
+desktop-first implementation order is:
 
-1. T83 bounded discovery, then T84 bounded detail/evidence retrieval; they share
-   the main desktop navigation path but keep data-contract risks separately
-   reviewable and must preserve T93/T94 interaction semantics.
-2. T71 model-context and analysis-configuration audit.
-3. T80 Task Outcome evidence workspace, followed by T81 Cohort/Experiment
-   definition workflow.
-4. T85 append-only JSONL import, then T86 project evidence and T87 source-native
-   parent/child evidence.
-5. T89 comparable cohort evaluation, followed by T90 verified post-run feedback.
+1. T98 module contracts and Server application composition.
+2. T71 model-context and analysis-configuration audit, followed by T99 Model
+   Catalog Server extraction/data contracts and T100 configuration workspace.
+3. T83 bounded discovery, then T84 bounded detail/evidence retrieval; implement
+   them through the new module/query boundaries, coordinate T70 transition
+   feedback, and preserve T93/T94 interaction semantics.
+4. T80 Task Outcome evidence workspace, followed by T81 Cohort/Experiment
+   definition workflow and the corresponding Task/Comparison repository split.
+5. T87 source-native parent/child evidence before T86 project-level aggregation,
+   so Project Profile accounting is designed against proven relationship
+   coverage rather than the temporary primary-only boundary.
+6. T85 append-only JSONL import after the normalized relationship/replacement
+   contract is stable.
+7. T89 comparable cohort evaluation, followed by T90 verified post-run feedback.
 
 T88 is conditional on a product decision to support non-local access and is not
 part of the default local-first sequence. Mobile dashboard navigation remains
