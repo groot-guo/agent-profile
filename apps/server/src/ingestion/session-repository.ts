@@ -26,7 +26,7 @@ export class SessionRepository {
       WHERE id = ?
     `);
     this.getAnnotationsStatement = database.prepare(
-      'SELECT tags, notes FROM sessions WHERE id = ?',
+      'SELECT source_kind as sourceKind, tags, notes FROM sessions WHERE id = ?',
     );
     this.upsertSessionStatement = database.prepare(`
       INSERT INTO sessions (
@@ -191,11 +191,15 @@ export class SessionRepository {
     this.replaceTransaction(summary, spans, revision);
   }
 
-  removeGeneratedIfUnannotated(sessionId: string): 'missing' | 'annotated' | 'removed' {
+  removeGeneratedIfUnannotated(
+    sessionId: string,
+    sourceKind: string,
+  ): 'missing' | 'different_source' | 'annotated' | 'removed' {
     const row = this.getAnnotationsStatement.get(sessionId) as
-      | { tags: string | null; notes: string | null }
+      | { sourceKind: string | null; tags: string | null; notes: string | null }
       | undefined;
     if (!row) return 'missing';
+    if (row.sourceKind !== sourceKind) return 'different_source';
     if ((row.tags ?? '').trim() || (row.notes ?? '').trim()) return 'annotated';
     this.removeTransaction(sessionId);
     return 'removed';

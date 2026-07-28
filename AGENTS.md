@@ -37,6 +37,7 @@ pnpm install
 pnpm dev
 pnpm build
 pnpm lint
+pnpm benchmark:scale:ci
 pnpm --filter trace-server dev
 pnpm --filter agent-profile-web dev
 pnpm --filter @agent-profile/core test
@@ -170,6 +171,7 @@ belong to an explicit Task. Do not hide unrelated work inside another Task.
 | `docs/roadmap.md` | Task definitions, lifecycle status, acceptance criteria, and completion evidence |
 | `docs/agent-runtime-profile-design.md` | Proposed target model and future Agent Runtime Profile design; it must not present unimplemented behavior as current |
 | `docs/diagnosis.md`, `docs/multi-agent.md`, `docs/stats.md` | Focused current designs and implementation notes that must agree with the architecture |
+| `docs/performance.md` | Reproducible content-free scale fixture, desktop regression budgets, and measurement limits |
 | `docs/zh/OVERVIEW.md` | Chinese current-state overview aligned with README and architecture |
 
 When code and documentation disagree, inspect implementation and tests, then

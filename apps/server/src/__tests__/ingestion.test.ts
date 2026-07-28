@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ParsedSession, Span } from '@agent-profile/core';
 import Database from 'better-sqlite3';
@@ -481,6 +481,123 @@ describe('session ingestion boundary', () => {
     ).toEqual({ tags: 'keep-tag', notes: 'keep-note' });
     target.close();
   });
+
+  it('excludes only MiMo copies of canonical Claude Code histories', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-mimo-external-'));
+    tempDirectories.push(directory);
+    const mimoPath = join(directory, 'mimo.db');
+    createMiMoExternalHistoryFixture(mimoPath);
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const legacyCopy = createParsedSession('mimo-session', 'legacy-mimo-span');
+    legacyCopy.meta.agent = 'mimo-code';
+    repository.replace(
+      { parsed: legacyCopy },
+      { kind: 'mimo-code', updatedAt: 1, fingerprint: 'mimo:legacy' },
+    );
+
+    const adapter = new MiMoSourceAdapter(mimoPath);
+    const items = await adapter.discover();
+    const externalHistory = items.find((item) => item.sessionId === 'mimo-session');
+    expect(externalHistory?.revision.fingerprint).toMatch(/^mimo-v2:/);
+    await expect(externalHistory?.load()).resolves.toEqual({
+      excluded: true,
+      sessionId: 'mimo-session',
+      reason: 'non_actionable_external_history',
+    });
+
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      scanned: 3,
+      imported: 2,
+      updated: 0,
+      skipped: 1,
+      removed: 1,
+      failed: 0,
+      protectedAnnotatedSessions: 0,
+      skipReasons: { excluded_non_actionable: 1 },
+    });
+    expect(
+      target.prepare('SELECT id FROM sessions WHERE id = ?').get('mimo-session'),
+    ).toBeUndefined();
+    expect(
+      target
+        .prepare('SELECT id FROM sessions WHERE id IN (?, ?) ORDER BY id')
+        .all('mimo-noncanonical-cc', 'mimo-non-cc'),
+    ).toEqual([{ id: 'mimo-non-cc' }, { id: 'mimo-noncanonical-cc' }]);
+
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      skipped: 3,
+      removed: 0,
+      failed: 0,
+      skipReasons: { unchanged_revision: 2, excluded_non_actionable: 1 },
+    });
+
+    const directClaude = createParsedSession('mimo-session', 'direct-claude-span');
+    directClaude.meta.agent = 'claude-code';
+    repository.replace(
+      { parsed: directClaude },
+      { kind: 'claude-code', updatedAt: 1, fingerprint: 'claude:direct' },
+    );
+    expect(
+      target
+        .prepare("SELECT COUNT(*) AS count FROM sessions WHERE source_kind = 'claude-code'")
+        .get(),
+    ).toEqual({ count: 1 });
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      skipped: 3,
+      removed: 0,
+      failed: 0,
+      skipReasons: { unchanged_revision: 2, excluded_non_actionable: 1 },
+    });
+    expect(
+      target
+        .prepare("SELECT COUNT(*) AS count FROM sessions WHERE source_kind = 'claude-code'")
+        .get(),
+    ).toEqual({ count: 1 });
+
+    target.close();
+  });
+
+  it('retains annotated MiMo copies of external Claude histories and reports manual cleanup', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-mimo-annotated-'));
+    tempDirectories.push(directory);
+    const mimoPath = join(directory, 'mimo.db');
+    createMiMoExternalHistoryFixture(mimoPath);
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const legacyCopy = createParsedSession('mimo-session', 'legacy-mimo-span');
+    legacyCopy.meta.agent = 'mimo-code';
+    repository.replace(
+      { parsed: legacyCopy },
+      { kind: 'mimo-code', updatedAt: 1, fingerprint: 'mimo:legacy' },
+    );
+    target
+      .prepare("UPDATE sessions SET tags = 'keep', notes = 'user annotation' WHERE id = ?")
+      .run('mimo-session');
+
+    expect(await importFromSource(new MiMoSourceAdapter(mimoPath), repository)).toMatchObject({
+      imported: 2,
+      removed: 0,
+      failed: 1,
+      protectedAnnotatedSessions: 1,
+      skipReasons: { excluded_non_actionable: 0 },
+    });
+    expect(
+      target.prepare('SELECT tags, notes FROM sessions WHERE id = ?').get('mimo-session'),
+    ).toEqual({
+      tags: 'keep',
+      notes: 'user annotation',
+    });
+    target.close();
+  });
 });
 
 function createAdapter(fingerprint: string, load: () => { parsed: ParsedSession }): SourceAdapter {
@@ -671,30 +788,98 @@ function createMiMoFixture(path: string): void {
       session_id TEXT,
       data TEXT
     );
+    CREATE TABLE external_import (
+      source TEXT NOT NULL,
+      source_key TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      source_path TEXT NOT NULL,
+      source_mtime INTEGER NOT NULL,
+      time_imported INTEGER NOT NULL,
+      PRIMARY KEY (source, source_key)
+    );
   `);
+  insertMiMoSession(database, 'mimo-session', 'initial', 1000);
+  database.close();
+}
+
+function createMiMoExternalHistoryFixture(path: string): void {
+  createMiMoFixture(path);
+  const database = new Database(path);
+  insertMiMoSession(database, 'mimo-noncanonical-cc', 'noncanonical cc', 2000);
+  insertMiMoSession(database, 'mimo-non-cc', 'non-cc', 3000);
+  database
+    .prepare(
+      `INSERT INTO external_import (
+        source, source_key, session_id, source_path, source_mtime, time_imported
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'cc',
+      'canonical-claude',
+      'mimo-session',
+      join(homedir(), '.claude', 'projects', 'fixture', 'session.jsonl'),
+      1000,
+      1000,
+    );
+  database
+    .prepare(
+      `INSERT INTO external_import (
+        source, source_key, session_id, source_path, source_mtime, time_imported
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'cc',
+      'noncanonical-claude',
+      'mimo-noncanonical-cc',
+      '/tmp/not-claude-projects/session.jsonl',
+      1000,
+      1000,
+    );
+  database
+    .prepare(
+      `INSERT INTO external_import (
+        source, source_key, session_id, source_path, source_mtime, time_imported
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'codex',
+      'canonical-non-cc',
+      'mimo-non-cc',
+      join(homedir(), '.claude', 'projects', 'fixture', 'session.jsonl'),
+      1000,
+      1000,
+    );
+  database.close();
+}
+
+function insertMiMoSession(
+  database: Database.Database,
+  sessionId: string,
+  title: string,
+  time: number,
+): void {
   database
     .prepare(
       'INSERT INTO session (id, title, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?)',
     )
-    .run('mimo-session', 'initial', '/tmp/project', 1000, 1000);
+    .run(sessionId, title, '/tmp/project', time, time);
   database
     .prepare(
       'INSERT INTO message (id, session_id, agent_id, time_created, data) VALUES (?, ?, ?, ?, ?)',
     )
     .run(
-      'mimo-message',
-      'mimo-session',
+      `${sessionId}-message`,
+      sessionId,
       'agent',
-      1000,
+      time,
       JSON.stringify({
         role: 'assistant',
         modelID: 'fixture-model',
         providerID: 'fixture',
         tokens: { input: 10, output: 5, reasoning: 0 },
-        time: { created: 1000, completed: 1100 },
+        time: { created: time, completed: time + 100 },
       }),
     );
-  database.close();
 }
 
 function createOpenCodeFixture(path: string): void {

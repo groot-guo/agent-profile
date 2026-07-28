@@ -276,6 +276,7 @@ pnpm dev
 pnpm test
 pnpm build
 pnpm lint
+pnpm benchmark:scale:ci
 ```
 
 `pnpm build` currently passes. The repository-wide lint baseline is tracked
@@ -292,6 +293,8 @@ that a runtime metric is wrong.
   behavior and coverage limits
 - [Task and Outcome foundations](docs/tasks-outcomes.md) — persistence, privacy,
   reset behavior, Task Profile, and experiment guardrails
+- [Performance benchmark](docs/performance.md) — reproducible content-free
+  scale fixture, desktop regression budgets, and measurement limits
 - [Roadmap](docs/roadmap.md) — Task status and verification evidence
 - [Runtime design](docs/agent-runtime-profile-design.md) — implemented phase
   status and remaining proposal

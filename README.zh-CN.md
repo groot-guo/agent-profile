@@ -216,6 +216,7 @@ pnpm dev
 pnpm test
 pnpm build
 pnpm lint
+pnpm benchmark:scale:ci
 ```
 
 `pnpm build` 当前通过。全仓 lint 基线由 [T44](docs/roadmap.md) 单独跟踪；lint 失败不应
@@ -228,5 +229,6 @@ pnpm lint
 - [中文总览](docs/zh/OVERVIEW.md)：中文当前实现说明
 - [多 Agent 导入](docs/multi-agent.md)：各来源的归一化方式与覆盖度差异
 - [Task 与 Outcome 基础](docs/tasks-outcomes.md)：持久化、隐私、重置、Task Profile 与实验护栏
+- [性能基准](docs/performance.md)：可复现的无内容规模 fixture、桌面回归预算与测量限制
 - [路线图](docs/roadmap.md)：Task 状态与验证证据
 - [Runtime 设计](docs/agent-runtime-profile-design.md)：已实现阶段和剩余未来方案

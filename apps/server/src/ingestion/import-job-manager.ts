@@ -38,6 +38,7 @@ const EMPTY_RESULT: ScanResult = {
   skipped: 0,
   removed: 0,
   failed: 0,
+  protectedAnnotatedSessions: 0,
   sessionIds: [],
   skipReasons: { unchanged_revision: 0, not_importable: 0, excluded_non_actionable: 0 },
 };

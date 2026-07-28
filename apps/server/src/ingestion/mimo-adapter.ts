@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { statSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { isAbsolute, relative, resolve } from 'node:path';
 import {
   type MiMoMessage,
   type MiMoPart,
@@ -26,6 +28,17 @@ interface PartRow {
   data: string;
 }
 
+interface ExternalImportRow {
+  session_id: string;
+  source: string;
+  source_path: string;
+  source_mtime: number;
+  time_imported: number;
+}
+
+const MIMO_REVISION_VERSION = 'mimo-v2';
+const CLAUDE_PROJECTS_DIRECTORY = resolve(homedir(), '.claude', 'projects');
+
 export class MiMoSourceAdapter implements SourceAdapter {
   readonly kind = 'mimo-code';
 
@@ -40,6 +53,7 @@ export class MiMoSourceAdapter implements SourceAdapter {
 
     const database = new Database(this.databasePath, { readonly: true });
     let sessions: MiMoSessionRow[];
+    let externalImports: ExternalImportRow[] = [];
     try {
       sessions = database
         .prepare(
@@ -50,20 +64,51 @@ export class MiMoSourceAdapter implements SourceAdapter {
            ORDER BY s.time_created DESC`,
         )
         .all() as MiMoSessionRow[];
+      const hasExternalImportTable = database
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'external_import' LIMIT 1",
+        )
+        .get();
+      if (hasExternalImportTable) {
+        externalImports = database
+          .prepare(
+            `SELECT session_id, source, source_path, source_mtime, time_imported
+             FROM external_import`,
+          )
+          .all() as ExternalImportRow[];
+      }
     } finally {
       database.close();
     }
 
-    return sessions.map((session) => ({
-      key: session.id,
-      sessionId: session.id,
-      revision: {
-        kind: this.kind,
-        updatedAt: session.time_updated,
-        fingerprint: `mimo:${session.time_updated}:${session.message_count}:${session.part_count}`,
-      },
-      load: async () => this.loadSession(session),
-    }));
+    const importsBySession = new Map<string, ExternalImportRow[]>();
+    for (const externalImport of externalImports) {
+      const imports = importsBySession.get(externalImport.session_id) ?? [];
+      imports.push(externalImport);
+      importsBySession.set(externalImport.session_id, imports);
+    }
+
+    return sessions.map((session) => {
+      const imports = importsBySession.get(session.id) ?? [];
+      const excluded = imports.some(isExternalClaudeCodeHistory);
+      return {
+        key: session.id,
+        sessionId: session.id,
+        revision: {
+          kind: this.kind,
+          updatedAt: session.time_updated,
+          fingerprint: `${MIMO_REVISION_VERSION}:${session.time_updated}:${session.message_count}:${session.part_count}:${externalImportFingerprint(imports)}`,
+        },
+        load: async () =>
+          excluded
+            ? {
+                excluded: true as const,
+                sessionId: session.id,
+                reason: 'non_actionable_external_history' as const,
+              }
+            : this.loadSession(session),
+      };
+    });
   }
 
   private async loadSession(session: MiMoSessionRow) {
@@ -114,4 +159,29 @@ export class MiMoSourceAdapter implements SourceAdapter {
     const parsed = parseMiMoSession(session, messages);
     return parsed ? { parsed } : null;
   }
+}
+
+function isExternalClaudeCodeHistory(externalImport: ExternalImportRow): boolean {
+  if (externalImport.source !== 'cc' || !isAbsolute(externalImport.source_path)) return false;
+  const pathFromProjectsDirectory = relative(
+    CLAUDE_PROJECTS_DIRECTORY,
+    resolve(externalImport.source_path),
+  );
+  return (
+    pathFromProjectsDirectory !== '' &&
+    pathFromProjectsDirectory !== '..' &&
+    !pathFromProjectsDirectory.startsWith('../')
+  );
+}
+
+function externalImportFingerprint(externalImports: ExternalImportRow[]): string {
+  if (externalImports.length === 0) return 'none';
+  const source = externalImports
+    .map(
+      (externalImport) =>
+        `${externalImport.source}\u0000${externalImport.source_path}\u0000${externalImport.source_mtime}\u0000${externalImport.time_imported}`,
+    )
+    .sort()
+    .join('\u0001');
+  return createHash('sha256').update(source).digest('hex').slice(0, 16);
 }

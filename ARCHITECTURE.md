@@ -94,8 +94,13 @@ restored later without losing delivery context.
 Scan results also expose structured `skipReasons`: `unchanged_revision` means a
 matching source fingerprint required no work, while `not_importable` means the
 source item did not produce a normalized Session (for example, a metadata-only
-history with no usable LLM turn). These remain skipped items rather than import
-failures; malformed items that throw are counted separately as failures.
+history with no usable LLM turn), and `excluded_non_actionable` means exact
+source metadata identified a history that must not become another normalized
+Session. These remain skipped items rather than import failures; malformed
+items that throw are counted separately as failures. Scan results separately
+count `protectedAnnotatedSessions` when cleanup cannot remove an obsolete
+generated copy because it has user tags or notes; the Web labels those records
+as requiring manual action instead of presenting them as retryable parse errors.
 
 ## Components
 
@@ -172,9 +177,16 @@ The source import coordinator discovers all source items but skips an unchanged
 item before loading/parsing it. When a source revision changes, the complete
 normalized Session is parsed and atomically replaces its stored Spans. This
 preserves revision and annotation guarantees, but transcript append-only parsing
-is not implemented. T82–T85 in `docs/roadmap.md` own performance fixtures,
-bounded read/render contracts, and source-safe incremental-import work; they
-must not change metric, privacy, or atomic-replacement semantics merely to
+is not implemented.
+
+The reproducible T82 benchmark in `docs/performance.md` now fixes a content-free
+desktop workload at 500 Sessions, 75,000 Spans, one 3,000-Span detail Session,
+and a 24,600-Span project cohort. It measures the current full-list, stats,
+analysis, no-content evidence, unchanged-revision, query-plan, response-size,
+and process high-water paths through the normal implementation. Its budgets are
+generous regression guards rather than product SLOs. T83–T85 own bounded
+read/render contracts and source-safe incremental-import work; they must not
+change metric, privacy, coverage, or atomic-replacement semantics merely to
 improve throughput.
 
 ## Current data sources
@@ -184,7 +196,7 @@ improve throughput.
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
 | Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), captured `session_meta.cwd` project evidence when present, response items, events, and call IDs |
 | Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
-| MiMo | `mimocode.db` SQLite database | `time_updated` plus message/part counts; changed session records are loaded lazily |
+| MiMo | `mimocode.db` SQLite database | `mimo-v2` parser-contract revision plus `time_updated`, message/part counts, and a hashed `external_import` metadata fingerprint; exact `cc` imports whose absolute `source_path` is below `~/.claude/projects` are excluded before message/part loading, while native and ambiguous rows remain source-visible |
 | OpenCode | `opencode.db` SQLite database | parser-contract version plus `time_updated` and message/part counts; changed Session rows and their message/part evidence are loaded lazily from a read-only connection |
 
 All adapters emit the same session/span shape so downstream metrics and UI do
@@ -521,6 +533,8 @@ page exposes the same contract and privacy boundaries.
 - `README.md` is the concise user-facing current-state entry point.
 - `docs/roadmap.md` is the source of truth for task status and completion
   evidence.
+- `docs/performance.md` defines the reproducible content-free scale fixture,
+  benchmark method, desktop regression budgets, and known measurement limits.
 - `docs/agent-runtime-profile-design.md` is the future design proposal.
 - Focused documents under `docs/` must be updated in the same task when their
   domain changes.

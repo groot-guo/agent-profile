@@ -52,12 +52,36 @@ describe('import experience state', () => {
         status([
           source({
             state: 'completed',
-            result: { scanned: 8, imported: 2, updated: 1, skipped: 5, removed: 3, failed: 0 },
+            result: {
+              scanned: 8,
+              imported: 2,
+              updated: 1,
+              skipped: 5,
+              removed: 3,
+              failed: 0,
+              protectedAnnotatedSessions: 0,
+            },
           }),
           source({ id: 'codex', label: 'Codex', state: 'failed' }),
         ]),
       ),
     ).toBe('已检查 8 条记录；新增 2，更新 1，跳过 5，清理 3，失败 1');
+    expect(
+      sourceStatusText(
+        source({
+          state: 'completed',
+          result: {
+            scanned: 1,
+            imported: 0,
+            updated: 0,
+            skipped: 1,
+            removed: 0,
+            failed: 1,
+            protectedAnnotatedSessions: 1,
+          },
+        }),
+      ),
+    ).toContain('保留 1 个已标注会话（需手动处理）');
   });
 
   it('derives truthful source-level progress without counting unavailable sources', () => {
@@ -68,7 +92,15 @@ describe('import experience state', () => {
             id: 'claude-code',
             label: 'Claude Code',
             state: 'completed',
-            result: { scanned: 8, imported: 2, updated: 1, skipped: 5, removed: 0, failed: 0 },
+            result: {
+              scanned: 8,
+              imported: 2,
+              updated: 1,
+              skipped: 5,
+              removed: 0,
+              failed: 0,
+              protectedAnnotatedSessions: 0,
+            },
           }),
           source({ id: 'codex', label: 'Codex', state: 'scanning' }),
           source({ id: 'zed', label: 'Zed', available: false }),

@@ -2851,7 +2851,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T73 MiMo external Claude Code history exclusion
 
-- status: planned
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
 - purpose: restore source-faithful Agent attribution by preventing Claude Code
   histories copied into the MiMo database from being analyzed as native
   `mimo-code` Sessions or counted twice in aggregate evidence
@@ -2901,6 +2903,50 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - documentation plan: update the current adapter/source-identity behavior,
   cleanup semantics, operational implications, verification evidence, and any
   retained protected records in the listed documents before completion
+- implementation:
+  - the read-only MiMo adapter now queries `external_import` metadata when the
+    table exists and classifies a Session as excluded only for exact `source =
+    'cc'` metadata whose absolute `source_path` is a descendant of the canonical
+    `~/.claude/projects` directory; source names, paths outside that directory,
+    models, titles, and message content do not participate
+  - excluded Sessions return the shared explicit non-actionable outcome before
+    message/part loading; native and ambiguous MiMo rows retain the normal parser
+    path
+  - the `mimo-v2` fingerprint includes the Session update/count fields plus a
+    bounded hash of sorted external-import metadata, forcing one ordinary
+    refresh from the legacy MiMo fingerprint without storing the raw external
+    path in the profiler fingerprint
+  - cleanup now requires the stored Session's `source_kind` to match the
+    excluding adapter, so a same-ID direct Claude Code Session cannot be removed
+    by MiMo exclusion; matching generated copies are removed atomically only
+    when tags and notes are empty
+  - annotation-protected copies increment the public
+    `protectedAnnotatedSessions` result count and the Web reports that manual
+    tag/note cleanup is required
+- verification:
+  - focused ingestion/job/UI state tests — 3 files / 19 tests passed
+  - Core tests — 28 files / 197 tests passed
+  - full repository Vitest run — 43 files / 256 tests passed
+  - Server no-emit TypeScript build and Web optimized production build — passed;
+    all 9 Web routes generated successfully
+  - `pnpm lint` — passed with no errors; 18 existing warnings and 2 existing
+    informational diagnostics remain outside T73
+  - isolated read-only local MiMo synchronization into an in-memory profiler
+    database — first run scanned 173 records, imported 6 native MiMo Sessions,
+    excluded 167 canonical external Claude histories, and had zero failures;
+    the repeated run skipped the 6 native revisions normally and again excluded
+    the 167 non-actionable copies, with no source or profiler file modified
+  - focused formatting check, documentation consistency review, and
+    `git diff --check` — passed
+- completion:
+  - changed files: Core scan result type; MiMo adapter, import coordinator,
+    import-job result initialization, source-owned cleanup repository, and
+    ingestion/job tests; Web import status type/presentation/tests;
+    `ARCHITECTURE.md`, `docs/multi-agent.md`, and this roadmap
+  - result: MiMo no longer attributes imported Claude Code histories as native
+    `mimo-code` evidence or deletes a same-ID direct Claude Session; obsolete
+    unannotated MiMo copies are safely cleaned on synchronization, while
+    annotated copies remain visible as explicit manual-action failures
 
 ### T74 Session title fallback and recent-history filter refinement
 
@@ -3475,7 +3521,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T82 representative scale fixtures and performance budgets
 
-- status: planned
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
 - estimated size/risk: medium / low runtime risk; its main difficulty is making
   fixtures representative and memory measurements repeatable
 - purpose: turn the T79 observations into repeatable non-content fixtures and
@@ -3493,6 +3541,58 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   samples, query-plan check, and CI-suitable focused regression check
 - documentation: add the final measurement method, supported scale envelope,
   and known fixture limits to architecture/performance documentation and roadmap
+- implementation:
+  - added a deterministic, non-content SQLite fixture with 500 Sessions and
+    75,000 normalized Spans, including one 3,000-Span Session and a 25-Session /
+    24,600-Span selected project cohort; all prompt, answer, reasoning, tool
+    input, and tool-output metadata remains absent
+  - added a `scale-benchmark/v1` runner that uses the normal schema, import
+    coordinator, registered Fastify routes, statistics, diagnosis, project-score,
+    evidence, and serialization paths against a temporary database
+  - benchmark reports include route median/max time, response bytes, RSS before
+    and after each route group, whole-process maximum RSS, database size,
+    unchanged-sync load count, and SQLite query-plan details
+  - added `pnpm benchmark:scale` for measurement and
+    `pnpm benchmark:scale:ci` for bounded regression enforcement; the latter
+    exits non-zero on latency, response-size, unchanged-load, or process-memory
+    budget failure
+  - added a focused fixture test proving deterministic counts, no stored content,
+    indexed Session-Span lookup, and 500/fixture-sized revision skipping before
+    `load()`; no application API, schema, or metric behavior changed
+- measured baseline:
+  - two consecutive Node v24.18.0 / Darwin arm64 runs created a 21,196,800-byte
+    fixture database and passed every budget
+  - 500 unchanged revisions took 0.9–1.9 ms with zero `load()` calls
+  - `/api/sessions` median was 2.6–5.9 ms at 324,418 bytes; `/api/stats` was
+    8.4–16.5 ms at 9,735 bytes
+  - the 3,000-Span `/analysis` response was 1,882,040 bytes at 218.3–222.0 ms
+    while exercising a 24,600-Span project cohort; no-content evidence was
+    1,627,750 bytes at 12.3–12.4 ms
+  - whole-process maximum RSS was 393,805,824–413,253,632 bytes and includes
+    fixture creation, module loading, SQLite, analysis, and serialization
+  - query plans retained the current baseline: Session listing scans and builds
+    a temporary ordering B-tree; Session Span lookup uses
+    `idx_spans_session` and builds a temporary ordering B-tree
+- verification:
+  - focused scale-fixture test — passed
+  - `pnpm benchmark:scale:ci` — passed twice with zero budget failures
+  - full root tests — Core 28 files / 197 tests and Server 12 files / 45 tests
+    passed
+  - full root build — Core TypeScript, Server no-emit TypeScript, and optimized
+    Web production build passed; all 9 Web routes generated successfully
+  - `pnpm lint` — passed with no errors; the 18 existing warnings and 2 existing
+    informational diagnostics remain outside T82
+  - documentation review and `git diff --check` — passed
+- completion:
+  - changed files: root/Server package scripts; Server scale fixture, benchmark,
+    and focused test; `AGENTS.md`, bilingual READMEs, `ARCHITECTURE.md`, new
+    `docs/performance.md`, and this roadmap
+  - result: contributors and CI now have one reproducible, privacy-safe desktop
+    workload and explicit budgets for current list, stats, detail, evidence,
+    unchanged-import, query-plan, response-size, and process-memory behavior
+  - limitation: the benchmark intentionally excludes browser rendering, network
+    transport, concurrency, production cold-cache behavior, and source-parser
+    throughput; its budgets are regression guards, not cross-machine SLOs
 
 ### T83 bounded Session discovery and statistics data contract
 
@@ -3896,21 +3996,20 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ## Execution Order
 
-T79 completed the documentation/assessment baseline, and T92 completed the
-bounded Codex non-project classification fix. The remaining normal desktop-first
-implementation order is:
+T79 completed the documentation/assessment baseline, T92 completed the bounded
+Codex non-project classification fix, T73 restored MiMo source attribution, and
+T82 established the representative performance baseline. The remaining normal
+desktop-first implementation order is:
 
-1. T73 MiMo external Claude Code history exclusion, to protect source identity.
-2. T82 representative scale fixtures and performance budgets.
-3. T70 Session-navigation loading feedback, then T83 bounded discovery and T84
+1. T70 Session-navigation loading feedback, then T83 bounded discovery and T84
    bounded detail/evidence retrieval; they share the main desktop navigation
    path but keep transition UX and data-contract risk separately reviewable.
-4. T71 model-context and analysis-configuration audit.
-5. T80 Task Outcome evidence workspace, followed by T81 Cohort/Experiment
+2. T71 model-context and analysis-configuration audit.
+3. T80 Task Outcome evidence workspace, followed by T81 Cohort/Experiment
    definition workflow.
-6. T85 append-only JSONL import, then T86 project evidence and T87 source-native
+4. T85 append-only JSONL import, then T86 project evidence and T87 source-native
    parent/child evidence.
-7. T89 comparable cohort evaluation, followed by T90 verified post-run feedback.
+5. T89 comparable cohort evaluation, followed by T90 verified post-run feedback.
 
 T88 is conditional on a product decision to support non-local access and is not
 part of the default local-first sequence. Mobile dashboard navigation remains

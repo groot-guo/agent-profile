@@ -7,6 +7,8 @@
     "start": "pnpm --parallel --stream --filter trace-server --filter agent-profile-web start",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "benchmark:scale": "pnpm --filter trace-server benchmark:scale",
+    "benchmark:scale:ci": "pnpm --filter trace-server benchmark:scale:ci",
     "lint": "biome check .",
     "format": "biome format --write .",
     "lint:fix": "biome check --write ."

@@ -5,7 +5,9 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark:scale": "node --expose-gc --import tsx src/performance/scale-benchmark.ts",
+    "benchmark:scale:ci": "node --expose-gc --import tsx src/performance/scale-benchmark.ts --check"
   },
   "dependencies": {
     "@agent-profile/core": "workspace:*",

@@ -15,6 +15,7 @@ export async function importFromSource(
     updated: 0,
     removed: 0,
     failed: 0,
+    protectedAnnotatedSessions: 0,
     sessionIds: [],
     skipReasons: { unchanged_revision: 0, not_importable: 0, excluded_non_actionable: 0 },
   };
@@ -37,9 +38,13 @@ export async function importFromSource(
         continue;
       }
       if ('excluded' in loaded) {
-        const cleanup = repository.removeGeneratedIfUnannotated(loaded.sessionId);
+        const cleanup = repository.removeGeneratedIfUnannotated(
+          loaded.sessionId,
+          item.revision.kind,
+        );
         if (cleanup === 'annotated') {
           result.failed++;
+          result.protectedAnnotatedSessions++;
           continue;
         }
         if (cleanup === 'removed') result.removed++;

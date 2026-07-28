@@ -187,6 +187,8 @@ export interface ScanResult {
   updated: number;
   removed: number;
   failed: number;
+  /** Generated sessions retained because user tags or notes require manual action. */
+  protectedAnnotatedSessions: number;
   sessionIds: string[];
   skipReasons: Record<ScanSkipReason, number>;
 }

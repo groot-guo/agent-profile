@@ -7,6 +7,7 @@ export interface ImportResult {
   skipped: number;
   removed: number;
   failed: number;
+  protectedAnnotatedSessions: number;
 }
 
 export interface ImportSourceStatus {

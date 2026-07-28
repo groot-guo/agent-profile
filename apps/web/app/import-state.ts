@@ -38,7 +38,11 @@ export function sourceStatusText(source: ImportSourceStatus): string {
   if (source.state === 'scanning') return '正在导入…';
   if (source.state === 'failed') return '导入失败，可重试';
   if (source.state === 'completed' && source.result) {
-    return `已完成 · 新增 ${source.result.imported} · 更新 ${source.result.updated} · 跳过 ${source.result.skipped}`;
+    const protectedText =
+      source.result.protectedAnnotatedSessions > 0
+        ? ` · 保留 ${source.result.protectedAnnotatedSessions} 个已标注会话（需手动处理）`
+        : '';
+    return `已完成 · 新增 ${source.result.imported} · 更新 ${source.result.updated} · 跳过 ${source.result.skipped}${protectedText}`;
   }
   if (source.available) return `已发现 · ${source.storedSessions} 个会话`;
   return '本机未发现';
@@ -85,12 +89,22 @@ export function summarizeImport(status: ImportJobStatus): string {
       skipped: sum.skipped + (source.result?.skipped ?? 0),
       removed: sum.removed + (source.result?.removed ?? 0),
       failed: sum.failed + (source.result?.failed ?? 0),
+      protectedAnnotatedSessions:
+        sum.protectedAnnotatedSessions + (source.result?.protectedAnnotatedSessions ?? 0),
     }),
-    { scanned: 0, imported: 0, updated: 0, skipped: 0, removed: 0, failed: 0 },
+    {
+      scanned: 0,
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      removed: 0,
+      failed: 0,
+      protectedAnnotatedSessions: 0,
+    },
   );
   const sourceFailures = status.sources.filter((source) => source.state === 'failed').length;
   const failures = totals.failed + sourceFailures;
-  return `已检查 ${totals.scanned} 条记录；新增 ${totals.imported}，更新 ${totals.updated}，跳过 ${totals.skipped}${totals.removed > 0 ? `，清理 ${totals.removed}` : ''}${failures > 0 ? `，失败 ${failures}` : ''}`;
+  return `已检查 ${totals.scanned} 条记录；新增 ${totals.imported}，更新 ${totals.updated}，跳过 ${totals.skipped}${totals.removed > 0 ? `，清理 ${totals.removed}` : ''}${totals.protectedAnnotatedSessions > 0 ? `，保留 ${totals.protectedAnnotatedSessions} 个已标注会话（需手动处理）` : ''}${failures > 0 ? `，失败 ${failures}` : ''}`;
 }
 
 export function canResetData(confirmation: string, summary: DataManagementSummary | null): boolean {
