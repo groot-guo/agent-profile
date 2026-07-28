@@ -3745,9 +3745,129 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     available-source completion; a single large active source may keep the count
     unchanged until it settles
 
+### T92 Codex non-project Session classification
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- estimated size/risk: small-medium / medium; no schema migration or source
+  rebuild is expected, but Session navigation and project-based statistics must
+  use the same classification contract
+- purpose:
+  - distinguish captured project evidence from Codex's dated rollout storage
+    layout so a missing `session_meta.cwd` never turns `YYYY/MM/DD` or another
+    arbitrary parent folder into a project
+  - present these records directly as `Codex 会话记录` while retaining date as
+    a time-grouping dimension rather than a project identity
+- scope and expected files:
+  1. define one explicit project-classification rule for Session navigation and
+     aggregate statistics: a non-empty captured `cwd` remains authoritative;
+     Codex without one uses a stable non-path category displayed as
+     `Codex 会话记录`
+  2. remove the arbitrary-parent-directory fallback for Codex while retaining
+     only source-specific path decoding whose project semantics are explicit,
+     such as the constrained Claude Code `~/.claude/projects/<encoded>/` layout
+  3. align project selectors, row metadata, untitled Session fallback labels,
+     free-text matching, `/api/stats` project totals, project baselines, and
+     anomaly grouping so the same Session cannot receive different project
+     identities across views
+  4. preserve the raw `cwd` and `filePath` evidence in storage; do not synthesize
+     a persisted project path, change the Codex parser fingerprint, migrate the
+     schema, or require re-import merely to correct presentation/aggregation
+  5. implement the classification as a shared pure Core helper so Web navigation
+     and Server aggregation consume one contract rather than duplicating source
+     rules; expected implementation and test surfaces are
+     `packages/core/src/project.ts`, its browser-safe package subpath export and
+     focused tests,
+     `apps/web/app/session-navigation.ts`, its focused tests and project-label
+     presentation where needed, plus `apps/server/src/routes/stats.ts` and its
+     aggregate-route tests
+- dependencies, assumptions, and risks:
+  - `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` is a dated source-storage
+    partition, not project evidence
+  - the 2026-07-28 local probe found all 118 discoverable Codex rollouts and all
+    56 currently stored Codex Sessions had a non-empty captured `cwd`; missing
+    project coverage therefore needs synthetic fixtures and remains a latent
+    correctness case rather than a claim about the current stored population
+  - regrouping historical Sessions without `cwd` can intentionally change their
+    project baseline and anomaly membership; coverage must remain visibly
+    uncaptured rather than being presented as an inferred path
+  - the display category must not collide with a real filesystem path or imply
+    that every Codex Session lacks project evidence
+- acceptance:
+  - a Codex Session with no `cwd` and a file under either
+    `.../.codex/sessions/2026/07/28/` or an archived/date-like location is
+    classified once as `Codex 会话记录`, never as `28`, `07`, `2026`, or an
+    arbitrary parent folder
+  - a Codex Session with captured `cwd` continues to use that exact project
+    evidence, and supported Claude project-path fallback behavior does not
+    regress
+  - Session rows, filter options/search, display-title fallback, project totals,
+    baselines, and anomaly lookup agree on the classification
+  - Session time grouping continues to use `startTime`; no date-derived project
+    category is introduced and no data reset or forced rebuild is required
+- verification plan:
+  - add focused Web fixtures for captured-Codex, dated-path/no-`cwd` Codex, and
+    supported Claude fallback cases
+  - add Server statistics fixtures proving missing-`cwd` Codex Sessions share
+    one category across totals, baselines, and anomaly evaluation
+  - run focused Vitest suites, Web lint/type validation and production build in
+    proportion to touched files, then run `git diff --check`
+- documentation plan:
+  - after implementation, update `ARCHITECTURE.md`, `docs/multi-agent.md`, the
+    user-facing README/Chinese overview where the label is exposed, and this
+    Task with actual changed files, behavior, checks, and any remaining source
+    coverage limitation
+- scheduling assessment:
+  - suitable for immediate implementation before larger ingestion or project-
+    intelligence work because it is bounded, does not require a migration or
+    re-import, and closes a misleading project/statistics fallback; keep it
+    independent from T86's broader cross-Session project evidence scope
+- implementation:
+  - added a shared pure Core project classifier: captured non-empty `cwd` remains
+    authoritative, the explicit Claude `.claude/projects/<encoded>/` compatibility
+    fallback remains supported, and missing project evidence becomes a stable
+    source-record category rather than an arbitrary parent directory
+  - added a browser-safe `@agent-profile/core/project` package subpath after the
+    first production build demonstrated that importing a runtime helper through
+    the Core root barrel would pull Node-only transcript scanners into Webpack
+  - Web navigation now groups dated/no-`cwd` Codex Sessions under the displayed
+    `Codex 会话记录` label across selectors, rows, untitled fallback titles, URL
+    filtering, and free-text search without exposing the internal category key
+  - Server project totals, baselines, and anomaly lookup now use one extracted,
+    tested aggregation path backed by the same Core classifier; stored `cwd` and
+    `filePath`, parser fingerprints, schema, and import behavior remain unchanged
+- changed files:
+  - Core: `packages/core/package.json`, `packages/core/src/index.ts`,
+    `packages/core/src/project.ts`, and
+    `packages/core/src/__tests__/project.test.ts`
+  - Server: `apps/server/src/routes/stats.ts` and
+    `apps/server/src/__tests__/stats-aggregation.test.ts`
+  - Web: `apps/web/app/page.tsx`, `apps/web/app/project-label.ts`,
+    `apps/web/app/project-label.test.ts`, `apps/web/app/session-navigation.ts`,
+    `apps/web/app/session-navigation.test.ts`, and
+    `apps/web/app/stats/page.tsx`
+  - documentation: `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/multi-agent.md`, `docs/zh/OVERVIEW.md`, and this roadmap
+- verification:
+  - focused project/navigation/statistics Vitest run — 4 files and 16 tests passed
+  - `pnpm --filter @agent-profile/core test` — 27 files and 191 tests passed
+  - full `pnpm exec vitest run` — 43 files and 251 tests passed
+  - `pnpm lint` — completed with no errors; 18 existing warnings and 2 existing
+    style suggestions remain outside T92, including the pre-existing statistics
+    page model-color non-null assertion
+  - `pnpm build` — Core TypeScript build, Server no-emit type check, and optimized
+    Next.js production build all passed; all 9 Web routes generated successfully
+  - project-classification consistency scan and `git diff --check` — passed
+- limitation:
+  - the local 2026-07-28 source/store probe found no current Codex Session without
+    `cwd`, so the corrected branch is covered by synthetic dated-path fixtures
+    rather than a mutated source record or live-data UI smoke test
+
 ## Execution Order
 
-T79 completed the documentation/assessment baseline. The normal desktop-first
+T79 completed the documentation/assessment baseline, and T92 completed the
+bounded Codex non-project classification fix. The remaining normal desktop-first
 implementation order is:
 
 1. T73 MiMo external Claude Code history exclusion, to protect source identity.

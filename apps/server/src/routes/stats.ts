@@ -1,4 +1,4 @@
-import { identifyModel, type ModelIdentityKind } from '@agent-profile/core';
+import { classifySessionProject, identifyModel, type ModelIdentityKind } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { db } from '../db';
@@ -145,12 +145,100 @@ function buildLogBins(
   return bins;
 }
 
-function extractProjectFromPath(filePath: string): string {
-  const parts = filePath.split('/');
-  const idx = parts.indexOf('projects');
-  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
-  // 取父目录名作为项目名
-  return parts[parts.length - 2] || parts[parts.length - 1] || '';
+export function buildProjectStats(sessions: Record<string, unknown>[]) {
+  const projectMap = new Map<
+    string,
+    {
+      sessions: number;
+      tokens: number;
+      cost: number;
+      costs: number[];
+      cacheHits: number[];
+    }
+  >();
+
+  for (const session of sessions) {
+    const project = projectForStats(session);
+    const entry = projectMap.get(project) ?? {
+      sessions: 0,
+      tokens: 0,
+      cost: 0,
+      costs: [],
+      cacheHits: [],
+    };
+    const tokens = sessionTokens(session);
+    const cost = (session.totalCost as number) || 0;
+    entry.sessions++;
+    entry.tokens += tokens;
+    entry.cost += cost;
+    entry.costs.push(cost);
+    entry.cacheHits.push((session.cacheHitRate as number) || 0);
+    projectMap.set(project, entry);
+  }
+
+  const byProject: ProjectStats[] = [...projectMap.entries()]
+    .map(([cwd, entry]) => ({
+      cwd,
+      sessions: entry.sessions,
+      totalTokens: entry.tokens,
+      totalCost: entry.cost,
+    }))
+    .sort((a, b) => b.sessions - a.sessions || a.cwd.localeCompare(b.cwd));
+
+  const baselineProjects: Record<
+    string,
+    {
+      sessions: number;
+      avgCost: number;
+      medCost: number;
+      p95Cost: number;
+      avgTokens: number;
+      avgCacheHit: number;
+    }
+  > = {};
+  for (const [project, entry] of projectMap) {
+    baselineProjects[project] = {
+      sessions: entry.sessions,
+      avgCost: entry.cost / entry.sessions,
+      medCost: percentile(entry.costs, 0.5),
+      p95Cost: percentile(entry.costs, 0.95),
+      avgTokens: Math.round(entry.tokens / entry.sessions),
+      avgCacheHit: entry.cacheHits.reduce((total, value) => total + value, 0) / entry.sessions,
+    };
+  }
+
+  const anomalySessions: string[] = [];
+  for (const session of sessions) {
+    const baseline = baselineProjects[projectForStats(session)];
+    const cost = (session.totalCost as number) || 0;
+    if (baseline?.sessions >= 3 && baseline.medCost > 0.001 && cost > baseline.medCost * 3) {
+      anomalySessions.push(session.id as string);
+    }
+  }
+
+  return { byProject, baselineProjects, anomalySessions };
+}
+
+function projectForStats(session: Record<string, unknown>): string {
+  return classifySessionProject({
+    agent: typeof session.agent === 'string' ? session.agent : undefined,
+    cwd: typeof session.cwd === 'string' ? session.cwd : undefined,
+    filePath: typeof session.filePath === 'string' ? session.filePath : undefined,
+  });
+}
+
+function sessionTokens(session: Record<string, unknown>): number {
+  return (
+    ((session.inputTokens as number) || 0) +
+    ((session.cacheCreationTokens as number) || 0) +
+    ((session.cacheReadTokens as number) || 0) +
+    ((session.outputTokens as number) || 0)
+  );
+}
+
+function percentile(values: number[], quantile: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length * quantile)] || 0;
 }
 
 export function registerStatsRoutes(app: FastifyInstance) {
@@ -239,28 +327,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
       }))
       .sort((a, b) => b.sessions - a.sessions);
 
-    // By project (cwd)，fallback 从 filePath 提取项目名
-    const projMap = new Map<string, { sessions: number; tokens: number; cost: number }>();
-    for (const s of sessions) {
-      const cwd = (s.cwd as string) || extractProjectFromPath(s.filePath as string) || 'unknown';
-      const entry = projMap.get(cwd) || { sessions: 0, tokens: 0, cost: 0 };
-      entry.sessions++;
-      entry.tokens +=
-        ((s.inputTokens as number) || 0) +
-        ((s.cacheCreationTokens as number) || 0) +
-        ((s.cacheReadTokens as number) || 0) +
-        ((s.outputTokens as number) || 0);
-      entry.cost += (s.totalCost as number) || 0;
-      projMap.set(cwd, entry);
-    }
-    const byProject: ProjectStats[] = [...projMap.entries()]
-      .map(([cwd, e]) => ({
-        cwd,
-        sessions: e.sessions,
-        totalTokens: e.tokens,
-        totalCost: e.cost,
-      }))
-      .sort((a, b) => b.sessions - a.sessions);
+    const { byProject, baselineProjects, anomalySessions } = buildProjectStats(sessions);
 
     // By model (from spans)
     const { modelMap, recentTools } = loadDashboardSpanAggregates();
@@ -327,73 +394,6 @@ export function registerStatsRoutes(app: FastifyInstance) {
       agentDistribution: agentDist,
     };
 
-    // Baseline: per-project baseline stats + anomaly flags
-    const baselineProjMap = new Map<
-      string,
-      { costs: number[]; tokens: number[]; cacheHits: number[]; durations: number[] }
-    >();
-    for (const s of sessions) {
-      const proj = (s.cwd as string) || extractProjectFromPath(s.filePath as string) || 'unknown';
-      const entry = baselineProjMap.get(proj) || {
-        costs: [],
-        tokens: [],
-        cacheHits: [],
-        durations: [],
-      };
-      entry.costs.push((s.totalCost as number) || 0);
-      entry.tokens.push(
-        ((s.inputTokens as number) || 0) +
-          ((s.cacheCreationTokens as number) || 0) +
-          ((s.cacheReadTokens as number) || 0) +
-          ((s.outputTokens as number) || 0),
-      );
-      entry.cacheHits.push((s.cacheHitRate as number) || 0);
-      entry.durations.push(
-        ((s.endTime as number) || (s.startTime as number)) - (s.startTime as number),
-      );
-      baselineProjMap.set(proj, entry);
-    }
-    const baselineProjects: Record<
-      string,
-      {
-        sessions: number;
-        avgCost: number;
-        medCost: number;
-        p95Cost: number;
-        avgTokens: number;
-        avgCacheHit: number;
-      }
-    > = {};
-    const p95 = (arr: number[]) => {
-      const s = [...arr].sort((a, b) => a - b);
-      return s[Math.floor(s.length * 0.95)] || 0;
-    };
-    const med = (arr: number[]) => {
-      const s = [...arr].sort((a, b) => a - b);
-      return s[Math.floor(s.length * 0.5)] || 0;
-    };
-    for (const [proj, data] of baselineProjMap) {
-      baselineProjects[proj] = {
-        sessions: data.costs.length,
-        avgCost: data.costs.reduce((a, b) => a + b, 0) / data.costs.length,
-        medCost: med(data.costs),
-        p95Cost: p95(data.costs),
-        avgTokens: Math.round(data.tokens.reduce((a, b) => a + b, 0) / data.tokens.length),
-        avgCacheHit: data.cacheHits.reduce((a, b) => a + b, 0) / data.cacheHits.length,
-      };
-    }
-
-    // Anomaly flags: sessions > 2x project median cost
-    const anomalySessions = new Set<string>();
-    for (const s of sessions) {
-      const proj = (s.cwd as string) || extractProjectFromPath(s.filePath as string) || 'unknown';
-      const bl = baselineProjects[proj];
-      if (bl && bl.sessions >= 3) {
-        const cost = (s.totalCost as number) || 0;
-        if (bl.medCost > 0.001 && cost > bl.medCost * 3) anomalySessions.add(s.id as string);
-      }
-    }
-
     // Time series trends: daily aggregation
     const dailyMap = new Map<
       string,
@@ -429,7 +429,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
       byModel,
       recentTools,
       distribution,
-      baseline: { projects: baselineProjects, anomalySessions: [...anomalySessions] },
+      baseline: { projects: baselineProjects, anomalySessions },
       trends,
     };
   });

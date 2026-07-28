@@ -52,6 +52,13 @@ export {
   MIN_PROFILE_METRIC_COVERAGE,
   SIMILARITY_THRESHOLD,
 } from './profile';
+export type { SessionProjectInput } from './project';
+export {
+  CODEX_SESSION_RECORDS_PROJECT,
+  classifySessionProject,
+  isSessionRecordsProject,
+  sessionRecordsProjectAgent,
+} from './project';
 export type {
   HintSource,
   IterationHint,

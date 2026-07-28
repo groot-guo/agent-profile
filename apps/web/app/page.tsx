@@ -1,6 +1,7 @@
 'use client';
 
 import type { SessionSummary } from '@agent-profile/core';
+import { isSessionRecordsProject } from '@agent-profile/core/project';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API, type DataManagementSummary, type ImportJobStatus } from './config';
 import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
@@ -378,7 +379,8 @@ export default function HomePage() {
                 <option value="">全部项目 · {sessions.length}</option>
                 {projects.map(({ project, count }) => (
                   <option key={project} value={project}>
-                    {projectLabel(project)} · {count} — {project}
+                    {projectLabel(project)} · {count}
+                    {isSessionRecordsProject(project) ? '' : ` — ${project}`}
                   </option>
                 ))}
               </select>

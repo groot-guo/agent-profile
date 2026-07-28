@@ -1,5 +1,6 @@
+import { CODEX_SESSION_RECORDS_PROJECT } from '@agent-profile/core';
 import { describe, expect, it } from 'vitest';
-import { loadDashboardSpanAggregates } from '../routes/stats';
+import { buildProjectStats, loadDashboardSpanAggregates } from '../routes/stats';
 
 describe('dashboard span aggregation', () => {
   it('uses two set-based queries regardless of Session count', () => {
@@ -55,4 +56,80 @@ describe('dashboard span aggregation', () => {
     expect(aggregates.modelMap.get('provider:litellm')).toMatchObject({ kind: 'provider_only' });
     expect(aggregates.modelMap.get('unknown:glm-5-2-origin')).toMatchObject({ kind: 'unknown' });
   });
+
+  it('uses one Codex Session-record category for totals, baselines, and anomalies', () => {
+    const sessions = [
+      projectSession(
+        'codex-a',
+        'codex',
+        undefined,
+        '/Users/example/.codex/sessions/2026/07/27/rollout-a.jsonl',
+        1,
+      ),
+      projectSession(
+        'codex-b',
+        'codex',
+        undefined,
+        '/Users/example/.codex/sessions/2026/07/28/rollout-b.jsonl',
+        1,
+      ),
+      projectSession(
+        'codex-c',
+        'codex',
+        undefined,
+        '/Users/example/.codex/sessions/2026/07/28/rollout-c.jsonl',
+        1,
+      ),
+      projectSession(
+        'codex-anomaly',
+        'codex',
+        undefined,
+        '/Users/example/.codex/sessions/2026/07/28/rollout-d.jsonl',
+        5,
+      ),
+      projectSession('codex-project', 'codex', '/workspace/project', '/rollout-e.jsonl', 2),
+    ];
+
+    const stats = buildProjectStats(sessions);
+
+    expect(stats.byProject).toContainEqual({
+      cwd: CODEX_SESSION_RECORDS_PROJECT,
+      sessions: 4,
+      totalTokens: 60,
+      totalCost: 8,
+    });
+    expect(stats.byProject).toContainEqual({
+      cwd: '/workspace/project',
+      sessions: 1,
+      totalTokens: 15,
+      totalCost: 2,
+    });
+    expect(stats.baselineProjects[CODEX_SESSION_RECORDS_PROJECT]).toMatchObject({
+      sessions: 4,
+      medCost: 1,
+    });
+    expect(stats.anomalySessions).toEqual(['codex-anomaly']);
+    expect(Object.keys(stats.baselineProjects)).not.toContain('28');
+  });
 });
+
+function projectSession(
+  id: string,
+  agent: string,
+  cwd: string | undefined,
+  filePath: string,
+  totalCost: number,
+): Record<string, unknown> {
+  return {
+    id,
+    agent,
+    cwd,
+    filePath,
+    inputTokens: 10,
+    cacheCreationTokens: 1,
+    cacheReadTokens: 2,
+    outputTokens: 2,
+    totalCost,
+    cacheHitRate: 0.5,
+  };
+}

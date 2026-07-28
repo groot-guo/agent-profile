@@ -1,4 +1,5 @@
 import type { SessionSummary } from '@agent-profile/core';
+import { classifySessionProject, isSessionRecordsProject } from '@agent-profile/core/project';
 import { projectLabel } from './project-label';
 import { AGENT_LABELS } from './theme';
 
@@ -26,17 +27,10 @@ export const DEFAULT_SESSION_NAVIGATION: SessionNavigationState = {
   selectedId: null,
 };
 
-type SessionLocation = Pick<SessionSummary, 'cwd' | 'filePath'>;
+type SessionLocation = Pick<SessionSummary, 'agent' | 'cwd' | 'filePath'>;
 
 export function sessionProject(session: SessionLocation): string {
-  if (session.cwd) return session.cwd;
-  const parts = session.filePath.split('/');
-  const projectIndex = parts.indexOf('projects');
-  const encoded =
-    projectIndex >= 0 && parts[projectIndex + 1]
-      ? parts[projectIndex + 1]
-      : parts[parts.length - 2] || 'unknown';
-  return encoded.startsWith('-') ? `/${encoded.slice(1).replace(/-/g, '/')}` : encoded;
+  return classifySessionProject(session);
 }
 
 export function sessionDisplayTitle(
@@ -45,7 +39,10 @@ export function sessionDisplayTitle(
   const sourceTitle = session.name?.trim();
   if (sourceTitle) return sourceTitle;
   const agent = AGENT_LABELS[session.agent] || session.agent || 'Agent';
-  const project = projectLabel(sessionProject(session));
+  const projectKey = sessionProject(session);
+  const project = projectLabel(projectKey);
+  if (isSessionRecordsProject(projectKey))
+    return `${project} · ${formatLocalStart(session.startTime)}`;
   return `${agent} · ${project} · ${formatLocalStart(session.startTime)}`;
 }
 
@@ -63,9 +60,11 @@ export function filterSessions(
     .filter((session) => cutoff === null || session.startTime >= cutoff)
     .filter((session) => {
       if (!query) return true;
+      const project = sessionProject(session);
       return (
         sessionDisplayTitle(session).toLowerCase().includes(query) ||
-        sessionProject(session).toLowerCase().includes(query) ||
+        project.toLowerCase().includes(query) ||
+        projectLabel(project).toLowerCase().includes(query) ||
         session.id.toLowerCase().includes(query)
       );
     })

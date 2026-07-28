@@ -1,8 +1,10 @@
 'use client';
 
+import { isSessionRecordsProject } from '@agent-profile/core/project';
 import { useEffect, useState } from 'react';
 import { API } from '../config';
 import { AgentMark, getModelIcon } from '../icons';
+import { projectLabel } from '../project-label';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtTokens, R, SP } from '../theme';
 import { BarRow, Card, Empty, Notice, SectionTitle, StatCard } from '../ui';
 
@@ -198,8 +200,12 @@ export default function StatsPage() {
               borderRadius: R.md,
             }}
           >
-            <span className="clamp1" title={p.cwd} style={{ color: C.text, minWidth: 0, flex: 1 }}>
-              {p.cwd}
+            <span
+              className="clamp1"
+              title={isSessionRecordsProject(p.cwd) ? projectLabel(p.cwd) : p.cwd}
+              style={{ color: C.text, minWidth: 0, flex: 1 }}
+            >
+              {isSessionRecordsProject(p.cwd) ? projectLabel(p.cwd) : p.cwd}
             </span>
             <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
               {p.sessions} 会话 · {fmtTokens(p.totalTokens)} · ¥{p.totalCost.toFixed(2)}
@@ -231,7 +237,7 @@ export default function StatsPage() {
                   title={proj}
                   style={{ color: C.text, minWidth: 0, flex: 1 }}
                 >
-                  {proj.split('/').pop() || proj}
+                  {projectLabel(proj)}
                 </span>
                 <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
                   {bl.sessions} 会话 · 中位 ¥{bl.medCost.toFixed(4)} · P95 ¥{bl.p95Cost.toFixed(4)}{' '}

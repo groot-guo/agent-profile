@@ -1,4 +1,5 @@
 import type { SessionSummary } from '@agent-profile/core';
+import { CODEX_SESSION_RECORDS_PROJECT } from '@agent-profile/core/project';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SESSION_NAVIGATION,
@@ -8,6 +9,7 @@ import {
   projectOptions,
   serializeSessionNavigation,
   sessionDisplayTitle,
+  sessionProject,
   visibleSessionSlice,
 } from './session-navigation';
 
@@ -80,6 +82,37 @@ describe('flat Session navigation', () => {
     expect(title).not.toContain('opaque-session-id');
   });
 
+  it('classifies Codex Sessions without cwd as one searchable Session-record category', () => {
+    const first = session('dated-a', undefined, 'codex', 100, 0);
+    first.filePath =
+      '/Users/example/.codex/sessions/2026/07/27/rollout-2026-07-27T10-00-00-a.jsonl';
+    const second = session('dated-b', undefined, 'codex', 200, 0);
+    second.filePath =
+      '/Users/example/.codex/sessions/2026/07/28/rollout-2026-07-28T10-00-00-b.jsonl';
+
+    expect(sessionProject(first)).toBe(CODEX_SESSION_RECORDS_PROJECT);
+    expect(sessionProject(second)).toBe(CODEX_SESSION_RECORDS_PROJECT);
+    expect(projectOptions([first, second])).toEqual([
+      { project: CODEX_SESSION_RECORDS_PROJECT, count: 2 },
+    ]);
+
+    const untitled = { ...first, name: '' };
+    expect(sessionDisplayTitle(untitled)).toContain('Codex 会话记录 ·');
+    expect(sessionDisplayTitle(untitled)).not.toContain('Codex · Codex');
+    expect(
+      filterSessions([first, second], new Set(), {
+        ...DEFAULT_SESSION_NAVIGATION,
+        query: 'Codex 会话记录',
+      }).map((item) => item.id),
+    ).toEqual(['dated-b', 'dated-a']);
+  });
+
+  it('retains the explicit Claude projects-path fallback without using arbitrary parents', () => {
+    const claude = session('claude', undefined, 'claude-code', 100, 0);
+    claude.filePath = '/Users/example/.claude/projects/-Users-example-repo/session.jsonl';
+    expect(sessionProject(claude)).toBe('/Users/example/repo');
+  });
+
   it('groups recent Sessions by time and bounds a 400-row render', () => {
     const now = new Date('2026-07-27T12:00:00+08:00').getTime();
     const sessions = Array.from({ length: 400 }, (_, index) =>
@@ -104,7 +137,7 @@ describe('flat Session navigation', () => {
 
 function session(
   id: string,
-  cwd: string,
+  cwd: string | undefined,
   agent: string,
   startTime: number,
   costUnknownCount: number,
@@ -112,7 +145,7 @@ function session(
   return {
     id,
     name: `session ${id}`,
-    filePath: `${cwd}/${id}.jsonl`,
+    filePath: cwd ? `${cwd}/${id}.jsonl` : `/transcripts/${id}.jsonl`,
     cwd,
     agent,
     startTime,

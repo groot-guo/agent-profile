@@ -139,6 +139,14 @@ title/project/path discovery. An all/1/7/30/90-day rolling range composes with
 project, Agent, text, quick-view, and sort filters. These filters and the
 selected Session use bounded URL parameters; opening a Session pushes one
 history entry and browser back restores the filters and saved list scroll.
+One shared Core classifier supplies the project key used by both Web navigation
+and Server statistics. A non-empty captured `cwd` is authoritative; the
+constrained Claude `~/.claude/projects/<encoded>/` layout remains an explicit
+compatibility fallback. Other Sessions without captured project evidence use a
+stable source-record category, displayed for Codex as `Codex 会话记录`. Codex's
+`~/.codex/sessions/YYYY/MM/DD/` layout is only a source-time partition and is
+never inferred as a project. This classification does not alter stored `cwd` or
+`filePath` and needs no migration or re-import.
 Source-provided Session names remain authoritative. When one is absent, the Web
 layer derives a display-only Agent/project/local-start-time label from
 non-content metadata; it does not store a replacement title or inspect prompt,
@@ -171,7 +179,7 @@ improve throughput.
 | Agent | Local source | Import model |
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
-| Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), project metadata, response items, events, and call IDs |
+| Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), captured `session_meta.cwd` project evidence when present, response items, events, and call IDs |
 | Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `time_updated` plus message/part counts; changed session records are loaded lazily |
 | OpenCode | `opencode.db` SQLite database | parser-contract version plus `time_updated` and message/part counts; changed Session rows and their message/part evidence are loaded lazily from a read-only connection |

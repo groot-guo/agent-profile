@@ -36,7 +36,12 @@ require deleting the local database.
   `session_id` retained only as a legacy fallback;
 - child rollouts keep their distinct thread IDs instead of replacing the
   parent Session, and their generated Spans are marked as sidechain evidence;
-- `session_meta.cwd` supplies project metadata;
+- a non-empty `session_meta.cwd` supplies project evidence; if it is absent,
+  navigation and statistics use the stable `Codex 会话记录` source category
+  while preserving the missing coverage and raw file path;
+- `~/.codex/sessions/YYYY/MM/DD/` and archived date-like locations are source
+  storage partitions, not project evidence, and are never converted into a
+  project name;
 - response messages/reasoning become LLM evidence;
 - custom tool calls pair with their outputs by call ID;
 - token-count events provide available token aggregates. When Codex reports all
