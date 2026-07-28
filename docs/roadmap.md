@@ -3220,6 +3220,102 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - implementation impact: documentation and planning only; no application,
     API, schema, storage, or current desktop behavior changed
 
+### T78 product positioning, Profile taxonomy, and documentation governance
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- purpose:
+  - make the product positioning, Profile terminology, current capability
+    boundary, and future technical plan consistent across the repository before
+    further implementation Tasks are split
+- expected outcome:
+  - Agent Profile is consistently described as a local-first AI coding-Agent
+    runtime profiling, diagnosis, and outcome-evaluation system; Task is an
+    outcome and comparability boundary, not the product's sole purpose
+  - readers can distinguish Session analysis, Agent Process Profile, Task
+    Profile, and the future cohort/configuration-level Runtime Profile without
+    treating process metrics as delivery-quality or causal proof
+- scope:
+  1. create a focused current-state Profile model document that defines the
+     product, terminology, evidence boundaries, feedback loop, and implemented
+     versus future layers
+  2. align `AGENTS.md` durable product context and documentation rules with that
+     model, including terminology that future implementation must preserve
+  3. update bilingual READMEs, `ARCHITECTURE.md`, Chinese overview, Task/Outcome
+     document, and future design proposal so each has a clear current/future
+     role and cross-links to the canonical terminology
+  4. record concrete near-term gaps as planned work boundaries without silently
+     expanding an implementation Task
+- affected documents:
+  - `AGENTS.md`, `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/profile-model.md`, `docs/tasks-outcomes.md`,
+    `docs/agent-runtime-profile-design.md`, `docs/zh/OVERVIEW.md`, and this
+    roadmap
+- dependencies and risks:
+  - T49 is the implemented foundation for Task/Outcome/Configuration records;
+    terminology must not claim that cohort statistics, configuration-level
+    outcome aggregation, automated regression detection, or Runtime feedback
+    has been implemented
+  - the documentation must preserve privacy, metric-coverage, neutral
+    comparison, and non-causality constraints rather than rebranding them away
+- acceptance:
+  - one canonical definition distinguishes the product's observability,
+    diagnosis, profiling, outcome-evaluation, and future feedback layers
+  - Session evidence, Agent Process Profile, Task Profile, and future Runtime
+    Profile have non-overlapping definitions and explicit scope/coverage rules
+  - public README material explains what users can do today, what Task adds,
+    and what remains manual or future work without overclaiming
+  - `AGENTS.md` requires future changes to preserve the agreed terminology and
+    document whether a change affects process evidence, outcome evidence, or
+    both
+  - all affected documents agree on the current state and link readers to the
+    right source of truth
+- verification plan:
+  - review changed terminology against implemented Core report contracts and
+    routes, scan for stale claims, run Markdown/document link checks available
+    in the repository, and run `git diff --check`
+- documentation plan:
+  - record the final terminology, exact files, checks, and intentionally
+    deferred capability gaps before marking the Task complete
+- implementation:
+  - added `docs/profile-model.md` as the canonical current-state product model:
+    a local-first runtime profiling, diagnosis, and outcome-evaluation system
+    for AI coding agents, where Task is a delivery/comparability boundary rather
+    than the product's sole purpose
+  - separated Span/Event evidence, Session analysis, the implemented
+    `agent-profile/v1` Agent Process Profile, the implemented `task-profile/v1`
+    Task Profile, persisted cohort/experiment definitions, and the future
+    cohort/configuration Runtime Profile
+  - aligned project rules, current architecture, bilingual user documentation,
+    the Chinese overview, Task/Outcome design, and the future Runtime proposal
+    to state both the implemented T49 foundation and the still-deferred
+    statistics, causal evaluation, regression, and Runtime-feedback layers
+- verification:
+  - CodeGraph review of `packages/core/src/profile.ts` and
+    `packages/core/src/task-profile.ts` — confirmed that `agent-profile/v1` is
+    Session-scoped and `task-profile/v1` requires build, test, lint, Git, and
+    human-rating fields for `verified` Outcome coverage
+  - Markdown link check — confirmed all new Profile-model references resolve
+    from the English/Chinese READMEs, Task/Outcome document, future proposal,
+    and Chinese overview
+  - terminology scan — no stale claim remains that the T49 persistence layer is
+    unimplemented, that `agent-profile/v1` aggregates Task/Outcome/configuration
+    data, or that automatic experiment conclusions or Runtime feedback exist
+  - `git diff --check` — passed
+- completion:
+  - changed files: `AGENTS.md`, `README.md`, `README.zh-CN.md`,
+    `ARCHITECTURE.md`, `docs/profile-model.md`, `docs/tasks-outcomes.md`,
+    `docs/agent-runtime-profile-design.md`, `docs/zh/OVERVIEW.md`, and this
+    roadmap
+  - result: user-facing, architectural, design, and repository-governance
+    material now shares one precise Profile taxonomy and explicit current/future
+    boundary
+  - intentionally deferred: comparable cohort/configuration Runtime Profiles,
+    automated experiment and regression evaluation, Runtime-consumable feedback,
+    and a Task-workspace UI for the additional human Outcome fields already
+    supported by the local model/API
+
 ## Execution Order
 
 There is no active `in_progress` implementation Task. The remaining planned

@@ -1,14 +1,15 @@
 # Agent Profile — 中文总览
 
 > 本文描述当前已经实现的能力，并与 [中文 README](../../README.zh-CN.md)、
-> `README.md`、`ARCHITECTURE.md` 保持一致。
+> `README.md`、`ARCHITECTURE.md` 和 [Profile 模型](../profile-model.md) 保持一致。
 > Task、Outcome、Configuration Snapshot、Cohort、Experiment 与 Task Profile
 > 已实现本地基础；自动实验评估和 Runtime feedback 仍是未来方案。
 
 ## 定位
 
-Agent Profile 是面向 AI 编码 Agent Runtime 的本地离线 profiler。它不是聊天记录
-产品，而是把本地运行记录转换为可比较的资源、过程效率、可靠性和异常证据。
+Agent Profile 是面向 AI 编码 Agent 的本地优先运行画像、诊断与效果验证系统。它不是
+聊天记录产品、云端监控平台、代码质量扫描器或 Agent 排行榜，而是把本地运行记录转换为
+带范围、覆盖度与限制说明的资源、过程效率、可靠性和交付证据。
 
 当前运行证据以 Session 为分析中心，已经可以回答 token、成本、时间、上下文、工具和
 子 Agent 消耗在哪里，以及过程中发生了哪些重复、失败和退化。系统也可在不保存原文的
@@ -16,6 +17,20 @@ Agent Profile 是面向 AI 编码 Agent Runtime 的本地离线 profiler。它�
 Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度的 `task-profile/v1`。
 但系统仍不能仅凭过程指标判断最终交付是否正确，也不能直接宣称某个 Agent 全面优于
 另一个 Agent 或某次配置改动一定有效。
+
+## Profile 分层
+
+- **Span/Event 证据**与 **Session 分析**：描述一次已观察到的运行过程，不保证是完整
+  原始 transcript，也不证明交付成功。
+- **Agent Process Profile**（`agent-profile/v1`）：按 Agent 聚合当前 Session 的资源、
+  上下文、可靠性、协作、覆盖度和中性相对特征；它尚未按 Task、配置或 Outcome 分组。
+- **Task Profile**（`task-profile/v1`）：描述一个交付单元的关联 Session、配置快照、
+  显式 Outcome 覆盖度与聚合过程证据。
+- **Cohort/Experiment**：当前只持久化比较定义、guardrail 和证据状态；自动分布比较、
+  回归检测、配置赢家和 Runtime feedback 是未来能力。
+
+Task 是把过程证据连接到交付结果的边界，不是产品唯一目的。所有 Profile 都必须说明
+适用范围、样本量、字段覆盖度和限制；“高于/低于”描述观察到的行为，不是质量排名。
 
 ## 当前数据源与数据流
 
@@ -43,7 +58,8 @@ OpenCode 的来源版本变化后会重新导入，不再因为 Session 已存�
 同一个任务管理器支持显式“强制重建”：它绕过相同来源指纹，但仍按 Session 解析并在
 事务中原子替换，因此失败时旧分析保留，成功时标签和备注保留，当前不可用来源也不会被
 清除。独立危险区重置需要完整确认短语，只删除 `sessions` 与 `spans`，保留定价、模型
-窗口和 migration。
+窗口、migration，以及 Task、Outcome、Configuration Snapshot、Cohort、Experiment 和
+逻辑 Session 关联。
 Codex 使用 rollout 的 `session_meta.id` 作为线程级 Session 身份；旧格式缺少 `id`
 时才回退到 `session_id`。子线程保留自己的 ID，其 Span 标记为 Sidechain，不再覆盖父
 Session。
@@ -79,8 +95,8 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   没有配置时，启发式分析与整个服务仍可正常使用。
 - 展示过程效率、综合过程分、项目内相对位置、趋势、分布，以及按 Agent/项目/模型的
   消耗统计。
-- 生成 `agent-profile/v1` 运行画像，从资源、上下文、工具可靠性和 sidechain 协作
-  维度比较 Agent；每项均包含样本量、覆盖度和解释边界。
+- 生成 `agent-profile/v1` Agent Process Profile，从资源、上下文、工具可靠性和
+  sidechain 协作维度比较 Agent；每项均包含样本量、覆盖度和解释边界。
 - 生成 `prompt-review/v1` 和 `iteration-hints/v1`：确定性检查目标、范围、验收、
   约束、上下文和验证结构，并可选择结合 Agent 画像提出待验证的调整假设。
 - 在“任务”工作区关联多个 Session 与版本/Hash 配置快照，记录显式 Outcome，并生成

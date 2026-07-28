@@ -1,13 +1,15 @@
 # Agent Profile
 
-[English README](README.md) · [当前架构](ARCHITECTURE.md) · [任务路线图](docs/roadmap.md)
+[English README](README.md) · [Profile 模型](docs/profile-model.md) · [当前架构](ARCHITECTURE.md) · [任务路线图](docs/roadmap.md)
 
-Agent Profile 是一个本地优先的 AI 编码 Agent Runtime 分析工具。它导入本机的
-Claude Code、Codex、Zed、MiMo 和 OpenCode 会话数据，帮助你理解 Token、上下文、
-成本、耗时、工具调用和子 Agent 的消耗去向。
+Agent Profile 是面向 AI 编码 Agent 的本地优先运行画像、诊断与效果验证系统。它导入
+本机的 Claude Code、Codex、Zed、MiMo 和 OpenCode 会话数据，帮助你理解 Token、
+上下文、成本、耗时、工具调用和子 Agent 的消耗去向，并能将这些过程证据关联到显式
+Task Outcome，而不会把更低的资源消耗误作更好的交付结果。
 
-它分析的是**已观察到的运行过程**，不是聊天记录阅读器、云端监控平台，也不会给 Agent
-给出绝对能力排名。
+它分析的是**已观察到的运行过程**与本地交付证据，不是聊天记录阅读器、云端监控平台、
+代码质量扫描器，也不会给 Agent 给出绝对能力排名。Profile 的术语与当前/未来边界见
+[Profile 模型](docs/profile-model.md)。
 
 ## 适合解决什么问题
 
@@ -15,6 +17,7 @@ Claude Code、Codex、Zed、MiMo 和 OpenCode 会话数据，帮助你理解 Tok
 - 某个工具是否反复失败、输出异常大，或引发上下文突增？
 - 不同 Agent、模型或项目的资源与工具使用方式有什么差异？
 - 一段任务提示词是否清楚写明目标、范围、验收条件和验证方式？
+- 配置调整是只降低了过程成本，还是在可比交付工作中仍保住了 build/test/lint 结果？
 
 ## 使用前准备
 
@@ -77,10 +80,21 @@ URL 保留。来源提供的标题优先；没有标题时，界面只用 Agent�
 内容。大结果集按批次渲染，不会一次创建全部行。
 
 **任务**页面在 Session 过程分析之上补充本地交付证据。一个 Task 可关联多个 Session、
-绑定只保存版本/Hash 的 Configuration Snapshot，并记录 build/test/lint/Git/人工 Outcome。
-缺失 Outcome 会明确保持“未采集”，不会变成失败。`task-profile/v1` 只聚合当前可用的关联
-Session，并展示覆盖度与限制。Cohort 和 Experiment API 可保存比较定义与证据状态，但
-不会仅凭过程指标推断因果赢家。
+绑定只保存版本/Hash 的 Configuration Snapshot，并在页面记录 build/test/lint/Git Outcome。
+本地模型/API 还支持人工评分、返工原因、完成时间和有界结构化证据。缺失 Outcome 会明确
+保持“未采集”，不会变成失败。`task-profile/v1` 只聚合当前可用的关联 Session，并展示
+覆盖度与限制。Cohort 和 Experiment API 可保存比较定义与证据状态，但目前不会自动计算
+因果赢家。
+
+## 如何理解 Profile
+
+- **Session 分析**解释一次已观察到的运行；它是过程证据，不是交付成功证明。
+- **Agent Process Profile**（`agent-profile/v1`）展示一个 Agent 当前 Session 集合上的
+  资源、上下文、可靠性、协作、覆盖度和中性同类相对特征。
+- **Task Profile**（`task-profile/v1`）展示一个交付单元的关联 Session/配置、Outcome
+  覆盖度与聚合过程证据。
+- 按 cohort/configuration 聚合的 Runtime Profile、自动实验结论、回归决策和运行时反馈
+  仍是后续能力，不能当作当前产品承诺。
 
 OpenCode 适配器以只读方式打开本机 SQLite。当前来源把 Token 总量保存在 Session
 聚合字段中，而不是逐消息记录；Agent Profile 因此保留一个明确标记的聚合 LLM 回合，
@@ -93,8 +107,8 @@ cost 当作可移植的计费证据。
 - **会话**：在扁平最近列表中按项目和 Agent 筛选数据；进入会话后可分别查看概览、上下文与成本、工具与
   链路、规范化运行证据。
 - **任务**：把多个 Session 和配置版本关联到显式交付 Outcome，并查看带覆盖度的 Task Profile。
-- **画像**：在样本量和字段覆盖度限制下，对比 Agent 的运行指纹。“高于/低于”只表示
-  观察到的行为差异，不代表谁更好。
+- **画像**：在样本量和字段覆盖度限制下，查看 Agent Process Profile。“高于/低于”只
+  表示观察到的行为差异，不代表谁更好。
 - **迭代**：本地检查任务提示词的目标、范围、验收、约束、上下文和验证结构。结合运行
   画像得到的建议是待验证假设，不会自动改写提示词。
 - **统计**：查看 Token、成本、上下文，以及项目、Agent、模型的汇总和分布。

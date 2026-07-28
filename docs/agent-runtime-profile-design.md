@@ -1,24 +1,29 @@
 # Agent Runtime Profile 设计方案
 
-> 状态：Proposal；Phase 1 基础和 Phase 2 数据模型已由 T49 实现，自动比较与 Runtime feedback 仍未实现
+> 状态：Proposal；Task/Outcome/Configuration、Cohort/Experiment 定义与单 Task 的
+> `task-profile/v1` 已由 T49 实现。自动 cohort/configuration 比较、回归检测与 Runtime
+> feedback 仍未实现。
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
 ## 文档地位
 
-本文是未来目标设计，不描述当前已经实现的全部行为。当前实现以
-`../ARCHITECTURE.md` 为准，用户入口以 `../README.md` 为准，具体实施状态与验收
-证据以 `roadmap.md` 为准。
+本文是未来目标设计，不描述当前已经实现的全部行为。当前产品定位和 Profile 术语以
+`profile-model.md` 为准；当前实现以 `../ARCHITECTURE.md` 为准，用户入口以
+`../README.md` 为准，具体实施状态与验收证据以 `roadmap.md` 为准。
 
 实现本文中的任一 Phase 前，必须先在 `roadmap.md` 建立明确 Task，写出该阶段的
 数据迁移、API/指标兼容、文档更新和验证计划并标记为 `in_progress`。实现结束后，
 应先把当前架构及相关领域文档同步为真实状态，再记录验证结果并关闭 Task。Proposal
 中的概念、接口和时间阶段在任务完成前均不得被表述为当前能力。
 
-## 1. 定位
+## 1. 目标定位
 
-**Agent Profile 是 Agent Runtime 的 pprof。**
+**Agent Profile 的未来 Runtime Profile 层是 Agent Runtime 的 pprof。**
 
-它不以保存聊天记录为目标，也不把“改提示词”当作唯一能力。它为一次或一组可比较的任务生成运行画像，帮助人和 Agent 回答：
+当前产品已实现 Session 分析、Agent Process Profile 和 Task Profile；本文定义的是将这些
+证据扩展为 cohort/configuration 级 Runtime Profile 与受验证反馈的未来层。它不以保存聊天
+记录为目标，也不把“改提示词”当作唯一能力。目标层为一次或一组可比较的任务生成运行
+画像，帮助人和 Agent 回答：
 
 1. 资源花在了哪里（token、成本、时间、上下文、工具、子 Agent）？
 2. 过程是否存在异常或退化（失败重试、重复读取、上下文膨胀、无效输出）？
@@ -53,7 +58,9 @@ flowchart LR
 | Task | 用户关心的交付单元；可由一个或多个 session 完成 | 已实现本地持久化与 Session 关联 |
 | Configuration | 本次运行采用的模型、规则、工具策略和提示模板版本 | 已实现版本/Hash 快照；规则/prompt 原文不复制 |
 | Outcome | 可验证的任务结果与人工反馈 | 已实现显式可空字段与结构化证据 |
-| Profile | 基于 Session、Configuration、Outcome 的可比较运行画像 | 部分已有 |
+| Agent Process Profile | 基于当前 Session 分布的 Agent 运行过程画像 | 已实现为 `agent-profile/v1`；不含 Task/Configuration/Outcome 聚合 |
+| Task Profile | 一个 Task 的关联 Session、Configuration 和 Outcome 覆盖度画像 | 已实现为 `task-profile/v1` |
+| Cohort/Configuration Runtime Profile | 基于可比较 Task、配置和 Outcome 的运行画像 | 未来；不得由当前报告暗示 |
 | Cohort | 可公平比较的任务集合，如同项目的“功能实现”任务 | 已实现定义与生命周期模型，统计比较未实现 |
 | Experiment | 对同类任务比较不同配置版本的受控试验 | 已实现受护栏记录模型，自动评估未实现 |
 
@@ -252,7 +259,8 @@ Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，�
 - 支持 test/build/lint/Git/human rating 的结果录入。
 - 生成 Task Profile Report，并支持导出 JSON。
 
-验收：可判断某个配置在同类任务中是否提高了完成质量，且不会将“未采集结果”误判为失败。
+验收：可记录一个 Task 的交付 Outcome 与配置关联，且不会将“未采集结果”误判为失败。
+同类 Task 的配置质量比较属于后续 Phase 2 自动评估，而不是当前 Phase 1 的结论。
 
 ### Phase 2：Cohort 与 Experiment
 

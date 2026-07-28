@@ -6,23 +6,29 @@ separate instructions behind the two entry points.
 
 ## Project context
 
-Agent Profile is a local-first profiler for AI coding-agent runtimes. It imports
-Claude Code, Codex, Zed, and MiMo session data and analyzes tokens, context,
-cost, duration, tools, sub-agents, process efficiency, and reliability.
+Agent Profile is a local-first runtime profiling, diagnosis, and
+outcome-evaluation system for AI coding agents. It imports Claude Code, Codex,
+Zed, MiMo, and OpenCode Session data; normalizes runtime evidence; analyzes
+resources, context, tools, collaboration, and reliability; and can attach that
+process evidence to explicit local Task Outcomes.
 
 Keep the boundaries clear:
 
 - `README.md` is the user-facing current-state entry point.
 - `ARCHITECTURE.md` is the detailed source of truth for current implementation.
+- `docs/profile-model.md` defines the canonical product positioning and Profile
+  terminology for current-state documentation and implementation discussions.
 - `docs/roadmap.md` is the source of truth for Task status and verification.
 - `docs/agent-runtime-profile-design.md` is a future proposal, not current
   behavior.
 
-The current runtime evidence remains session-centric. A deterministic,
-ephemeral prompt-structure review can combine an optional Agent process profile
-into iteration hypotheses, but Task/Outcome/Configuration persistence,
-experiments, and outcome-validated runtime feedback remain proposed until their
-roadmap Tasks are completed and the current-state documents have changed.
+The current evidence model has distinct layers. Session analysis and
+`session-evidence/v1` describe normalized observed process; `agent-profile/v1`
+is an Agent Process Profile over Session distributions; `task-profile/v1`
+combines one explicit Task’s linked Sessions, configuration snapshots, and
+Outcome coverage. Cohort and experiment records persist comparison definitions,
+but cohort/configuration outcome aggregation, automated regression decisions,
+and Runtime feedback remain proposed until their roadmap Tasks are completed.
 
 ## Common commands
 
@@ -95,6 +101,14 @@ These rules protect metric correctness and must not change accidentally:
 - Efficiency and score metrics describe the observed process. Without a
   verifiable Task Outcome they do not prove delivery quality or universal Agent
   superiority.
+- Keep Profile terminology precise. A Session analysis is not an Agent Process
+  Profile; an Agent Process Profile is not a Task Profile; and a future
+  cohort/configuration Runtime Profile must not be claimed by existing reports.
+  Every Profile conclusion must expose its scope, sample/coverage limits, and
+  whether it concerns process evidence, delivery Outcome evidence, or both.
+- Task is a delivery and comparability boundary, not the product’s only unit of
+  value. It connects process evidence to explicit Outcomes but does not itself
+  establish configuration causality or universal Agent quality.
 - Raw prompts are not profiler records. Prompt review must remain ephemeral by
   default: do not persist or log request text, do not send it to a semantic
   provider, keep returned excerpts opt-in/redacted/bounded, and never present a
@@ -152,6 +166,7 @@ belong to an explicit Task. Do not hide unrelated work inside another Task.
 | `CLAUDE.md` | Compatibility symlink to `AGENTS.md`; never an independent source |
 | `README.md` | Current user-facing positioning, implemented capabilities, setup, and document entry points |
 | `ARCHITECTURE.md` | Current implemented architecture, data flow, storage, APIs, limitations, and operational behavior |
+| `docs/profile-model.md` | Canonical current-state product positioning, Profile taxonomy, evidence layers, and documentation terminology |
 | `docs/roadmap.md` | Task definitions, lifecycle status, acceptance criteria, and completion evidence |
 | `docs/agent-runtime-profile-design.md` | Proposed target model and future Agent Runtime Profile design; it must not present unimplemented behavior as current |
 | `docs/diagnosis.md`, `docs/multi-agent.md`, `docs/stats.md` | Focused current designs and implementation notes that must agree with the architecture |

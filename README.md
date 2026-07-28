@@ -1,13 +1,19 @@
 # Agent Profile
 
-[中文说明](README.zh-CN.md) · [Current architecture](ARCHITECTURE.md) · [Roadmap](docs/roadmap.md)
+[中文说明](README.zh-CN.md) · [Profile model](docs/profile-model.md) · [Current architecture](ARCHITECTURE.md) · [Roadmap](docs/roadmap.md)
 
-Agent Profile is a local-first profiler for AI coding-agent runtimes. It imports
-local Claude Code, Codex, Zed, MiMo, and OpenCode session data, then explains
-where time, tokens, context, cost, tool calls, and sub-agent work went.
+Agent Profile is a local-first runtime profiling, diagnosis, and
+outcome-evaluation system for AI coding agents. It imports local Claude Code,
+Codex, Zed, MiMo, and OpenCode Session data, then explains where time, tokens,
+context, cost, tool calls, and sub-agent work went. It can connect that process
+evidence to explicit Task Outcomes without treating lower resource use as proof
+of better delivery.
 
-It is an analysis tool for observed runtime process. It is not a chat-history
-viewer, a hosted monitoring service, or a universal ranking of agents.
+It is an analysis tool for observed runtime process and local delivery evidence.
+It is not a chat-history viewer, a hosted monitoring service, a code-quality
+scanner, or a universal ranking of agents. See
+[the Profile model](docs/profile-model.md) for the terminology and current/future
+boundary.
 
 ## Who it is for
 
@@ -20,6 +26,8 @@ Use Agent Profile when you want to answer questions such as:
   projects?
 - Does a task prompt clearly state its goal, scope, acceptance criteria, and
   verification plan?
+- Did a configuration change preserve build/test/lint evidence for comparable
+  delivery work, or only reduce observed process cost?
 
 ## Requirements
 
@@ -95,11 +103,27 @@ once.
 
 The **任务** workspace adds local delivery evidence above Session analysis. A
 Task can link multiple Sessions, attach version/hash-only Configuration
-Snapshots, and record build/test/lint/Git/human Outcome fields. Missing Outcome
-fields remain visibly uncollected rather than failed. `task-profile/v1`
-aggregates available linked Sessions with explicit coverage and limitations.
-Cohort and experiment APIs persist comparison definitions and evidence state,
-but do not infer a causal winner from process metrics alone.
+Snapshots, and record build/test/lint/Git Outcome fields. The local model/API
+also supports human rating, rework reason, completion time, and bounded
+structured evidence; missing fields remain visibly uncollected rather than
+failed. `task-profile/v1` aggregates available linked Sessions with explicit
+coverage and limitations. Cohort and experiment APIs persist comparison
+definitions and evidence state, but do not yet calculate a causal winner from
+process metrics.
+
+## How to read a Profile
+
+- **Session analysis** explains one observed run. It is process evidence, not
+  delivery proof.
+- **Agent Process Profile** (`agent-profile/v1`) describes distributions across
+  an Agent’s current Sessions: resources, context, reliability, collaboration,
+  coverage, and neutral peer-relative characteristics.
+- **Task Profile** (`task-profile/v1`) describes one delivery unit, its linked
+  Sessions/configurations, explicit Outcome coverage, and aggregated process
+  evidence.
+- A cohort/configuration-level Runtime Profile, automated experiment result,
+  regression decision, and live Runtime feedback are future work. They are not
+  current product claims.
 
 ## What the main views do
 
@@ -107,8 +131,8 @@ but do not infer a causal winner from process metrics alone.
   diagnosis, context/cost, tools/chain, or normalized evidence.
 - **任务** — connect Sessions and configuration versions to explicit delivery
   Outcomes and inspect a coverage-aware Task Profile.
-- **画像** — compare observed Agent runtime fingerprints with sample-size and
-  coverage limits. “Higher” or “lower” describes behavior, not quality.
+- **画像** — inspect Agent Process Profiles with sample-size and coverage limits.
+  “Higher” or “lower” describes observed behavior, not quality.
 - **迭代** — review a task prompt locally for goal, scope, acceptance,
   constraints, context, and verification structure. Optional runtime-profile
   hints are hypotheses to validate, not automatic prompt rewrites.

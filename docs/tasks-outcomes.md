@@ -1,9 +1,12 @@
 # Task, Outcome, Cohort, and Experiment Foundations
 
 Agent Profile stores local delivery context separately from imported runtime
-evidence. A Task can link multiple Sessions, optional Configuration Snapshots,
-and one explicit Outcome. Cohorts and experiments persist comparison scope and
-evidence state; they do not automatically establish causality.
+evidence. In the [Profile model](profile-model.md), Task is the delivery and
+comparability boundary between Session process evidence and explicit results; it
+is not the product's sole unit of analysis. A Task can link multiple Sessions,
+optional Configuration Snapshots, and one explicit Outcome. Cohorts and
+experiments persist comparison scope and evidence state; they do not
+automatically establish causality.
 
 ## Privacy boundary
 
@@ -39,6 +42,12 @@ Outcome coverage has three states:
 - `verified`: build, test, lint, Git commit, and human rating are all present.
 
 An explicit `failed` value is evidence. A missing field is not failure.
+
+The current Task workspace records build, test, lint, and Git-commit fields.
+The local model/API also accepts human rating, rework reason, completion time,
+and bounded structured evidence. Until that extra Outcome surface is exposed in
+the workspace, users should not interpret a UI-only `partial` state as a
+runtime failure or as proof that a Task was unsuccessful.
 
 ## Experiment guardrail
 

@@ -1,17 +1,40 @@
 # Agent Profile — Current Architecture
 
 This document describes the implementation that exists today.
-Task/Outcome/Configuration persistence, Task-Session links, cohort/experiment
-definitions, and `task-profile/v1` are implemented foundations. Automated
-cohort statistics, causal experiment evaluation, regression decisions, and
-runtime feedback APIs remain proposals in `docs/agent-runtime-profile-design.md`.
-The prompt-review surface remains ephemeral and does not automatically create
-or modify those persisted records.
+Agent Profile is a local-first runtime profiling, diagnosis, and
+outcome-evaluation system for AI coding agents. Its canonical current-state
+terminology is in `docs/profile-model.md`. Task/Outcome/Configuration
+persistence, Task-Session links, cohort/experiment definitions, and
+`task-profile/v1` are implemented foundations. Automated cohort statistics,
+configuration-level Runtime Profiles, causal experiment evaluation, regression
+decisions, and Runtime feedback APIs remain proposals in
+`docs/agent-runtime-profile-design.md`. The prompt-review surface remains
+ephemeral and does not automatically create or modify those persisted records.
 
-Agent Profile is a local-first profiler for AI coding-agent sessions. It imports
-local Claude Code, Codex, Zed, MiMo, and OpenCode data, normalizes their different
-formats into sessions and spans, computes comparable process metrics, and
-exposes the results through a local API and web application.
+It imports local Claude Code, Codex, Zed, MiMo, and OpenCode data, normalizes
+their different formats into Sessions and Spans, computes comparable process
+metrics, and exposes the results through a local API and web application.
+
+## Profile model
+
+The product has distinct evidence layers:
+
+- **Span/Event evidence** and **Session analysis** describe observed runtime
+  process; they do not prove delivery success.
+- **Agent Process Profile** is the implemented `agent-profile/v1` report over
+  Session distributions. Its scope is currently Agent plus available Session
+  evidence; it is not grouped by Configuration Snapshot, Task type, or Outcome.
+- **Task Profile** is the implemented `task-profile/v1` report for one explicit
+  delivery unit, its linked Sessions/configurations, and its explicit Outcome
+  coverage.
+- **Cohort/Experiment definitions** persist comparison scope and guardrails,
+  but do not calculate outcomes or causal winners.
+- A cohort/configuration-level **Runtime Profile** is future work. It requires
+  comparable Task samples, Outcome guardrails, coverage, and statistical rules.
+
+All reports expose their scope and limitations. Process metrics may form a
+diagnostic or iteration hypothesis; they are not a universal Agent ranking or a
+code-quality verdict.
 
 ## System flow
 
@@ -239,10 +262,11 @@ from available source histories when recovery is necessary.
 - Tool categorization groups observed calls for analysis; it does not define
   the runtime's structural call graph.
 
-Efficiency, diagnosis, and scoring describe execution behavior. Without a
-recorded Task and Outcome, they cannot establish whether the requested
-deliverable was correct. This is the central boundary between the current
-session profiler and the proposed runtime-profile design.
+Efficiency, diagnosis, and scoring describe execution behavior. A recorded Task
+and Outcome add delivery evidence for that Task, but neither one Task nor an
+unscoped Agent Process Profile establishes a general configuration effect. This
+is the boundary between implemented Session/Task evidence and the future
+cohort/configuration Runtime Profile design.
 
 ## Analysis surfaces
 
@@ -256,7 +280,7 @@ The current server/UI support:
   project-relative comparison;
 - statistics by agent/project/model, distributions, trends, and multi-session
   comparison;
-- versioned per-Agent process profiles with resource, context, reliability, and
+- versioned Agent Process Profiles with resource, context, reliability, and
   collaboration dimensions, metric coverage, and neutral peer-relative
   characteristics;
 - deterministic prompt-structure review with optional Agent-profile evidence
@@ -315,10 +339,11 @@ view is mounted on demand, provides filters and progressive disclosure, and
 does not request the evidence report while the user remains in the overview,
 context/cost, or tools/chain views.
 
-### Agent Profile report contract
+### Agent Process Profile report contract
 
-`agent-profile/v1` is a stable derived report over the current normalized
-sessions and spans; it does not add a persistence table. Each Agent profile
+`agent-profile/v1` is the implemented Agent Process Profile: a stable derived
+report over current normalized Sessions and Spans. It does not add a persistence
+table or aggregate Task Outcomes. Each Agent profile
 contains:
 
 - sample counts for sessions, LLM turns, and tool calls;
@@ -339,7 +364,22 @@ Task type/complexity are not controlled and Outcome coverage is explicitly
 quality. Source adapters also do not yet distinguish an unavailable tool-error
 status from an observed non-error in every format, so tool-error rates count
 explicit observed errors only. The `/profiles` page presents the same contract
-as a human-readable runtime fingerprint rather than a leaderboard.
+as a human-readable process fingerprint rather than a leaderboard. Task and
+configuration scope are deliberately absent from this report today; use
+`task-profile/v1` for one delivery unit, and do not imply a cohort/configuration
+Runtime Profile until that future report exists.
+
+### Task Profile report contract
+
+`task-profile/v1` is the implemented per-Task delivery profile. It aggregates
+only currently available linked Sessions and exposes linked/available coverage,
+Agent identities, token totals, known-cost coverage, duration, peak context,
+cache behavior, tool-error evidence, attached Configuration Snapshots, explicit
+Outcome fields, matching cohort definitions, and limitations.
+
+Its Outcome coverage is `not_collected`, `partial`, or `verified`; a missing
+field never becomes a failure. The report does not compute cross-Task cohort
+distributions, configuration winners, regression decisions, or causal effects.
 
 ### Prompt review and iteration-hint contract
 
