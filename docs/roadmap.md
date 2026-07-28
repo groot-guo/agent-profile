@@ -1006,10 +1006,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     the existing API, and an isolated production Web process were verified
     instead. Existing separately launched development processes must be
     stopped once before starting the new root command
-  - remaining limitation: the overall dashboard shell still preserves its
-    desktop sidebar at very narrow widths; the standalone Session route is
-    responsive, while a future dashboard-shell Task should decide whether the
-    sidebar becomes a drawer on mobile
+  - remaining limitation: the overall dashboard shell remains desktop-first;
+    the standalone Session route is responsive, but a mobile drawer/navigation
+    redesign is intentionally outside the planned product scope
 
 ### T46 Codex import completeness and reliable Web navigation
 
@@ -1441,20 +1440,17 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     CI, cohorts and experiments persist definitions rather than running jobs, and
     configuration snapshots deliberately omit prompt/rule bodies
 
-### T50 scale, project intelligence, responsive UX, and local safety
+### T50 scale, project intelligence, and local safety
 
 - status: planned
 - purpose:
   - keep the profiler usable with long histories and large Sessions while
-    making project-level evidence and small-screen workflows practical
+    improving project-level evidence and local operational safety
 - planned scope:
   - project-level cross-Session file/tool trends and explicit parent/child
     Session relationships without inventing missing evidence
   - append-only transcript parsing, scan progress/retry, and virtualized or
     downsampled rendering for large histories
-  - responsive dashboard-shell navigation that replaces the fixed desktop
-    sidebar at narrow widths; Session discovery and project filtering inside the
-    sidebar are implemented independently under T64
   - reviewed local network/API defaults, documented backup/export workflow,
     and authentication/directory-access controls before any remote exposure
 - dependencies and risks:
@@ -1526,9 +1522,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - changed files: `apps/web/app/icons.tsx`, `apps/web/app/theme-toggle.tsx`,
     `apps/web/app/layout.tsx`, `apps/web/app/page.tsx`, dashboard, Session
     detail, statistics, comparison, and profile views, plus this roadmap
-  - remaining limitation: the fixed desktop sidebar still overflows narrow
-    mobile viewports; the responsive navigation redesign remains explicitly
-    owned by T50
+  - remaining limitation: the fixed desktop sidebar is not designed as a
+    mobile navigation shell; no mobile redesign is planned
 
 ### T52 schema migration consistency guard
 
@@ -1676,8 +1671,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - completion:
   - changed files: `apps/web/app/page.tsx`, `apps/web/app/layout.tsx`, and this
     roadmap
-  - mobile navigation redesign remains intentionally deferred under T50; this
-    task only guarantees the existing detail panel can shrink, reflow, and scroll
+  - this task only guarantees the existing detail panel can shrink, reflow, and
+    scroll; a separate mobile navigation redesign is outside the planned scope
 
 ### T55 Zed session analysis missing
 
@@ -2392,8 +2387,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     showed the detail iframe; returning removed only the Session parameter and
     restored the project/quick-view state
   - narrow desktop check at 750×720 — project filtering remained visible and
-    the page had no horizontal overflow; the broader mobile navigation redesign
-    remains deferred to T50 as requested
+    the page had no horizontal overflow; mobile dashboard navigation remains
+    outside the planned scope
   - `pnpm test` — passed: Core 20 files / 176 tests; Server 9 files / 33 tests
   - `pnpm lint` — passed with the existing 19 warnings and 2 informational
     diagnostics, no errors
@@ -3180,24 +3175,63 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     the implementation and completion evidence remain intact
   - changed file: this roadmap only; T59 remains `in_progress` and its code and
     documentation changes are intentionally excluded from this Task's commit
+
+### T77 planned-scope and execution-order cleanup
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- purpose:
+  - remove the mobile dashboard-navigation redesign from the planned product
+    scope because the project remains desktop-first
+  - make the roadmap's execution order agree with the current completed and
+    planned Task states
+- scope:
+  - retain T50's scale, project-intelligence, large-history, and local-safety
+    work while removing its mobile/small-screen navigation requirement
+  - remove current roadmap claims that a future mobile drawer/navigation Task
+    is expected
+  - replace the stale execution sequence that still names completed Tasks with
+    the four remaining planned Tasks
+- acceptance:
+  - T50 no longer includes mobile navigation or small-screen workflow work
+  - no current roadmap statement assigns a future mobile navigation redesign
+    to T50 or another planned Task
+  - the execution-order section lists only Tasks whose current status is
+    `planned`
+- verification plan:
+  - scan roadmap references to T50, mobile navigation, and all non-completed
+    status values
+  - run `git diff --check`
+- documentation plan:
+  - update `docs/roadmap.md` only; no implemented application behavior or
+    user-facing current-state capability changes
+- verification:
+  - status extraction — only T50, T70, T71, and T73 remain `planned`; no
+    implementation Task remains `in_progress` or `blocked`
+  - future-mobile-reference scan — no roadmap statement still assigns a mobile
+    drawer or responsive dashboard-navigation redesign to T50
+  - `git diff --check` — passed
+- completion:
+  - changed file: `docs/roadmap.md`
+  - result: T50 retains scale, project-intelligence, and local-safety scope;
+    mobile dashboard navigation is no longer planned, and the execution-order
+    section now lists only the four remaining planned Tasks
+  - implementation impact: documentation and planning only; no application,
+    API, schema, storage, or current desktop behavior changed
+
 ## Execution Order
 
-T63 safe rebuild/reset, T64 flat Session navigation, and T74 title/range
-refinement are complete. T58 is also complete. Under the current
-user-authorized sequence, the next work is T48's remaining stable
-local-operation scope, followed by T54, T59, T49, and the desktop-first portion
-of T50. T70, T71, and T73 remain independently planned.
+There is no active `in_progress` implementation Task. The remaining planned
+work is:
 
-T65 is complete: the correctness repair discovered while auditing the local
-`im` Sessions excludes non-actionable external-history materializations and has
-removed their unannotated stored copies. T62 owns loading/onboarding, T63 owns
-safe rebuild/reset, T64 owns flat Session discovery, and T74 refines its
-privacy-safe title plus exact project/recent-range filtering.
+1. T50 scale, project intelligence, and local safety.
+2. T70 Session-navigation loading performance and transition feedback.
+3. T71 model-context and analysis-configuration audit.
+4. T73 MiMo external Claude Code history exclusion.
 
-T48 and T50 remain broader product umbrellas; their overlapping
-loading/rebuild/Session-discovery pieces are completed by T62–T64 and must not
-be reimplemented. T50's overall mobile navigation redesign is explicitly
-deferred while desktop usage remains the priority.
+T50 retains large-history performance, project evidence, and local-safety
+scope. Mobile dashboard navigation is intentionally not planned.
 
 ## Task Lifecycle
 
