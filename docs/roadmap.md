@@ -2963,6 +2963,52 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     profiling console, keeps operational controls visually subordinate, and
     remains usable across both themes and narrow stacked layouts
 
+### T76 reconcile diverged main while preserving in-progress T59
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- purpose:
+  - reconcile the local T54 commit with four newer `origin/main` commits while
+    preserving every uncommitted T59 OpenCode adapter change
+- scope:
+  - save the full dirty T59 worktree in a recoverable Git stash
+  - rebase the single local T54 commit onto current `origin/main`, resolving
+    overlapping Session layout and roadmap changes without regressing either
+  - restore T59 and merge its source-status/UI typing changes with the newer
+    Session filter-console implementation
+- dependencies and risks:
+  - `apps/web/app/page.tsx`, `apps/web/app/layout.tsx`, `docs/roadmap.md`, and
+    `packages/core/src/index.ts` overlap between local, remote, or T59 changes
+  - the operation must not drop untracked OpenCode parser/adapter/test files or
+    rewrite commits already present on `origin/main`
+- acceptance:
+  - local `main` is based on current `origin/main` with no unmerged paths
+  - T54 remains one local commit with its layout behavior and completion evidence
+  - all T59 tracked and untracked changes are restored and remain `in_progress`
+- verification plan:
+  - inspect rebase/stash state, compare changed-file inventory before and after,
+    run conflict-marker and diff checks, then run focused web/Core/Server checks
+    required by the restored overlaps
+- documentation plan:
+  - record the exact reconciliation result and resulting commit identities here;
+    no current-product documentation changes are expected from coordination alone
+- implementation:
+  - stashed the complete tracked and untracked T59 worktree, rebased the single
+    local T54 commit onto the four newer `origin/main` commits, and restored T59
+  - preserved upstream T75 and renamed this coordination Task to T76 after the
+    only conflict revealed that T75 had already been assigned upstream
+- verification:
+  - `git status --short --branch` — local `main` is based on `origin/main` and
+    is ahead by the single rebased T54 commit, with no missing T59 paths
+  - stash/worktree inventory comparison — all nine tracked modifications and
+    three untracked OpenCode parser/adapter/test files were restored
+  - conflict-marker scan and `git diff --check` — passed
+- completion:
+  - T54 commit identity changed from `b66a189` to `4618f69` during the rebase;
+    the implementation and completion evidence remain intact
+  - changed file: this roadmap only; T59 remains `in_progress` and its code and
+    documentation changes are intentionally excluded from this Task's commit
 ## Execution Order
 
 T63 safe rebuild/reset, T64 flat Session navigation, and T74 title/range
