@@ -4322,6 +4322,56 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     T87 remains the owner of source-native parent/child persistence and combined
     relationship-aware attribution
 
+### T96 Explicit Server Node type dependency
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- estimated size/risk: small / low; development dependency metadata only
+- purpose and expected outcome:
+  - replace the inconsistent root-level Node 26 type dependency with an explicit
+    Node 22 toolchain dependency and an explicit Server development dependency
+    aligned with the repository's existing Node 22 type baseline
+  - restore formatting checks while keeping Core, Server, and Web builds and
+    tests unchanged
+- scope:
+  - `apps/server/package.json`, `package.json`, `pnpm-lock.yaml`,
+    `tsconfig.base.json`, and this roadmap Task
+- dependencies, assumptions, and risks:
+  - Server uses Node APIs and must declare its own type dependency rather than
+    relying on workspace hoisting
+  - the Task does not change the supported Node runtime or application behavior
+- acceptance:
+  - root tooling and Server resolve `@types/node` 22 directly; no Node 26 type
+    dependency or global base-config type override remains
+  - lint, root build, all tests, lockfile consistency, and diff checks pass
+- verification plan:
+  - frozen/offline install, `pnpm lint`, `pnpm build`, `pnpm test`,
+    TypeScript resolution inspection, and `git diff --check`
+- documentation plan:
+  - record final files and verification evidence in this Task; no public
+    behavior documentation is affected
+- implementation:
+  - pinned the root Vitest toolchain to `@types/node` 22 so pnpm does not
+    auto-select a newer optional peer type package
+  - added the same direct development dependency to the Server package, removing
+    its reliance on workspace hoisting for Node globals and `node:*` modules
+  - discarded the global base-tsconfig type override; Core and Server now resolve
+    their package-declared Node 22 types without changing compiler behavior
+- changed files:
+  - `package.json`, `apps/server/package.json`, `pnpm-lock.yaml`, and this roadmap
+- verification:
+  - `pnpm install --frozen-lockfile` passed supply-chain validation for all 808
+    lock entries and restored all 717 packages
+  - direct TypeScript file resolution confirmed both Core and Server use
+    `@types/node@22.20.1`; the lockfile contains no Node 26 type package
+  - `pnpm lint` passed all 111 files with only the existing 18 warnings and two
+    informational diagnostics
+  - `pnpm build` passed Core and Server TypeScript checks plus the optimized
+    nine-route Web production build
+  - `pnpm test` passed 40 files / 249 tests across Core and Server
+  - `git diff --check` passed
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded
