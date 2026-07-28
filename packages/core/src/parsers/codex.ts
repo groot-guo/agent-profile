@@ -169,7 +169,6 @@ export function parseCodexTranscript(
   const hasTurnContexts = sorted.some((entry) => entry.type === 'turn_context');
   const cwd = meta.cwd as string | undefined;
   const claudeVersion = meta.cli_version as string | undefined;
-  const model = meta.model_provider as string | undefined;
   const isSidechain = typeof meta.parent_thread_id === 'string' && meta.parent_thread_id.length > 0;
 
   // 2. 收集 reasoning 文本构建 session name
@@ -285,6 +284,9 @@ export function parseCodexTranscript(
 
     // 找到 turn_id
     const turnContext = turnEntries.find((e) => e.type === 'turn_context');
+    const capturedModel = turnContext?.payload.model;
+    const model =
+      typeof capturedModel === 'string' && capturedModel.trim() ? capturedModel.trim() : undefined;
     const turnId =
       (turnContext?.payload.turn_id as string) ||
       (taskStarted?.payload.turn_id as string) ||

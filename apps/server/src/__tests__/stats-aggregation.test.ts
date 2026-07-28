@@ -1,6 +1,7 @@
 import { CODEX_SESSION_RECORDS_PROJECT } from '@agent-profile/core';
 import { describe, expect, it } from 'vitest';
-import { buildProjectStats, loadDashboardSpanAggregates } from '../routes/stats';
+import { createDatabase } from '../database';
+import { buildModelViews, buildProjectStats, loadDashboardSpanAggregates } from '../routes/stats';
 
 describe('dashboard span aggregation', () => {
   it('uses two set-based queries regardless of Session count', () => {
@@ -29,6 +30,7 @@ describe('dashboard span aggregation', () => {
 
     expect(queries).toHaveLength(2);
     expect(queries[0]).toContain('GROUP BY');
+    expect(queries[0]).toContain('primary_span.is_sidechain = 0');
     expect(queries[1]).toContain('recent_sessions');
     expect(aggregates.modelMap.get('unknown:fixture-model')).toMatchObject({ count: 400 });
     expect(aggregates.recentTools).toEqual([{ name: 'Read', count: 30, errors: 1 }]);
@@ -55,6 +57,50 @@ describe('dashboard span aggregation', () => {
     });
     expect(aggregates.modelMap.get('provider:litellm')).toMatchObject({ kind: 'provider_only' });
     expect(aggregates.modelMap.get('unknown:glm-5-2-origin')).toMatchObject({ kind: 'unknown' });
+
+    const views = buildModelViews(aggregates.modelMap);
+    expect(views.byModel.map((entry) => entry.model)).toEqual([
+      'deepseek-v4-flash',
+      'litellm（未提供具体模型）',
+      'glm-5-2-origin',
+    ]);
+    expect(views.modelDistribution.map((entry) => entry.model)).toEqual([
+      'deepseek-v4-flash',
+      'litellm（未提供具体模型）',
+      'glm-5-2-origin',
+    ]);
+    expect(views.byModel.some((entry) => entry.model.startsWith('model:'))).toBe(false);
+  });
+
+  it('excludes sidechain-only Codex records from primary model aggregates', () => {
+    const database = createDatabase(':memory:');
+    try {
+      database
+        .prepare(
+          `INSERT INTO sessions (id, file_path, agent, start_time)
+           VALUES ('codex-root', 'fixture://root', 'codex', 1000),
+                  ('codex-guardian', 'fixture://guardian', 'codex', 1001)`,
+        )
+        .run();
+      database
+        .prepare(
+          `INSERT INTO spans (
+            id, session_id, type, name, start_time, input_tokens, output_tokens,
+            model, cost, is_sidechain
+          ) VALUES
+            ('root-turn', 'codex-root', 'llm_turn', 'gpt-5.6-sol', 1000, 10, 2,
+             'gpt-5.6-sol', 0, 0),
+            ('guardian-turn', 'codex-guardian', 'llm_turn', 'codex-auto-review',
+             1001, 20, 4, 'codex-auto-review', 0, 1)`,
+        )
+        .run();
+
+      const aggregates = loadDashboardSpanAggregates(database);
+      expect(aggregates.modelMap.get('model:gpt-5.6-sol')).toMatchObject({ count: 1 });
+      expect(aggregates.modelMap.has('model:codex-auto-review')).toBe(false);
+    } finally {
+      database.close();
+    }
   });
 
   it('uses one Codex Session-record category for totals, baselines, and anomalies', () => {

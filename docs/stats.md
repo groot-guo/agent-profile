@@ -1,7 +1,9 @@
 # Cost and Consumption Statistics — Current State
 
-The implemented `/stats` page and `GET /api/stats` endpoint aggregate the local
-session database. Monetary values use the current `CNY per million tokens`
+The implemented `/stats` page and `GET /api/stats` endpoint aggregate primary
+Sessions in the local database. A Codex source record containing only sidechain
+Spans remains stored and directly inspectable but is not counted as a peer
+top-level Session. Monetary values use the current `CNY per million tokens`
 contract. The statistics are descriptive process telemetry; source coverage,
 missing pricing, and calculation provenance must be considered before comparing
 agents.
@@ -30,10 +32,13 @@ calling `/api/recompute-cost` recalculates them with calculator `v1`.
 Model groups use a presentation-only identity contract. Explicit case and
 provider-prefix aliases such as `DeepSeek-V4-Flash` and
 `deepseek-ai/DeepSeek-V4-Pro` are grouped with their canonical model and retain
-their observed raw labels in the API response. Provider-only values (for
-example `litellm`) are labeled as not providing a concrete model; unrecognized
-versions/modes remain separate. This grouping never changes the persisted Span
-model or makes an unpriced raw label eligible for a canonical model's price.
+their observed raw labels in the API response. Captured Codex turn models
+`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and
+`codex-auto-review` are concrete identities. Provider-only values such as
+`openai` and `litellm` are labeled as not providing a concrete model;
+unrecognized versions/modes remain separate. This grouping never changes the
+persisted Span model or makes an unpriced raw label eligible for a canonical
+model's price.
 
 | Dimension | Current metrics |
 | --- | --- |
@@ -76,7 +81,9 @@ start time, then session totals are rebuilt from those span values.
 ## Agent Profile v1
 
 `GET /api/profiles/agents` and `GET /api/profiles/agents/:agent` expose the
-versioned `agent-profile/v1` report. The current dimensions are:
+versioned `agent-profile/v1` report over the same primary Session scope. Retained
+Codex child-only rollout usage is not merged into its parent until a future
+source-native relationship contract is implemented. The current dimensions are:
 
 | Dimension | Current metrics |
 | --- | --- |

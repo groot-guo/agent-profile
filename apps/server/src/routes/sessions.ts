@@ -14,6 +14,7 @@ import {
 } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import { db, getModelContext, getPricing } from '../db';
+import { primarySessionPredicate } from '../primary-sessions';
 import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
@@ -115,7 +116,12 @@ function withoutStoredContent(span: Span): Span {
 export function registerSessionRoutes(app: FastifyInstance) {
   app.get('/api/sessions', async () => {
     return db
-      .prepare(`SELECT ${SESSION_COLS} FROM sessions ORDER BY start_time DESC`)
+      .prepare(
+        `SELECT ${SESSION_COLS}
+         FROM sessions
+         WHERE ${primarySessionPredicate()}
+         ORDER BY start_time DESC`,
+      )
       .all() as SessionSummary[];
   });
 
@@ -205,7 +211,11 @@ export function registerSessionRoutes(app: FastifyInstance) {
 
     if (session.cwd) {
       const cohort = db
-        .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE cwd = ?`)
+        .prepare(
+          `SELECT ${SESSION_COLS}
+           FROM sessions
+           WHERE cwd = ? AND ${primarySessionPredicate()}`,
+        )
         .all(session.cwd) as SessionSummary[];
       const spansBySession = loadSpansForSessions(cohort.map((candidate) => candidate.id));
       const cohortScores = cohort.map(
@@ -294,7 +304,11 @@ export function registerSessionRoutes(app: FastifyInstance) {
     // spans in one query, then rank by the same composite score shown in UI.
     if (session.cwd) {
       const cohort = db
-        .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE cwd = ?`)
+        .prepare(
+          `SELECT ${SESSION_COLS}
+           FROM sessions
+           WHERE cwd = ? AND ${primarySessionPredicate()}`,
+        )
         .all(session.cwd) as SessionSummary[];
       const spansBySession = loadSpansForSessions(cohort.map((candidate) => candidate.id));
       const cohortScores = cohort.map(

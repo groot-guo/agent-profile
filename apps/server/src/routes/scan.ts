@@ -16,6 +16,7 @@ import { OpenCodeSourceAdapter } from '../ingestion/opencode-adapter';
 import { SessionRepository } from '../ingestion/session-repository';
 import { TranscriptSourceAdapter } from '../ingestion/transcript-adapter';
 import { ZedSourceAdapter, type ZedSourceAdapterOptions } from '../ingestion/zed-adapter';
+import { primarySessionPredicate } from '../primary-sessions';
 
 interface ScanBody {
   dir: string;
@@ -217,6 +218,7 @@ function withStoredCounts(status: ImportJobStatus) {
       `SELECT COALESCE(source_kind, agent) as sourceKind, COUNT(*) as sessions
        FROM sessions
        WHERE COALESCE(source_kind, agent) IS NOT NULL
+         AND ${primarySessionPredicate()}
        GROUP BY COALESCE(source_kind, agent)`,
     )
     .all() as { sourceKind: string; sessions: number }[];

@@ -6,6 +6,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { db } from '../db';
+import { primarySessionPredicate } from '../primary-sessions';
 
 interface ProfileRow {
   id: string;
@@ -82,6 +83,7 @@ export function buildProfileReport(
           as sidechainTools
        FROM sessions s
        LEFT JOIN spans p ON p.session_id = s.id
+       WHERE ${primarySessionPredicate('s')}
        GROUP BY s.id
        ORDER BY s.start_time DESC`,
     )

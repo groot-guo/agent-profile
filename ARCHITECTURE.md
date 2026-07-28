@@ -205,7 +205,7 @@ improve throughput.
 | Agent | Local source | Import model |
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
-| Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), captured `session_meta.cwd` project evidence when present, response items, events, and call IDs |
+| Codex | dated rollout JSONL | parser-contract revision plus file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), captured `session_meta.cwd` project evidence when present, per-turn `turn_context.payload.model`, response items, events, and call IDs |
 | Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `mimo-v2` parser-contract revision plus `time_updated`, message/part counts, and a hashed `external_import` metadata fingerprint; exact `cc` imports whose absolute `source_path` is below `~/.claude/projects` are excluded before message/part loading, while native and ambiguous rows remain source-visible |
 | OpenCode | `opencode.db` SQLite database | parser-contract version plus `time_updated` and message/part counts; changed Session rows and their message/part evidence are loaded lazily from a read-only connection |
@@ -249,6 +249,23 @@ once. The coordinator removes a previously generated excluded Session and its
 Spans only when it has no tags or notes; annotated rows are retained and the
 cleanup is reported as failed. Import results expose the number removed. Normal
 Codex rollouts with runtime turn context remain unaffected.
+
+Codex Desktop also persists guardian/child rollouts as distinct source records.
+Their normalized Spans retain `is_sidechain = 1` and direct detail/evidence
+lookup by stored ID remains available. Primary Session surfaces—Session
+discovery, dashboard/statistics aggregates, project cohorts, Agent Process
+Profiles, and per-source stored-Session counts—exclude a Codex record only when
+it has no main-chain Span. This keeps one top-level Session count per visible
+Codex Task without deleting child evidence or inferring relationships from
+titles, paths, models, or timing. Parent/child relationship persistence and
+combined resource attribution remain future T87 work; current primary
+aggregates intentionally omit resource usage stored only in a child rollout.
+
+Each modern Codex LLM turn takes its model from that turn's captured
+`turn_context.payload.model`. `session_meta.model_provider` is provider evidence,
+not a concrete model, and is never promoted into `Span.model`. Advancing the
+Codex parser revision to `codex-v3` makes an ordinary sync atomically replace
+stale provider-labelled rows once; no generated-data reset is required.
 
 ## Persistence model
 
@@ -317,9 +334,12 @@ from available source histories when recovery is necessary.
   `costCalculatorVersion` make the derived value reproducible. Unknown pricing
   is surfaced as unknown rather than silently estimated as a known bill.
 - Statistics may derive a presentation-only canonical model group for explicit
-  aliases while retaining raw source labels. Provider-only and unknown model
-  values remain distinct; this grouping never rewrites stored evidence or
-  changes the raw-model pricing lookup.
+  aliases while retaining raw source labels. Captured Codex model IDs
+  `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and
+  `codex-auto-review` are recognized as concrete identities; `openai` and
+  `litellm` remain provider-only. Unknown model values remain distinct; this
+  grouping never rewrites stored evidence or changes the raw-model pricing
+  lookup.
 - Cost attribution distributes an LLM turn's cost across tool categories used
   by that turn and shows tool-free turns separately. It is an analytical
   allocation, not a provider invoice.
@@ -409,8 +429,9 @@ context/cost, or tools/chain views.
 ### Agent Process Profile report contract
 
 `agent-profile/v1` is the implemented Agent Process Profile: a stable derived
-report over current normalized Sessions and Spans. It does not add a persistence
-table or aggregate Task Outcomes. Each Agent profile
+report over current primary normalized Sessions and their Spans. Source-native
+Codex child-only rollout records remain stored but are not peer Session samples.
+The report does not add a persistence table or aggregate Task Outcomes. Each Agent profile
 contains:
 
 - sample counts for sessions, LLM turns, and tool calls;

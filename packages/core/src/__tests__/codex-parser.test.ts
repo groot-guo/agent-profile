@@ -25,7 +25,7 @@ function rollout(
     {
       timestamp: '2026-07-26T08:00:01.000Z',
       type: 'turn_context',
-      payload: { turn_id: 'turn-1' },
+      payload: { turn_id: 'turn-1', model: 'gpt-5.6-sol' },
     },
     {
       timestamp: '2026-07-26T08:00:02.000Z',
@@ -55,6 +55,7 @@ describe('parseCodexTranscript', () => {
       inputTokens: 100,
       cacheReadTokens: 40,
       outputTokens: 25,
+      model: 'gpt-5.6-sol',
     });
     expect(parsed?.spans[0].metadata).toBeUndefined();
   });
@@ -82,6 +83,47 @@ describe('parseCodexTranscript', () => {
 
     expect(parsed?.sessionId).toBe('legacy-session');
     expect(parsed?.spans[0].isSidechain).toBe(false);
+  });
+
+  it('attributes each LLM turn to its captured turn-context model', () => {
+    const entries = rollout({ id: 'mixed-model-thread' });
+    entries.push(
+      {
+        timestamp: '2026-07-26T08:01:00.000Z',
+        type: 'turn_context',
+        payload: { turn_id: 'turn-2', model: 'gpt-5.6-terra' },
+      },
+      {
+        timestamp: '2026-07-26T08:01:01.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: {
+            last_token_usage: {
+              input_tokens: 50,
+              cached_input_tokens: 10,
+              output_tokens: 5,
+              reasoning_output_tokens: 2,
+              total_tokens: 67,
+            },
+          },
+        },
+      },
+    );
+
+    const parsed = parseCodexTranscript(entries, { filePath: '/codex/mixed-model.jsonl' });
+    expect(
+      parsed?.spans.filter((span) => span.type === 'llm_turn').map((span) => span.model),
+    ).toEqual(['gpt-5.6-sol', 'gpt-5.6-terra']);
+  });
+
+  it('keeps model identity unknown when only a provider is captured', () => {
+    const entries = rollout({ id: 'provider-only-thread', model_provider: 'openai' });
+    delete entries[1].payload.model;
+
+    const parsed = parseCodexTranscript(entries, { filePath: '/codex/provider-only.jsonl' });
+    expect(parsed?.spans[0]).toMatchObject({ name: 'codex' });
+    expect(parsed?.spans[0].model).toBeUndefined();
   });
 
   it('uses total_tokens when Codex reports no classified token fields', () => {

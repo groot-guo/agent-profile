@@ -4193,6 +4193,135 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     Server discovery contract, but must preserve this canonical-key and coverage
     behavior
 
+### T95 Codex top-level Session accounting and turn model attribution
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- estimated size/risk: medium / medium; stored source evidence remains intact,
+  but every primary Session aggregate must use the same bounded scope and the
+  Codex parser revision must safely refresh historical rows
+- purpose:
+  - stop source-native Codex guardian/child rollouts from inflating top-level
+    Session counts while retaining their normalized sidechain evidence
+  - attribute every Codex LLM turn to the captured turn model rather than the
+    provider-only `session_meta.model_provider` value
+- confirmed local evidence:
+  - the Codex app exposes five top-level Tasks for
+    `/Users/guogenyuan/Desktop/agent-profile`, including the active Task; the
+    profiler currently stores four corresponding root rollouts plus eight
+    guardian rollouts in that project
+  - every guardian rollout supplies `parent_thread_id`, uses
+    `source.subagent.other = guardian`, and normalizes exclusively to
+    `is_sidechain = 1` Spans, but current Session lists and statistics still
+    count each rollout as a peer Session
+  - all 322 currently stored Codex LLM-turn Spans use the provider-only value
+    `openai`; observed `turn_context.payload.model` values include
+    `gpt-5.6-sol`, `gpt-5.6-terra`, and `codex-auto-review`
+- scope and expected files:
+  1. add one Server-side primary-Session scope contract that excludes a Codex
+     source record only when it has sidechain evidence and no main-chain Span;
+     apply it consistently to Session discovery, dashboard/statistics model and
+     tool aggregates, Agent Process Profiles, and stored source counts
+  2. keep direct detail/evidence retrieval by stored ID unchanged so child
+     rollout evidence is retained and inspectable; do not delete, merge, or
+     synthesize parent/child records in this Task
+  3. resolve each Codex LLM-turn model from its own `turn_context.payload.model`;
+     when no model is captured, retain unknown rather than promoting a provider
+     name to a concrete model
+  4. bump the Codex parser-contract revision so an ordinary source sync
+     atomically replaces stale `openai` model rows through the existing
+     adapter/coordinator/repository path
+  5. add focused parser, ingestion, Session-scope, statistics, and Profile
+     regressions; update current-state architecture/statistics documentation
+- dependencies, assumptions, and risks:
+  - `is_sidechain` is source-captured normalized evidence; the primary scope
+    must not infer child status from title, model, cwd, path, or timing
+  - primary Session aggregates intentionally omit child-rollout resource usage
+    until T87 defines source-native relationship persistence and aggregation;
+    this limitation must remain explicit
+  - pricing continues to use the captured raw turn model and effective time;
+    unknown pricing remains unknown
+  - unrelated existing changes in `package.json`, `pnpm-lock.yaml`, and
+    `tsconfig.base.json` are user-owned and must remain untouched
+- acceptance:
+  - the current `agent-profile` project reports five Codex top-level Sessions
+    after the active rollout is synchronized, while guardian rows remain
+    available by direct stored ID
+  - statistics and Agent Process Profile sample counts use the same primary
+    Session scope, and model statistics no longer group Codex turns as `openai`
+  - mixed-model Codex rollouts attribute each turn to its captured model;
+    provider-only and missing model evidence is not presented as a model
+  - ordinary sync upgrades prior Codex parser revisions without a reset and a
+    second unchanged sync skips them normally
+- verification plan:
+  - focused Core parser tests and Server route/ingestion/Profile aggregation
+    tests
+  - Core/Server/Web builds or the proportional root build, focused lint, local
+    read-only/source sync inspection, and `git diff --check`
+- documentation plan:
+  - update `ARCHITECTURE.md`, `docs/stats.md`, `docs/multi-agent.md`, and this
+    Task with final behavior, changed files, verification, and the T87 boundary
+- implementation:
+  - added one parameterized Server SQL scope for primary Sessions. A Codex
+    record is excluded from primary discovery only when it has no main-chain
+    Span; direct ID routes and persisted child evidence are unchanged
+  - applied the scope to `/api/sessions`, project score cohorts, `/api/stats`
+    Session/model/recent-tool aggregates, `agent-profile/v1`, and import-source
+    stored counts so all top-level views agree
+  - changed Codex parsing from provider-level `session_meta.model_provider` to
+    per-turn `turn_context.payload.model`; missing turn model remains missing
+  - recognized the observed Codex model IDs `gpt-5.6-sol`,
+    `gpt-5.6-terra`, `gpt-5.6-luna`, and `codex-auto-review` as concrete
+    presentation identities, while `openai` is provider-only; raw pricing
+    lookup remains unchanged
+  - corrected `/api/stats` model tables and distributions to return the
+    reader-facing identity label rather than leaking internal aggregation keys
+    such as `model:gpt-5.6-sol`
+  - advanced the Codex parser fingerprint to `codex-v3`; ordinary sync now
+    refreshes stale provider-labelled rows without resetting local data
+- changed files:
+  - Core: `packages/core/src/parsers/codex.ts`,
+    `packages/core/src/model-identity.ts`, and their focused tests
+  - Server: new `apps/server/src/primary-sessions.ts`,
+    `apps/server/src/ingestion/transcript-adapter.ts`,
+    `apps/server/src/routes/{sessions,stats,profiles,scan}.ts`, plus ingestion,
+    statistics, and Profile route tests
+  - documentation: `ARCHITECTURE.md`, `docs/multi-agent.md`, `docs/stats.md`,
+    and this roadmap
+- verification:
+  - Core Vitest passed 28 files / 202 tests; Server Vitest passed 12 files /
+    47 tests, including mixed-model turns, provider-only absence, `codex-v2`
+    ordinary-sync upgrade and repeat skip, sidechain-only aggregate exclusion,
+    and retained direct database evidence
+  - root `pnpm build` passed Core TypeScript, Server no-emit checking, and the
+    optimized nine-route Web production build
+  - focused Biome passed all T95 files; it reported only the two pre-existing
+    `apps/server/src/routes/sessions.ts` warning/information diagnostics outside
+    the changed query blocks
+  - full Biome remains blocked only by the pre-existing, user-owned
+    `tsconfig.base.json` formatting error; the existing 18 warnings and two
+    informational diagnostics remain unchanged and outside T95
+  - ordinary local Codex sync completed with zero failures and refreshed
+    `codex-v3` rows. Immediately after importing the active user Task, the
+    `agent-profile` project had five primary Codex Sessions and nine retained
+    child records; all prior `openai` LLM-turn labels were replaced by captured
+    `gpt-5.6-*` or `codex-auto-review` evidence
+  - during final smoke another real top-level Codex Task started in the same
+    project. Codex app discovery and `GET /api/sessions` then both reported six
+    project Sessions, proving the scope follows current top-level Tasks rather
+    than hard-coding the original count; `/api/stats` and
+    `/api/profiles/agents` agreed on eleven top-level Codex Sessions globally
+  - local API smoke returned concrete `model` identities for
+    `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`; no primary model group
+    retained raw `openai`, and no `model:`, `provider:`, or `unknown:` internal
+    key leaked into the model display field
+- limitation:
+  - child rollout records remain separate stored evidence and their resource
+    usage is intentionally absent from the parent primary Session aggregate.
+    T87 remains the owner of source-native parent/child persistence and combined
+    relationship-aware attribution
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded

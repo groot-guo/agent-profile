@@ -30,6 +30,7 @@ describe('Agent profile routes', () => {
       insertProfileFixture(database, 'codex', index, 300 + index * 10);
     }
     insertProfileFixture(database, 'zed', 0, 50);
+    insertSidechainOnlyCodexFixture(database);
 
     const response = await app.inject({ method: 'GET', url: '/api/profiles/agents' });
     expect(response.statusCode).toBe(200);
@@ -56,6 +57,14 @@ describe('Agent profile routes', () => {
     ).toMatchObject({
       comparisonStatus: 'insufficient_data',
       relativeCharacteristics: [],
+    });
+    expect(
+      report.profiles.find((profile: { agent: string }) => profile.agent === 'codex'),
+    ).toMatchObject({
+      sample: { sessions: 3 },
+    });
+    expect(database.prepare('SELECT id FROM sessions WHERE id = ?').get('codex-guardian')).toEqual({
+      id: 'codex-guardian',
     });
 
     const single = await app.inject({
@@ -152,4 +161,23 @@ function insertProfileFixture(
       agent === 'codex' ? 1 : 0,
       JSON.stringify({ input: '{}' }),
     );
+}
+
+function insertSidechainOnlyCodexFixture(database: DatabaseConnection): void {
+  database
+    .prepare(
+      `INSERT INTO sessions (
+        id, file_path, agent, start_time, end_time, input_tokens, output_tokens,
+        total_cost, cost_unknown_count, cache_hit_rate, peak_context_tokens,
+        avg_context_tokens
+      ) VALUES (?, ?, 'codex', 1000, 2000, 50, 5, 0, 1, 0, 50, 50)`,
+    )
+    .run('codex-guardian', 'fixture://codex-guardian');
+  database
+    .prepare(
+      `INSERT INTO spans (
+        id, session_id, type, name, start_time, model, is_error, is_sidechain
+      ) VALUES (?, ?, 'llm_turn', 'codex-auto-review', 1000, 'codex-auto-review', 0, 1)`,
+    )
+    .run('codex-guardian-turn', 'codex-guardian');
 }

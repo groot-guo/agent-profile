@@ -449,7 +449,7 @@ describe('session ingestion boundary', () => {
 
     const adapter = new TranscriptSourceAdapter(directory, 'codex');
     const [item] = await adapter.discover();
-    expect(item.revision.fingerprint).toMatch(/^file:codex-v2:/);
+    expect(item.revision.fingerprint).toMatch(/^file:codex-v3:/);
     expect(await importFromSource(adapter, repository)).toMatchObject({
       imported: 0,
       updated: 0,
@@ -479,6 +479,45 @@ describe('session ingestion boundary', () => {
     expect(
       target.prepare('SELECT tags, notes FROM sessions WHERE id = ?').get('migrated-codex-session'),
     ).toEqual({ tags: 'keep-tag', notes: 'keep-note' });
+    target.close();
+  });
+
+  it('refreshes an older Codex parser revision with captured turn models', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-codex-model-'));
+    tempDirectories.push(directory);
+    writeFileSync(join(directory, 'session.jsonl'), createModernCodexTranscript());
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const legacy = createParsedSession('modern-codex-session', 'legacy-span');
+    legacy.meta.agent = 'codex';
+    repository.replace(
+      { parsed: legacy },
+      { kind: 'codex', updatedAt: 1, fingerprint: 'file:codex-v2:1:1' },
+    );
+
+    const adapter = new TranscriptSourceAdapter(directory, 'codex');
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 1,
+      skipped: 0,
+      failed: 0,
+    });
+    expect(
+      target
+        .prepare(
+          "SELECT model FROM spans WHERE session_id = ? AND type = 'llm_turn' ORDER BY start_time",
+        )
+        .all('modern-codex-session'),
+    ).toEqual([{ model: 'gpt-5.6-sol' }]);
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      skipped: 1,
+      failed: 0,
+    });
     target.close();
   });
 
@@ -758,6 +797,45 @@ function createMigratedCodexTranscript(): string {
         type: 'task_complete',
         turn_id: 'external-import-turn-1',
         completed_at: 1_780_000_030,
+      },
+    },
+  ]
+    .map((entry) => JSON.stringify(entry))
+    .join('\n');
+}
+
+function createModernCodexTranscript(): string {
+  return [
+    {
+      timestamp: '2026-07-28T12:00:00.000Z',
+      type: 'session_meta',
+      payload: {
+        id: 'modern-codex-session',
+        cwd: '/tmp/project',
+        source: 'vscode',
+        originator: 'Codex Desktop',
+        model_provider: 'openai',
+      },
+    },
+    {
+      timestamp: '2026-07-28T12:00:01.000Z',
+      type: 'turn_context',
+      payload: { turn_id: 'modern-turn', model: 'gpt-5.6-sol' },
+    },
+    {
+      timestamp: '2026-07-28T12:00:02.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: {
+            input_tokens: 100,
+            cached_input_tokens: 20,
+            output_tokens: 10,
+            reasoning_output_tokens: 5,
+            total_tokens: 135,
+          },
+        },
       },
     },
   ]

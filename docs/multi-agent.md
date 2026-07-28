@@ -36,6 +36,11 @@ require deleting the local database.
   `session_id` retained only as a legacy fallback;
 - child rollouts keep their distinct thread IDs instead of replacing the
   parent Session, and their generated Spans are marked as sidechain evidence;
+- primary Session lists, statistics, project cohorts, Agent Process Profiles,
+  and import-source counts exclude a Codex record only when every stored Span
+  is sidechain evidence. The child record remains available by direct stored ID;
+  current primary aggregates do not yet merge its resource usage into the
+  parent, which remains T87 work;
 - a non-empty `session_meta.cwd` supplies project evidence; if it is absent,
   navigation and statistics use the stable `Codex 会话记录` source category
   while preserving the missing coverage and raw file path;
@@ -46,7 +51,9 @@ require deleting the local database.
   `cwd` under `~/Documents/Codex/YYYY-MM-DD/<session>`; this managed workspace is
   runtime isolation rather than project evidence and uses the same
   `Codex 会话记录` category;
-- response messages/reasoning become LLM evidence;
+- response messages/reasoning become LLM evidence, and each LLM turn uses its
+  own captured `turn_context.payload.model`; `session_meta.model_provider` is
+  retained as provider context only and is not stored as a concrete Span model;
 - custom tool calls pair with their outputs by call ID;
 - token-count events provide available token aggregates. When Codex reports all
   classified fields as zero but a non-zero `total_tokens`, the parser retains
@@ -112,7 +119,9 @@ transcript directory.
 `GET /api/imports/status` returns source label, availability, stored Session
 count, idle/scanning/completed/failed state, bounded result counts, and
 timestamps. It does not return transcript text, full local source paths, or
-source Session IDs. `POST /api/imports` starts a job and returns immediately so
+source Session IDs. The stored Session count uses the same primary-Session
+scope as navigation and statistics; retained Codex child-only records therefore
+do not inflate it. `POST /api/imports` starts a job and returns immediately so
 the UI can retain existing data, poll only while active, and refresh once on
 completion.
 

@@ -7,14 +7,18 @@ export interface ModelIdentity {
 }
 
 const ALIASES = new Map<string, string>([
+  ['codex-auto-review', 'codex-auto-review'],
   ['deepseek-v4-flash', 'deepseek-v4-flash'],
   ['deepseek-v4-pro', 'deepseek-v4-pro'],
   ['deepseek-ai/deepseek-v4-pro', 'deepseek-v4-pro'],
+  ['gpt-5.6-luna', 'gpt-5.6-luna'],
+  ['gpt-5.6-sol', 'gpt-5.6-sol'],
+  ['gpt-5.6-terra', 'gpt-5.6-terra'],
   ['glm-5-2', 'glm-5.2'],
   ['glm-5-1', 'glm-5.1'],
 ]);
 
-const PROVIDER_ONLY = new Set(['litellm']);
+const PROVIDER_ONLY = new Set(['litellm', 'openai']);
 
 // This is presentation/aggregation identity only. Pricing must use the raw
 // source model because an alias alone cannot establish an applicable price.

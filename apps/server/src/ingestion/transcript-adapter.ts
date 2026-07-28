@@ -10,7 +10,7 @@ import {
 } from '@agent-profile/core';
 import type { SourceAdapter, SourceItem } from './types';
 
-const CODEX_PARSER_REVISION = 'codex-v2';
+const CODEX_PARSER_REVISION = 'codex-v3';
 
 export class TranscriptSourceAdapter implements SourceAdapter {
   readonly kind = 'transcript';

@@ -2,6 +2,7 @@ import { classifySessionProject, identifyModel, type ModelIdentityKind } from '@
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { db } from '../db';
+import { primarySessionPredicate } from '../primary-sessions';
 import { SESSION_COLS } from './shared';
 
 interface StatsOverview {
@@ -64,14 +65,16 @@ type StatsQueryConnection = Pick<DatabaseConnection, 'prepare'>;
 export function loadDashboardSpanAggregates(database: StatsQueryConnection = db) {
   const modelRows = database
     .prepare(
-      `SELECT COALESCE(model, 'unknown') as model,
-        COUNT(DISTINCT session_id) as count,
-        SUM(input_tokens + cache_creation_tokens + cache_read_tokens) as inputTokens,
-        SUM(output_tokens) as outputTokens,
-        SUM(cost) as cost
+      `SELECT COALESCE(spans.model, 'unknown') as model,
+        COUNT(DISTINCT spans.session_id) as count,
+        SUM(spans.input_tokens + spans.cache_creation_tokens + spans.cache_read_tokens) as inputTokens,
+        SUM(spans.output_tokens) as outputTokens,
+        SUM(spans.cost) as cost
        FROM spans
-       WHERE type = 'llm_turn'
-       GROUP BY COALESCE(model, 'unknown')`,
+       INNER JOIN sessions ON sessions.id = spans.session_id
+       WHERE spans.type = 'llm_turn'
+         AND ${primarySessionPredicate()}
+       GROUP BY COALESCE(spans.model, 'unknown')`,
     )
     .all() as {
     model: string;
@@ -83,7 +86,11 @@ export function loadDashboardSpanAggregates(database: StatsQueryConnection = db)
   const recentTools = database
     .prepare(
       `WITH recent_sessions AS (
-        SELECT id FROM sessions ORDER BY start_time DESC LIMIT 30
+        SELECT sessions.id
+        FROM sessions
+        WHERE ${primarySessionPredicate()}
+        ORDER BY start_time DESC
+        LIMIT 30
        )
        SELECT spans.name as name, COUNT(*) as count,
          SUM(CASE WHEN spans.is_error = 1 THEN 1 ELSE 0 END) as errors
@@ -121,6 +128,35 @@ export function loadDashboardSpanAggregates(database: StatsQueryConnection = db)
     modelMap,
     recentTools,
   };
+}
+
+export function buildModelViews(
+  modelMap: ReturnType<typeof loadDashboardSpanAggregates>['modelMap'],
+): {
+  byModel: ModelStats[];
+  modelDistribution: DistributionData['modelDistribution'];
+} {
+  const byModel: ModelStats[] = [...modelMap.values()]
+    .map((entry) => ({
+      model: entry.model,
+      kind: entry.kind,
+      rawModels: entry.rawModels,
+      sessions: entry.count,
+      totalInputTokens: entry.inputTokens,
+      totalOutputTokens: entry.outputTokens,
+      totalCost: entry.cost,
+    }))
+    .sort((left, right) => right.sessions - left.sessions);
+  const modelDistribution = [...modelMap.values()]
+    .map((entry) => ({
+      model: entry.model,
+      kind: entry.kind,
+      rawModels: entry.rawModels,
+      count: entry.count,
+      tokens: entry.inputTokens + entry.outputTokens,
+    }))
+    .sort((left, right) => right.count - left.count);
+  return { byModel, modelDistribution };
 }
 
 function buildLogBins(
@@ -244,7 +280,12 @@ function percentile(values: number[], quantile: number): number {
 export function registerStatsRoutes(app: FastifyInstance) {
   app.get('/api/stats', async () => {
     const sessions = db
-      .prepare(`SELECT ${SESSION_COLS} FROM sessions ORDER BY start_time DESC`)
+      .prepare(
+        `SELECT ${SESSION_COLS}
+         FROM sessions
+         WHERE ${primarySessionPredicate()}
+         ORDER BY start_time DESC`,
+      )
       .all() as Record<string, unknown>[];
 
     if (sessions.length === 0) {
@@ -331,17 +372,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
 
     // By model (from spans)
     const { modelMap, recentTools } = loadDashboardSpanAggregates();
-    const byModel: ModelStats[] = [...modelMap.entries()]
-      .map(([model, e]) => ({
-        model,
-        kind: e.kind,
-        rawModels: e.rawModels,
-        sessions: e.count,
-        totalInputTokens: e.inputTokens,
-        totalOutputTokens: e.outputTokens,
-        totalCost: e.cost,
-      }))
-      .sort((a, b) => b.sessions - a.sessions);
+    const { byModel, modelDistribution } = buildModelViews(modelMap);
 
     // Distributions
     const sessionTokens = sessions.map(
@@ -371,16 +402,6 @@ export function registerStatsRoutes(app: FastifyInstance) {
       { label: '1M+', thresholds: [1_000_000, null] },
     ]);
 
-    const modelDist = [...modelMap.entries()]
-      .map(([model, e]) => ({
-        model,
-        kind: e.kind,
-        rawModels: e.rawModels,
-        count: e.count,
-        tokens: e.inputTokens + e.outputTokens,
-      }))
-      .sort((a, b) => b.count - a.count);
-
     const agentDist = [...agentMap.entries()].map(([agent, e]) => ({
       agent,
       count: e.sessions,
@@ -390,7 +411,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
     const distribution: DistributionData = {
       costBins,
       tokenBins,
-      modelDistribution: modelDist,
+      modelDistribution,
       agentDistribution: agentDist,
     };
 
