@@ -92,7 +92,7 @@ export const AGENT_LABELS: Record<string, string> = {
   codex: 'Codex',
   'kimi-code': 'Kimi Code',
   'mimo-code': 'MiMo Code',
-  opencode: 'Open Code',
+  opencode: 'OpenCode',
   copilot: 'Copilot',
   cursor: 'Cursor',
   windsurf: 'Windsurf',

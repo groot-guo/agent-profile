@@ -28,6 +28,8 @@ export type { CodexEntry, CodexParseOptions } from './parsers/codex';
 export { nonActionableCodexExternalHistoryId, parseCodexTranscript } from './parsers/codex';
 export type { MiMoMessage, MiMoPart, MiMoSessionMeta } from './parsers/mimo';
 export { parseMiMoSession } from './parsers/mimo';
+export type { OpenCodeMessage, OpenCodePart, OpenCodeSessionMeta } from './parsers/opencode';
+export { parseOpenCodeSession } from './parsers/opencode';
 export type { ZedThreadInput } from './parsers/zed';
 export { parseZedThread } from './parsers/zed';
 export { COST_CALCULATOR_VERSION, COST_CURRENCY, COST_UNIT, calcCost } from './pricing';

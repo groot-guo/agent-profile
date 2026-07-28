@@ -1791,17 +1791,89 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - result: newly initialized databases seed `qwen-max` at 131,072 tokens;
     existing local values remain unmodified and therefore user-configurable
 
-### T59 opencode session scan adapter
+### T59 OpenCode session scan adapter
 
-- status: planned
+- status: completed
+- started_at: 2026-07-27
+- completed_at: 2026-07-28
 - purpose: opencode stores sessions in `~/.local/share/opencode/opencode.db`
   (SQLite), but no adapter or scan path exists — 0 opencode sessions imported
-- scope: add an `OpenCodeSourceAdapter` reading `opencode.db`, register it in
-  the startup scan alongside MiMo and Zed
-- affected: `apps/server/src/ingestion/`, `apps/server/src/index.ts`,
-  `apps/server/src/routes/scan.ts`
-- acceptance: opencode sessions are discovered, parsed, and imported like other
-  sources
+- scope:
+  - inspect the observed OpenCode SQLite schema read-only and map only fields
+    backed by source evidence into normalized Session/Span records
+  - add an `OpenCodeSourceAdapter` with stable revision fingerprints and lazy
+    changed-record loading through the shared import coordinator/repository
+  - register OpenCode in startup/manual source status and Web source typing
+- dependencies and assumptions:
+  - the local schema/version observed in the source database is authoritative;
+    missing token, cost, timing, parent, or error fields remain uncaptured
+  - OpenCode and MiMo are distinct source databases unless a common stable
+    source identity is explicitly observed
+- risks:
+  - OpenCode schema can evolve; queries must detect incompatible/missing tables
+    without corrupting existing imports or blocking other sources
+  - message parts may contain sensitive content; default APIs must continue to
+    expose only normalized bounded evidence under the existing privacy contract
+- acceptance:
+  - available OpenCode sessions are discovered, fingerprinted, lazily parsed,
+    and atomically imported without adapter-owned Session/Span SQL
+  - unchanged rows skip on a repeated sync; changed rows replace rather than
+    duplicate; unavailable or unsupported databases fail safely
+  - source status, startup scan, rebuild, README/source docs, and focused tests
+    include OpenCode without regressing the existing four sources
+- verification plan:
+  - use an isolated SQLite fixture for discovery, field mapping, fingerprint
+    changes, missing-schema safety, and coordinator skip/update behavior
+  - run Server/Core tests, type checks, lint/build, and a read-only discovery or
+    isolated import against the currently observed local schema
+- documentation plan:
+  - update both READMEs, architecture, multi-agent notes, Chinese overview, and
+    this roadmap with the implemented schema coverage and limitations
+- implementation:
+  - added a read-only `OpenCodeSourceAdapter` for
+    `~/.local/share/opencode/opencode.db`; discovery fingerprints each Session
+    with parser revision, `time_updated`, message count, and part count, while
+    changed records load lazily through the existing coordinator/repository path
+  - added an OpenCode parser that maps source Session identity/title/directory,
+    model, assistant messages, answer/reasoning/tool parts, call IDs, part timing,
+    and source message/parent IDs into normalized Session/Span evidence
+  - preserved Session-level input, cache-write, cache-read, output, and reasoning
+    totals in one `llm_turn` marked `tokenUsageSource=session_aggregate`; cache
+    write maps to cache creation and reasoning is included in normalized output
+    without fabricating per-message token allocation
+  - retained source output/reasoning totals in aggregate Span metadata and left
+    cost calculation to the shared time-aware pricing analyzer instead of trusting
+    the source database's aggregate cost
+  - registered OpenCode in startup sync, manual sync, forced rebuild, bounded
+    import status, Web typing/onboarding/scan copy, and consistent Agent labels
+- verification:
+  - local schema inspection used SQLite read-only mode and confirmed the observed
+    `session`/`message`/`part` tables, required columns, 2 Sessions, 18 messages,
+    and 55 parts without reading or modifying source content
+  - isolated real-source smoke import — passed: scanned/imported 2 Sessions, 0
+    failures, 2 stored OpenCode Sessions, and 2 aggregate-token LLM Spans in an
+    in-memory target database; the source database remained read-only
+  - Core tests — passed: 23 files / 182 tests, including aggregate token classes,
+    source model shape, part timing, parent evidence, tools, and no-assistant skip
+  - Server tests — passed: 10 files / 38 tests, including import/update/unchanged
+    behavior, unavailable database handling, incompatible-schema safety, and the
+    five-source status contract
+  - `pnpm build` — passed: Core/Server TypeScript plus Next.js production build
+  - `pnpm lint` — passed with no errors after formatting changed files; existing
+    repository warnings/informational diagnostics remain outside this Task
+  - stale four-source current-document scan and `git diff --check` — passed
+- completion:
+  - changed files: new Core OpenCode parser/test and Server adapter; Core exports
+    and Agent label; Server import manager, scan registration, and ingestion/route
+    tests; Web import typing, source copy, and Agent label; both READMEs,
+    `ARCHITECTURE.md`, `docs/multi-agent.md`, `docs/zh/OVERVIEW.md`, and this roadmap
+  - intentional limitation: the observed OpenCode schema exposes token totals at
+    Session granularity, so per-message token/context/cost behavior remains
+    uncaptured; schema incompatibility marks the OpenCode source failed without
+    changing existing normalized data
+  - result: OpenCode is now a fifth local import source using the same safe
+    revision, rebuild, analysis, atomic replacement, privacy, and status contracts
+    as the existing adapters
 
 ### T60 codex token extraction fallback
 

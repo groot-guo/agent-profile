@@ -12,6 +12,7 @@ import {
   type ImportSourceId,
 } from '../ingestion/import-job-manager';
 import { MiMoSourceAdapter } from '../ingestion/mimo-adapter';
+import { OpenCodeSourceAdapter } from '../ingestion/opencode-adapter';
 import { SessionRepository } from '../ingestion/session-repository';
 import { TranscriptSourceAdapter } from '../ingestion/transcript-adapter';
 import { ZedSourceAdapter, type ZedSourceAdapterOptions } from '../ingestion/zed-adapter';
@@ -38,6 +39,7 @@ const claudeDirectory =
     : config.defaultScanDir;
 const codexDirectory = '~/.codex/sessions';
 const mimoDatabasePath = `${homedir()}/.local/share/mimocode/mimocode.db`;
+const openCodeDatabasePath = `${homedir()}/.local/share/opencode/opencode.db`;
 
 export const importJobManager = new ImportJobManager(
   [
@@ -71,6 +73,15 @@ export const importJobManager = new ImportJobManager(
       isAvailable: () => pathAvailable(mimoDatabasePath),
       run: (operation) =>
         scanMiMoSessions(mimoDatabasePath, sessionRepository, { force: operation === 'rebuild' }),
+    },
+    {
+      id: 'opencode',
+      label: 'OpenCode',
+      isAvailable: () => pathAvailable(openCodeDatabasePath),
+      run: (operation) =>
+        scanOpenCodeSessions(openCodeDatabasePath, sessionRepository, {
+          force: operation === 'rebuild',
+        }),
     },
   ],
   (source, error) => {
@@ -146,7 +157,7 @@ export function registerScanRoutes(app: FastifyInstance) {
 }
 
 export async function startStartupImports(): Promise<ImportJobStatus> {
-  const sources: ImportSourceId[] = ['zed', 'mimo-code'];
+  const sources: ImportSourceId[] = ['zed', 'mimo-code', 'opencode'];
   if (config.autoScanDir) {
     sources.push('claude-code');
     if (config.autoScanDir === config.defaultScanDir) sources.push('codex');
@@ -181,6 +192,14 @@ export function scanMiMoSessions(
   options: { force?: boolean } = {},
 ): Promise<ScanResult> {
   return importFromSource(new MiMoSourceAdapter(databasePath), repository, options);
+}
+
+export function scanOpenCodeSessions(
+  databasePath?: string,
+  repository = sessionRepository,
+  options: { force?: boolean } = {},
+): Promise<ScanResult> {
+  return importFromSource(new OpenCodeSourceAdapter(databasePath), repository, options);
 }
 
 async function importStatusWithStoredCounts() {

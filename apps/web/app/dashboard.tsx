@@ -220,7 +220,9 @@ export function DashboardView({
             上下文大小 = input + cache_creation + cache_read;Cache 命中率 = cache_read ÷ 上下文大小
           </Line>
           <Line>未知模型的成本不估算,统一显示「未定价」</Line>
-          <Line>启动与“重新扫描”共享任务状态，检查 Claude Code、Codex、Zed 和 MiMo Code</Line>
+          <Line>
+            启动与“重新扫描”共享任务状态，检查 Claude Code、Codex、Zed、MiMo Code 和 OpenCode
+          </Line>
         </div>
       </Card>
     </div>
@@ -322,7 +324,8 @@ function FirstRunOnboarding({
         </SoftButton>
         {available === 0 && (
           <div style={{ marginTop: SP.md, color: C.mute, fontSize: FS.sm }}>
-            暂未发现 Claude Code、Codex、Zed 或 MiMo Code 数据。使用过其中任一工具后再刷新检测。
+            暂未发现 Claude Code、Codex、Zed、MiMo Code 或 OpenCode
+            数据。使用过其中任一工具后再刷新检测。
           </div>
         )}
       </Card>

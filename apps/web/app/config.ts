@@ -10,7 +10,7 @@ export interface ImportResult {
 }
 
 export interface ImportSourceStatus {
-  id: 'claude-code' | 'codex' | 'zed' | 'mimo-code';
+  id: 'claude-code' | 'codex' | 'zed' | 'mimo-code' | 'opencode';
   label: string;
   available: boolean;
   state: 'idle' | 'scanning' | 'completed' | 'failed';

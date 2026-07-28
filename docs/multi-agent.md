@@ -1,8 +1,9 @@
 # Multi-Agent Data Ingestion — Current State
 
-Claude Code, Codex, Zed, and MiMo ingestion are implemented. Every adapter emits
-the shared `ParsedSession`/`Span` model so analysis, diagnosis, statistics, and
-the UI can operate without a separate metric implementation per agent.
+Claude Code, Codex, Zed, MiMo, and OpenCode ingestion are implemented. Every
+adapter emits the shared `ParsedSession`/`Span` model so analysis, diagnosis,
+statistics, and the UI can operate without a separate metric implementation per
+agent.
 
 ## Sources
 
@@ -12,6 +13,7 @@ the UI can operate without a separate metric implementation per agent.
 | Codex | `~/.codex/sessions/.../rollout-*.jsonl` and archived rollouts | JSONL | `session_meta.cwd` |
 | Zed | `~/Library/Application Support/Zed/threads/threads.db` | SQLite + compressed thread payload | `folder_paths` |
 | MiMo | `~/.local/share/mimocode/mimocode.db` | SQLite session/message/part rows | session directory |
+| OpenCode | `~/.local/share/opencode/opencode.db` | SQLite session/message/part rows | session directory |
 
 The shared `sessions.agent` field distinguishes sources. The internal
 `source_kind`, `source_updated_at`, and `source_fingerprint` fields record the
@@ -63,12 +65,27 @@ require deleting the local database.
 - message and part rows are joined and mapped into normalized turns and tools;
 - MiMo uses the stored session directory for project grouping.
 
+### OpenCode
+
+- the database is opened read-only and Session rows provide stable identity,
+  title, directory, model, agent mode, timestamps, and aggregate token fields;
+- message/part rows preserve answer, reasoning, and tool evidence, with tool
+  call IDs retained as normalized tool-call identities and captured part timing
+  plus source message/parent IDs kept as Span evidence;
+- OpenCode stores token totals at Session rather than message granularity, so
+  one aggregate LLM turn is marked `tokenUsageSource=session_aggregate` instead
+  of fabricating per-message usage;
+- cache writes map to cache creation, cache reads remain separate, and source
+  reasoning totals are included in normalized output usage;
+- the analyzer computes cost from model plus the four normalized token classes;
+  a source aggregate cost is not imported as trusted billing evidence.
+
 ## Scanning behavior
 
 At startup, configured Claude/Codex transcript directories and available
-Zed/MiMo databases enter one background import-job manager. The Web “重新扫描”
-action starts the same four-source job. A source already scanning is joined
-rather than started concurrently; failure in one source does not stop another.
+Zed/MiMo/OpenCode databases enter one background import-job manager. The Web
+“重新扫描” action starts the same five-source job. A source already scanning is
+joined rather than started concurrently; failure in one source does not stop another.
 `POST /api/scan` remains available for compatibility when importing an explicit
 transcript directory.
 
@@ -88,12 +105,13 @@ pricing, model-context rows, and migration history remain available for the
 next synchronization.
 File-based sources fingerprint file mtime and size. Zed fingerprints its
 parser-contract revision (`zed-v2` currently), `updated_at`, and payload
-metadata; MiMo fingerprints
-`time_updated` plus message/part counts. Matching database-source revisions are
-skipped before payload decompression or row loading. A changed source session
-is re-normalized and replaces its previous generated rows so aggregates do not
-double count. Advancing the Zed parser-contract revision refreshes Zed-derived
-rows through that same atomic path without touching unrelated sources. A legacy
+metadata; MiMo fingerprints `time_updated` plus message/part counts. OpenCode
+adds its parser-contract revision to the same updated-time and row-count
+fingerprint. Matching database-source revisions are skipped before payload
+decompression or row loading. A changed source session is re-normalized and
+replaces its previous generated rows so aggregates do not double count.
+Advancing a database parser-contract revision refreshes that source's derived
+rows through the same atomic path without touching unrelated sources. A legacy
 row with no fingerprint refreshes once.
 
 All adapters emit lazy source items to one import coordinator. The coordinator
@@ -101,9 +119,9 @@ reports scanned/imported/updated/skipped/failed counts and isolates an item
 failure from unrelated items. Its `skipReasons` distinguish
 `unchanged_revision` from `not_importable`, so an unchanged fingerprint is not
 conflated with a source item that produced no normalized Session. Metadata-only
-Claude/Codex histories and MiMo histories without an assistant turn are counted
-as `not_importable`; captured LLM turns are not rejected merely because their
-reported token usage is zero. One session repository performs analysis and
+Claude/Codex histories and MiMo/OpenCode histories without an assistant turn are
+counted as `not_importable`; captured LLM turns are not rejected merely because
+their reported token usage is zero. One session repository performs analysis and
 transactional session/span replacement for every source while preserving
 user-authored tags and notes. Scan routes contain no persistence SQL. A failure
 to access one optional local source must not make the health endpoint or

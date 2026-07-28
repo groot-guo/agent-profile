@@ -22,7 +22,10 @@ describe('import status routes', () => {
     const response = await app.inject({ method: 'GET', url: '/api/imports/status' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ active: false });
-    expect(response.json().sources).toHaveLength(4);
+    expect(response.json().sources).toHaveLength(5);
+    expect(response.json().sources.map((source: { id: string }) => source.id)).toContain(
+      'opencode',
+    );
     for (const source of response.json().sources) {
       expect(source).toMatchObject({
         id: expect.any(String),

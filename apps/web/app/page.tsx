@@ -480,7 +480,7 @@ export default function HomePage() {
               variant="primary"
               onClick={onScan}
               disabled={scanning}
-              tip="检查 Claude Code、Codex、Zed 与 MiMo Code，导入新增或变化的会话"
+              tip="检查 Claude Code、Codex、Zed、MiMo Code 与 OpenCode，导入新增或变化的会话"
               tipAlign="start"
               style={{ flex: 1 }}
             >

@@ -3,8 +3,8 @@
 [中文说明](README.zh-CN.md) · [Current architecture](ARCHITECTURE.md) · [Roadmap](docs/roadmap.md)
 
 Agent Profile is a local-first profiler for AI coding-agent runtimes. It imports
-local Claude Code, Codex, Zed, and MiMo session data, then explains where time,
-tokens, context, cost, tool calls, and sub-agent work went.
+local Claude Code, Codex, Zed, MiMo, and OpenCode session data, then explains
+where time, tokens, context, cost, tool calls, and sub-agent work went.
 
 It is an analysis tool for observed runtime process. It is not a chat-history
 viewer, a hosted monitoring service, or a universal ranking of agents.
@@ -67,9 +67,10 @@ completion summary instead of a stale generic empty list.
 | Codex | `~/.codex/sessions` | startup and “重新扫描” |
 | Zed | local Zed `threads.db` | startup and “重新扫描” when present |
 | MiMo | local `mimocode.db` | startup and “重新扫描” when present |
+| OpenCode | `~/.local/share/opencode/opencode.db` | startup and “重新扫描” when present |
 
 If the list is empty, use the source-aware first-run panel or click
-**重新扫描**. The same deduplicated job used at startup checks all four sources
+**重新扫描**. The same deduplicated job used at startup checks all five sources
 and reports imported, updated, skipped, and failed counts. The status API and UI
 do not expose transcript text, full local paths, or source Session identifiers.
 
@@ -114,6 +115,14 @@ text-wrapped tool history. Their project and tool evidence is not trustworthy,
 so they do not create mystery project folders or inflate Codex/tool aggregates.
 Previously generated unannotated copies are cleaned up during import; annotated
 rows are retained instead of silently deleting user notes.
+
+OpenCode is read from its SQLite database in read-only mode. Its current schema
+stores token totals at Session granularity rather than per message, so
+Agent Profile keeps one explicitly labelled aggregate LLM turn instead of
+inventing a per-message allocation. Cache writes map to cache creation, cache
+reads remain separate, and reported reasoning tokens are included in output
+usage. Cost is recalculated from the captured model and token classes; the
+source database's aggregate cost is not treated as portable billing evidence.
 
 ## Configuration
 

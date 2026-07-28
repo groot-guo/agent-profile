@@ -3,8 +3,8 @@
 [English README](README.md) · [当前架构](ARCHITECTURE.md) · [任务路线图](docs/roadmap.md)
 
 Agent Profile 是一个本地优先的 AI 编码 Agent Runtime 分析工具。它导入本机的
-Claude Code、Codex、Zed 和 MiMo 会话数据，帮助你理解 Token、上下文、成本、耗时、
-工具调用和子 Agent 的消耗去向。
+Claude Code、Codex、Zed、MiMo 和 OpenCode 会话数据，帮助你理解 Token、上下文、
+成本、耗时、工具调用和子 Agent 的消耗去向。
 
 它分析的是**已观察到的运行过程**，不是聊天记录阅读器、云端监控平台，也不会给 Agent
 给出绝对能力排名。
@@ -58,9 +58,10 @@ Server 启动后会创建一个可观察的后台导入任务。已有数据的�
 | Codex | `~/.codex/sessions` | 启动时与“重新扫描” |
 | Zed | 本机 Zed `threads.db` | 数据库存在时启动扫描与“重新扫描” |
 | MiMo | 本机 `mimocode.db` | 数据库存在时启动扫描与“重新扫描” |
+| OpenCode | `~/.local/share/opencode/opencode.db` | 数据库存在时启动扫描与“重新扫描” |
 
 如果列表为空，可使用首次导入面板或点击首页的**重新扫描**。它与启动导入共享同一个
-按来源去重的任务，检查四种来源并显示新增、更新、跳过和失败数量。状态接口和页面不会
+按来源去重的任务，检查五种来源并显示新增、更新、跳过和失败数量。状态接口和页面不会
 返回原始对话、完整本地路径或来源 Session ID。
 
 首页的**数据管理**明确区分刷新列表、增量同步、强制重建分析和清空本地生成数据。
@@ -74,6 +75,12 @@ Server 启动后会创建一个可观察的后台导入任务。已有数据的�
 URL 保留。来源提供的标题优先；没有标题时，界面只用 Agent、项目和开始时间组成展示
 标题，不再主显不透明 ID，也不会为此读取、预览或持久化 prompt、answer 或 reasoning
 内容。大结果集按批次渲染，不会一次创建全部行。
+
+OpenCode 适配器以只读方式打开本机 SQLite。当前来源把 Token 总量保存在 Session
+聚合字段中，而不是逐消息记录；Agent Profile 因此保留一个明确标记的聚合 LLM 回合，
+不会虚构逐消息分配。cache write 映射为 cache creation，cache read 单独保留，reasoning
+Token 计入 output 使用量。成本仍按模型和四类 Token 重新计算，不把来源数据库中的聚合
+cost 当作可移植的计费证据。
 
 ## 页面怎么用
 

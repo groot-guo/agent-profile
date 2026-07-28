@@ -7,17 +7,18 @@ prompt-review surface is an ephemeral deterministic aid; it does not create
 those entities or an experiment/outcome loop.
 
 Agent Profile is a local-first profiler for AI coding-agent sessions. It imports
-local Claude Code, Codex, Zed, and MiMo data, normalizes their different formats
-into sessions and spans, computes comparable process metrics, and exposes the
-results through a local API and web application.
+local Claude Code, Codex, Zed, MiMo, and OpenCode data, normalizes their different
+formats into sessions and spans, computes comparable process metrics, and
+exposes the results through a local API and web application.
 
 ## System flow
 
 ```text
 Claude Code JSONL ─┐
-Codex rollout JSONL ├─→ source adapters ─→ import coordinator
-Zed SQLite + zstd ──┤                              │
-MiMo SQLite ────────┘                              ▼
+Codex rollout JSONL ┤
+Zed SQLite + zstd ──┼─→ source adapters ─→ import coordinator
+MiMo SQLite ────────┤                              │
+OpenCode SQLite ────┘                              ▼
                                       normalized session/spans
                                                    │
                                                    ▼
@@ -36,10 +37,10 @@ reports additions/updates/failures separately, and asks the repository to
 atomically replace changed normalized sessions. Legacy rows without a
 fingerprint refresh once on their next scan. One in-memory import-job manager
 owns both startup and Web-triggered synchronization for configured
-Claude/Codex directories and available Zed/MiMo databases. It deduplicates each
-source, isolates failures, and exposes per-source state without blocking server
-startup. The compatibility scan API still supports a selected transcript
-directory; the Web uses the shared multi-source job instead.
+Claude/Codex directories and available Zed/MiMo/OpenCode databases. It
+deduplicates each source, isolates failures, and exposes per-source state
+without blocking server startup. The compatibility scan API still supports a
+selected transcript directory; the Web uses the shared multi-source job instead.
 
 The same job manager also owns an explicit forced-rebuild operation. Rebuild
 bypasses matching source fingerprints but keeps the normal lazy load, analysis,
@@ -111,6 +112,7 @@ explicit incremental batches for larger result sets.
 | Codex | dated rollout JSONL | file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), project metadata, response items, events, and call IDs |
 | Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `time_updated` plus message/part counts; changed session records are loaded lazily |
+| OpenCode | `opencode.db` SQLite database | parser-contract version plus `time_updated` and message/part counts; changed Session rows and their message/part evidence are loaded lazily from a read-only connection |
 
 All adapters emit the same session/span shape so downstream metrics and UI do
 not need agent-specific logic for basic analysis. Coverage can still vary by
@@ -128,6 +130,17 @@ The Zed fingerprint includes a parser-contract revision in addition to source
 metadata. When Zed normalization changes, advancing that revision makes the
 ordinary coordinator atomically replace existing derived rows once; it does not
 require deleting the local analysis database or re-importing unrelated sources.
+
+The current OpenCode schema stores input, output, reasoning, cache-read, and
+cache-write totals on the Session row. The parser maps cache write to cache
+creation and keeps cache read separate. Because those totals are not attached
+to individual messages, it creates one `llm_turn` with
+`tokenUsageSource=session_aggregate`; answer, reasoning, and tool parts remain
+child evidence with their captured part timing and source message/parent IDs,
+but no per-message token allocation is invented. Reasoning tokens are included
+in normalized output usage. Portable cost is recomputed by the analyzer from
+the captured model and four normalized token classes rather than trusting the
+source Session's aggregate cost field.
 
 Codex Desktop can materialize Claude or other external-Agent history as rollout
 JSONL with `external-import-turn-*` IDs, no ordinary `turn_context`, a shared
@@ -187,6 +200,10 @@ from available source histories when recovery is necessary.
   `tokenUsageClassified=false`. The input/cache/output split and resulting
   input-priced cost for such a turn are fallback approximations, not
   source-classified usage.
+- OpenCode currently exposes token classes only at Session granularity. Its one
+  aggregate LLM Span is labelled `tokenUsageSource=session_aggregate`; this
+  preserves observed totals without implying per-message token or context
+  behavior that the source did not capture.
 - Span cost uses all four token classes and the model price effective at the
   span's `startTime`. The current contract is `CNY` per million tokens.
   `costCurrency`, `pricingEffectiveFrom`, `costCalculatedAt`, and

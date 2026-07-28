@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase, lookupPricing } from '../database';
 import { importFromSource } from '../ingestion/import-coordinator';
 import { MiMoSourceAdapter } from '../ingestion/mimo-adapter';
+import { OpenCodeSourceAdapter } from '../ingestion/opencode-adapter';
 import { SessionRepository } from '../ingestion/session-repository';
 import { TranscriptSourceAdapter } from '../ingestion/transcript-adapter';
 import type { SourceAdapter } from '../ingestion/types';
@@ -220,13 +221,15 @@ describe('session ingestion boundary', () => {
     database.close();
   });
 
-  it('refreshes Zed and MiMo sessions when their source revisions change', async () => {
+  it('refreshes database-backed sessions when their source revisions change', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-profile-ingestion-'));
     tempDirectories.push(directory);
     const zedPath = join(directory, 'threads.db');
     const mimoPath = join(directory, 'mimo.db');
+    const openCodePath = join(directory, 'opencode.db');
     createZedFixture(zedPath);
     createMiMoFixture(mimoPath);
+    createOpenCodeFixture(openCodePath);
 
     const target = createDatabase(':memory:');
     const repository = new SessionRepository(target, (model, at) =>
@@ -245,6 +248,13 @@ describe('session ingestion boundary', () => {
       updated: 0,
       skipped: 0,
     });
+    expect(
+      await importFromSource(new OpenCodeSourceAdapter(openCodePath), repository),
+    ).toMatchObject({
+      imported: 1,
+      updated: 0,
+      skipped: 0,
+    });
 
     expect(
       await importFromSource(
@@ -253,6 +263,13 @@ describe('session ingestion boundary', () => {
       ),
     ).toMatchObject({ imported: 0, updated: 0, skipped: 1 });
     expect(await importFromSource(new MiMoSourceAdapter(mimoPath), repository)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      skipped: 1,
+    });
+    expect(
+      await importFromSource(new OpenCodeSourceAdapter(openCodePath), repository),
+    ).toMatchObject({
       imported: 0,
       updated: 0,
       skipped: 1,
@@ -266,6 +283,9 @@ describe('session ingestion boundary', () => {
     const mimo = new Database(mimoPath);
     mimo.prepare('UPDATE session SET title = ?, time_updated = ?').run('updated', 2000);
     mimo.close();
+    const opencode = new Database(openCodePath);
+    opencode.prepare('UPDATE session SET title = ?, time_updated = ?').run('updated', 2000);
+    opencode.close();
 
     expect(
       await importFromSource(
@@ -278,6 +298,13 @@ describe('session ingestion boundary', () => {
       updated: 1,
       skipped: 0,
     });
+    expect(
+      await importFromSource(new OpenCodeSourceAdapter(openCodePath), repository),
+    ).toMatchObject({
+      imported: 0,
+      updated: 1,
+      skipped: 0,
+    });
 
     expect(target.prepare('SELECT name FROM sessions WHERE id = ?').get('zed-session')).toEqual({
       name: 'updated',
@@ -285,6 +312,41 @@ describe('session ingestion boundary', () => {
     expect(target.prepare('SELECT name FROM sessions WHERE id = ?').get('mimo-session')).toEqual({
       name: 'updated',
     });
+    expect(
+      target.prepare('SELECT name FROM sessions WHERE id = ?').get('opencode-session'),
+    ).toEqual({
+      name: 'updated',
+    });
+    target.close();
+  });
+
+  it('does not discover an unavailable OpenCode database', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-opencode-missing-'));
+    tempDirectories.push(directory);
+
+    await expect(
+      new OpenCodeSourceAdapter(join(directory, 'missing.db')).discover(),
+    ).resolves.toEqual([]);
+  });
+
+  it('fails an incompatible OpenCode schema without changing stored analysis', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-opencode-incompatible-'));
+    tempDirectories.push(directory);
+    const openCodePath = join(directory, 'opencode.db');
+    const source = new Database(openCodePath);
+    source.exec('CREATE TABLE unsupported (id TEXT PRIMARY KEY)');
+    source.close();
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+
+    await expect(
+      importFromSource(new OpenCodeSourceAdapter(openCodePath), repository),
+    ).rejects.toThrow();
+    expect(target.prepare('SELECT COUNT(*) AS count FROM sessions').get()).toEqual({ count: 0 });
+    expect(target.prepare('SELECT COUNT(*) AS count FROM spans').get()).toEqual({ count: 0 });
     target.close();
   });
 
@@ -631,6 +693,80 @@ function createMiMoFixture(path: string): void {
         tokens: { input: 10, output: 5, reasoning: 0 },
         time: { created: 1000, completed: 1100 },
       }),
+    );
+  database.close();
+}
+
+function createOpenCodeFixture(path: string): void {
+  const database = new Database(path);
+  database.exec(`
+    CREATE TABLE session (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      directory TEXT NOT NULL,
+      model TEXT,
+      agent TEXT,
+      tokens_input INTEGER NOT NULL,
+      tokens_output INTEGER NOT NULL,
+      tokens_reasoning INTEGER NOT NULL,
+      tokens_cache_read INTEGER NOT NULL,
+      tokens_cache_write INTEGER NOT NULL,
+      time_created INTEGER NOT NULL,
+      time_updated INTEGER NOT NULL
+    );
+    CREATE TABLE message (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      time_created INTEGER NOT NULL,
+      data TEXT NOT NULL
+    );
+    CREATE TABLE part (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      time_created INTEGER NOT NULL,
+      data TEXT NOT NULL
+    );
+  `);
+  database
+    .prepare(
+      `INSERT INTO session (
+        id, title, directory, model, agent, tokens_input, tokens_output,
+        tokens_reasoning, tokens_cache_read, tokens_cache_write, time_created, time_updated
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'opencode-session',
+      'initial',
+      '/tmp/project',
+      JSON.stringify({ providerID: 'opencode', id: 'fixture-model' }),
+      'build',
+      10,
+      5,
+      1,
+      3,
+      2,
+      1000,
+      1000,
+    );
+  database
+    .prepare('INSERT INTO message (id, session_id, time_created, data) VALUES (?, ?, ?, ?)')
+    .run(
+      'opencode-assistant',
+      'opencode-session',
+      1000,
+      JSON.stringify({ role: 'assistant', time: { created: 1000, completed: 1100 } }),
+    );
+  database
+    .prepare(
+      'INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, ?, ?, ?)',
+    )
+    .run(
+      'opencode-answer',
+      'opencode-assistant',
+      'opencode-session',
+      1000,
+      JSON.stringify({ type: 'text', text: 'fixture answer' }),
     );
   database.close();
 }

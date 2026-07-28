@@ -18,13 +18,14 @@ Task 与 Outcome 数据，它目前不能仅凭过程指标判断最终交付是
 
 ## 当前数据源与数据流
 
-当前已接入 Claude Code、Codex、Zed 和 MiMo：
+当前已接入 Claude Code、Codex、Zed、MiMo 和 OpenCode：
 
 ```text
 Claude Code JSONL ─┐
-Codex rollout JSONL ├→ 来源适配器 → 导入协调器 → 统一 Session/Span
-Zed SQLite + zstd ──┤                                   ↓
-MiMo SQLite ────────┘                           分析 + 会话仓储
+Codex rollout JSONL ┤
+Zed SQLite + zstd ──┼→ 来源适配器 → 导入协调器 → 统一 Session/Span
+MiMo SQLite ────────┤                                   ↓
+OpenCode SQLite ────┘                           分析 + 会话仓储
                                                         ↓
                                                      SQLite
                                                         ↓
@@ -33,8 +34,8 @@ MiMo SQLite ────────┘                           分析 + 会�
 
 各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
 每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新
-和失败；会话仓储在同一事务中替换 Session/Span，并保留用户标签与备注。Zed 与 MiMo
-的来源版本变化后会重新导入，不再因为 Session 已存在而永久跳过。
+和失败；会话仓储在同一事务中替换 Session/Span，并保留用户标签与备注。Zed、MiMo 与
+OpenCode 的来源版本变化后会重新导入，不再因为 Session 已存在而永久跳过。
 启动导入与首页“重新扫描”共享同一个按来源去重的任务状态；同一来源不会并发重复扫描，
 单个来源失败也不会阻断其他来源。状态接口只返回来源名称、可用性、已存数量、阶段、
 汇总计数和时间，不返回原始内容、完整本地路径或来源 Session ID。
@@ -50,11 +51,16 @@ Codex Desktop 物化的外部 Agent 历史可通过 `external-import-turn-*`、�
 原始项目、模型、Token 分类和结构化工具证据不可信，导入器将其报告为
 `excluded_non_actionable`，不生成 Session。Codex 解析版本指纹会让旧文件重新经过一次
 判断；仓储只清理没有标签或备注的旧派生 Session，有用户标注时保留并报告失败。
+OpenCode 数据库以只读方式打开。当前 Session 行保存 input、output、reasoning、cache read
+和 cache write 聚合；导入器把 cache write 映射为 cache creation、单独保留 cache read，
+并把 reasoning Token 计入 output。由于来源没有逐消息 Token，系统只创建一个标记为
+`tokenUsageSource=session_aggregate` 的聚合 LLM Span，不虚构逐消息分配；成本仍按模型与
+四类 Token 重新计算。
 
 ## 当前能力
 
 - 分别保留 input、cache creation、cache read、output 四类 token。
-- 首次使用时展示四个数据源的发现、导入、失败与重试状态；已有数据在后台同步期间仍可
+- 首次使用时展示五个数据源的发现、导入、失败与重试状态；已有数据在后台同步期间仍可
   浏览，同步完成后只刷新一次。
 - 在按时间边界组织的扁平最近列表中浏览 Session；带数量的精确项目选择与不限时间/
   最近 1/7/30/90 天可和 Agent、标题/项目/路径搜索、异常/未定价快捷视图及排序组合。
@@ -159,7 +165,7 @@ Task 标记为 `completed`。
   `HOST` 只适合可信网络，启动时会输出警告。
 - Web 开发产物写入 `apps/web/.next-dev`，生产构建仍写入 `apps/web/.next`，因此
   运行中的 `pnpm dev` 不会再被 `pnpm build` 替换 chunk。
-- 首页“重新扫描”与启动导入共享任务管理器，检查 Claude Code、Codex、Zed 和 MiMo，
+- 首页“重新扫描”与启动导入共享任务管理器，检查 Claude Code、Codex、Zed、MiMo 和 OpenCode，
   并按来源展示新增、更新、跳过与失败数量。
 - 首页“数据管理”提供强制重建和独立确认的本地生成数据清空；重建是 parser/指标变化后
   的推荐恢复方式，清空前应停止 Server 并备份 `apps/server/trace.db` 或

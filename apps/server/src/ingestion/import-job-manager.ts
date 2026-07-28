@@ -1,6 +1,6 @@
 import type { ScanResult } from '@agent-profile/core';
 
-export type ImportSourceId = 'claude-code' | 'codex' | 'zed' | 'mimo-code';
+export type ImportSourceId = 'claude-code' | 'codex' | 'zed' | 'mimo-code' | 'opencode';
 export type ImportSourceState = 'idle' | 'scanning' | 'completed' | 'failed';
 export type ImportOperation = 'sync' | 'rebuild';
 
