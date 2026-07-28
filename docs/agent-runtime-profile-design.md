@@ -1,6 +1,6 @@
 # Agent Runtime Profile 设计方案
 
-> 状态：Proposal
+> 状态：Proposal；Phase 1 基础和 Phase 2 数据模型已由 T49 实现，自动比较与 Runtime feedback 仍未实现
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
 ## 文档地位
@@ -50,12 +50,12 @@ flowchart LR
 |---|---|---|
 | Event / Span | 一次 LLM 回合、工具调用、思考、子 Agent 或结果事件 | 已有 |
 | Session | 一次连续的 Agent 执行 | 已有 |
-| Task | 用户关心的交付单元；可由一个或多个 session 完成 | 缺失 |
-| Configuration | 本次运行采用的模型、规则、工具策略和提示模板版本 | 缺失；已有无持久化的提示词结构审查 |
-| Outcome | 可验证的任务结果与人工反馈 | 缺失 |
+| Task | 用户关心的交付单元；可由一个或多个 session 完成 | 已实现本地持久化与 Session 关联 |
+| Configuration | 本次运行采用的模型、规则、工具策略和提示模板版本 | 已实现版本/Hash 快照；规则/prompt 原文不复制 |
+| Outcome | 可验证的任务结果与人工反馈 | 已实现显式可空字段与结构化证据 |
 | Profile | 基于 Session、Configuration、Outcome 的可比较运行画像 | 部分已有 |
-| Cohort | 可公平比较的任务集合，如同项目的“功能实现”任务 | 缺失 |
-| Experiment | 对同类任务比较不同配置版本的受控试验 | 缺失 |
+| Cohort | 可公平比较的任务集合，如同项目的“功能实现”任务 | 已实现定义与生命周期模型，统计比较未实现 |
+| Experiment | 对同类任务比较不同配置版本的受控试验 | 已实现受护栏记录模型，自动评估未实现 |
 
 **Session 是原始过程，Profile 是可行动的解释。** 原始调用记录只能作为证据层，不能替代结果评价或建议。
 
@@ -225,9 +225,9 @@ Prompt 是 Configuration 的一个可实验变量，不是产品中心。
 
 这仍不等于经过验证的提示词优化。正式推荐提示词或 Agent
 规则的前提仍是同类 cohort 有足够样本，并同时满足质量 guardrail。例如推荐“要求运行
-测试”之前，需证明测试通过率/返工率改善且成本没有超过上限。目前 Task、Configuration
-Snapshot、Outcome、Cohort 和 Experiment 均未实现，因此页面建议必须被视为下一次
-实验的假设。
+测试”之前，需证明测试通过率/返工率改善且成本没有超过上限。T49 已实现 Task、
+Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，但尚未实现最低
+样本统计或自动实验判断，因此页面建议仍必须被视为下一次实验的假设。
 
 ## 9. 分期交付
 
@@ -246,6 +246,8 @@ Snapshot、Outcome、Cohort 和 Experiment 均未实现，因此页面建议必�
 
 ### Phase 1：Task 与 Outcome（核心）
 
+当前进度：T49 已实现实体、关联、Outcome 录入、Task 工作区与 `task-profile/v1` JSON。
+
 - 引入 Task、Configuration Snapshot、Outcome、Task-Session 关联。
 - 支持 test/build/lint/Git/human rating 的结果录入。
 - 生成 Task Profile Report，并支持导出 JSON。
@@ -253,6 +255,9 @@ Snapshot、Outcome、Cohort 和 Experiment 均未实现，因此页面建议必�
 验收：可判断某个配置在同类任务中是否提高了完成质量，且不会将“未采集结果”误判为失败。
 
 ### Phase 2：Cohort 与 Experiment
+
+当前进度：T49 已实现 cohort/experiment 定义、证据状态和因果决策护栏；自动分布比较、
+最低样本、guardrail 计算和回归检测仍未实现。
 
 - 定义 cohort：项目、任务类型、复杂度区间、Agent/模型。
 - 支持控制组/候选配置对比，展示主要指标与 guardrail。

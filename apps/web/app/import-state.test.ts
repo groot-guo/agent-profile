@@ -67,10 +67,15 @@ describe('import experience state', () => {
       pricingRows: 2,
       modelContextRows: 3,
       migrations: 4,
+      tasks: 2,
+      outcomes: 1,
+      configSnapshots: 2,
+      cohorts: 1,
+      experiments: 1,
       resetConfirmation: 'RESET LOCAL DATA',
     };
     expect(canResetData('RESET', summary)).toBe(false);
     expect(canResetData('RESET LOCAL DATA', summary)).toBe(true);
-    expect(summarizeReset({ sessions: 4, spans: 12 })).toContain('定价、模型窗口和迁移记录已保留');
+    expect(summarizeReset({ sessions: 4, spans: 12 })).toContain('任务验证和迁移记录已保留');
   });
 });

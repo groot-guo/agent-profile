@@ -76,6 +76,12 @@ URL 保留。来源提供的标题优先；没有标题时，界面只用 Agent�
 标题，不再主显不透明 ID，也不会为此读取、预览或持久化 prompt、answer 或 reasoning
 内容。大结果集按批次渲染，不会一次创建全部行。
 
+**任务**页面在 Session 过程分析之上补充本地交付证据。一个 Task 可关联多个 Session、
+绑定只保存版本/Hash 的 Configuration Snapshot，并记录 build/test/lint/Git/人工 Outcome。
+缺失 Outcome 会明确保持“未采集”，不会变成失败。`task-profile/v1` 只聚合当前可用的关联
+Session，并展示覆盖度与限制。Cohort 和 Experiment API 可保存比较定义与证据状态，但
+不会仅凭过程指标推断因果赢家。
+
 OpenCode 适配器以只读方式打开本机 SQLite。当前来源把 Token 总量保存在 Session
 聚合字段中，而不是逐消息记录；Agent Profile 因此保留一个明确标记的聚合 LLM 回合，
 不会虚构逐消息分配。cache write 映射为 cache creation，cache read 单独保留，reasoning
@@ -86,6 +92,7 @@ cost 当作可移植的计费证据。
 
 - **会话**：在扁平最近列表中按项目和 Agent 筛选数据；进入会话后可分别查看概览、上下文与成本、工具与
   链路、规范化运行证据。
+- **任务**：把多个 Session 和配置版本关联到显式交付 Outcome，并查看带覆盖度的 Task Profile。
 - **画像**：在样本量和字段覆盖度限制下，对比 Agent 的运行指纹。“高于/低于”只表示
   观察到的行为差异，不代表谁更好。
 - **迭代**：本地检查任务提示词的目标、范围、验收、约束、上下文和验证结构。结合运行
@@ -125,8 +132,9 @@ AUTO_SCAN_DIR="" pnpm dev
   transcript 数据。
 - 默认数据库位于 `apps/server/trace.db`。如需文件级备份，请先停止 Server 再复制。
 - parser 或指标变化后的常规恢复方式是“强制重建”。危险区清空会删除全部生成的
-  Session/Span（包括标签和备注），但保留定价、模型窗口配置和 migration，随后可从
-  当前可用来源重新同步。
+  Session/Span（包括标签和备注），但保留定价、模型窗口、migration、Task、Outcome、
+  Configuration Snapshot、cohort、experiment 和逻辑 Session 关联，随后可从当前可用来源
+  重新同步运行证据。
 - 提示词审查是临时计算：提示词文本不会写入数据库，也不会由该功能发送给语义模型服务。
 - 不同来源的数据覆盖度不同。字段缺失表示“未采集”，不表示零、成功或失败。
 
@@ -170,8 +178,8 @@ pnpm dev
 ## 当前产品边界
 
 - 目前没有桌面安装包；`pnpm start` 是受支持的非 watch 本地启动入口。
-- Task、Configuration Snapshot、Outcome、cohort、experiment 尚未实现。因此它能解释
-  过程行为，但不能证明某次会话是否正确完成了任务。
+- Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型。
+  自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化
   任务树仍是后续能力。
 - 历史很大时，仍需发现文件并整体替换发生变化的 Session；append-only 解析和超大 Session
@@ -197,5 +205,6 @@ pnpm lint
 - [当前架构](ARCHITECTURE.md)：已实现的数据流、API、存储与指标定义
 - [中文总览](docs/zh/OVERVIEW.md)：中文当前实现说明
 - [多 Agent 导入](docs/multi-agent.md)：各来源的归一化方式与覆盖度差异
+- [Task 与 Outcome 基础](docs/tasks-outcomes.md)：持久化、隐私、重置、Task Profile 与实验护栏
 - [路线图](docs/roadmap.md)：Task 状态与验证证据
-- [未来 Runtime 设计](docs/agent-runtime-profile-design.md)：未来方案，不是当前能力
+- [Runtime 设计](docs/agent-runtime-profile-design.md)：已实现阶段和剩余未来方案

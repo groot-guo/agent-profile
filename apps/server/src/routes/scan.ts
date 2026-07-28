@@ -143,6 +143,11 @@ export function registerScanRoutes(app: FastifyInstance) {
         pricingRows: before.pricingRows,
         modelContextRows: before.modelContextRows,
         migrations: before.migrations,
+        tasks: before.tasks,
+        outcomes: before.outcomes,
+        configSnapshots: before.configSnapshots,
+        cohorts: before.cohorts,
+        experiments: before.experiments,
       },
     };
   });
@@ -258,6 +263,11 @@ function dataManagementSummary() {
     pricingRows: count('pricing'),
     modelContextRows: count('model_context'),
     migrations: count('schema_migrations'),
+    tasks: count('tasks'),
+    outcomes: count('task_outcomes'),
+    configSnapshots: count('config_snapshots'),
+    cohorts: count('cohorts'),
+    experiments: count('experiments'),
     resetConfirmation: RESET_CONFIRMATION,
   };
 }

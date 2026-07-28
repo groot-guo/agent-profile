@@ -93,10 +93,20 @@ persisted and does not inspect or preview prompt, answer, or reasoning content.
 Large result sets render in bounded batches instead of creating every row at
 once.
 
+The **任务** workspace adds local delivery evidence above Session analysis. A
+Task can link multiple Sessions, attach version/hash-only Configuration
+Snapshots, and record build/test/lint/Git/human Outcome fields. Missing Outcome
+fields remain visibly uncollected rather than failed. `task-profile/v1`
+aggregates available linked Sessions with explicit coverage and limitations.
+Cohort and experiment APIs persist comparison definitions and evidence state,
+but do not infer a causal winner from process metrics alone.
+
 ## What the main views do
 
 - **会话** — browse a flat recent Session list by project and Agent; open a session for
   diagnosis, context/cost, tools/chain, or normalized evidence.
+- **任务** — connect Sessions and configuration versions to explicit delivery
+  Outcomes and inspect a coverage-aware Task Profile.
 - **画像** — compare observed Agent runtime fingerprints with sample-size and
   coverage limits. “Higher” or “lower” describes behavior, not quality.
 - **迭代** — review a task prompt locally for goal, scope, acceptance,
@@ -151,8 +161,9 @@ AUTO_SCAN_DIR="" pnpm dev
   a file-level backup of it.
 - A forced rebuild is the normal recovery path after parser or metric changes.
   The danger-zone reset deletes every generated Session/Span, including tags
-  and notes, but retains pricing, model-context configuration, and migration
-  records so the database can be synchronized again from available sources.
+  and notes, but retains pricing, model-context configuration, migration,
+  Tasks, Outcomes, Configuration Snapshots, cohorts, experiments, and their
+  logical Session links so runtime evidence can be synchronized again.
 - Prompt review is ephemeral: prompt text is not written to the database and is
   not sent to a semantic provider by that feature.
 - Source data varies. A missing field means “not captured”, not zero, success,
@@ -207,8 +218,9 @@ pnpm dev
 - There is no packaged desktop application yet. `pnpm start` is the supported
   non-watch local launcher.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
-  not implemented. The product can explain observed process behavior but cannot
-  prove whether a session delivered a correct result.
+  local foundations. Automated cohort statistics, regression detection,
+  causal experiment conclusions, and Runtime feedback/SDK integration are not
+  implemented.
 - Cross-file parent/child Codex threads remain separate Sessions. Their
   sidechain evidence is preserved, but a full persisted task graph is future
   work.
@@ -241,6 +253,8 @@ that a runtime metric is wrong.
 - [Chinese overview](docs/zh/OVERVIEW.md) — current implementation in Chinese
 - [Multi-agent ingestion](docs/multi-agent.md) — source-specific normalization
   behavior and coverage limits
+- [Task and Outcome foundations](docs/tasks-outcomes.md) — persistence, privacy,
+  reset behavior, Task Profile, and experiment guardrails
 - [Roadmap](docs/roadmap.md) — Task status and verification evidence
-- [Future runtime design](docs/agent-runtime-profile-design.md) — proposal, not
-  current behavior
+- [Runtime design](docs/agent-runtime-profile-design.md) — implemented phase
+  status and remaining proposal

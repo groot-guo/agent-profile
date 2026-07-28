@@ -2,8 +2,8 @@
 
 > 本文描述当前已经实现的能力，并与 [中文 README](../../README.zh-CN.md)、
 > `README.md`、`ARCHITECTURE.md` 保持一致。
-> 面向 Agent Runtime 的 Task、Outcome、Configuration 与反馈闭环仍是
-> `docs/agent-runtime-profile-design.md` 中的未来方案。
+> Task、Outcome、Configuration Snapshot、Cohort、Experiment 与 Task Profile
+> 已实现本地基础；自动实验评估和 Runtime feedback 仍是未来方案。
 
 ## 定位
 
@@ -12,9 +12,10 @@ Agent Profile 是面向 AI 编码 Agent Runtime 的本地离线 profiler。它�
 
 当前运行证据以 Session 为分析中心，已经可以回答 token、成本、时间、上下文、工具和
 子 Agent 消耗在哪里，以及过程中发生了哪些重复、失败和退化。系统也可在不保存原文的
-前提下检查提示词结构，并把缺口与可选 Agent 画像组合成迭代假设。由于还没有统一的
-Task 与 Outcome 数据，它目前不能仅凭过程指标判断最终交付是否正确，也不能直接
-宣称某个 Agent 全面优于另一个 Agent 或某次提示词改动一定有效。
+前提下检查提示词结构，并把缺口与可选 Agent 画像组合成迭代假设。Task 页面可关联多个
+Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度的 `task-profile/v1`。
+但系统仍不能仅凭过程指标判断最终交付是否正确，也不能直接宣称某个 Agent 全面优于
+另一个 Agent 或某次配置改动一定有效。
 
 ## 当前数据源与数据流
 
@@ -82,12 +83,14 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   维度比较 Agent；每项均包含样本量、覆盖度和解释边界。
 - 生成 `prompt-review/v1` 和 `iteration-hints/v1`：确定性检查目标、范围、验收、
   约束、上下文和验证结构，并可选择结合 Agent 画像提出待验证的调整假设。
+- 在“任务”工作区关联多个 Session 与版本/Hash 配置快照，记录显式 Outcome，并生成
+  带 Session/Outcome/成本覆盖度和限制的 `task-profile/v1`。
 - 维护模型定价与上下文窗口，并在定价变化后重新计算历史成本。
 - 导出 Session 数据和分析报告。
 
 ## 数据模型
 
-当前 SQLite 由 `apps/server/src/database.ts` 管理五张内部表：
+当前 SQLite 由 `apps/server/src/database.ts` 管理十一张内部表：
 
 - `sessions`：来源类型、更新时间与版本指纹、Agent/模型/项目、四类 token 聚合、
   上下文、缓存、成本、耗时、标签和备注。
@@ -96,6 +99,12 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - `pricing`：模型四类 token 的人民币/百万 token 单价、单位与生效时间。
 - `model_context`：模型上下文窗口。
 - `schema_migrations`：按版本记录已执行的增量 schema 迁移。
+- `tasks`：本地任务身份、项目、类型、状态、复杂度与内容保存模式。
+- `config_snapshots`：Agent/模型、规则/工具/模板版本与来源 Hash，不复制规则或 prompt 原文。
+- `task_sessions`：一个 Task 到多个 Session、角色和可选配置快照的逻辑关联。
+- `task_outcomes`：可空的 build/test/lint/Git/人工结果与结构化证据；空值表示未采集。
+- `cohorts`：比较范围定义与生命周期。
+- `experiments`：控制/候选配置、主要指标、guardrail、证据状态与受约束决策。
 
 兼容的新字段通过有序、幂等的 migration 补充；正常升级不应依赖删除 `trace.db`。
 任何 schema 修改都必须在对应 Task 中写明 migration/backfill 与验证方案。
@@ -130,12 +139,13 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 能以渐进披露方式检查规范化 Session/工具证据及其缺失项；
 - 能提供带样本量和覆盖度的 Agent 运行画像、相对比较和人工复盘证据；
 - 能提供无持久化的提示词结构审查和带护栏的下一步实验假设；
-- 尚未采集 Task Outcome，因此画像不能判断最终交付是否正确。
+- 能持久化 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment，并生成
+  `task-profile/v1`；缺失 Outcome 与失败严格区分。
+- 自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback 尚未实现。
 
 未来方案：
 
-- 引入 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment；
-- 生成稳定的 Task Profile Report；
+- 为 cohort/experiment 增加最低样本统计、guardrail 与回归检测；
 - 让 Agent Runtime 在任务结束后或运行中消费经过验证的建议；
 - 把提示词和 Agent 规则作为可实验配置，而不是把“改提示词”作为唯一目标。
 

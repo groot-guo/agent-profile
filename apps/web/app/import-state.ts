@@ -52,5 +52,5 @@ export function canResetData(confirmation: string, summary: DataManagementSummar
 }
 
 export function summarizeReset(deleted: { sessions: number; spans: number }): string {
-  return `已删除 ${deleted.sessions} 个会话、${deleted.spans} 个 Span；定价、模型窗口和迁移记录已保留`;
+  return `已删除 ${deleted.sessions} 个会话、${deleted.spans} 个 Span；定价、模型窗口、任务验证和迁移记录已保留`;
 }

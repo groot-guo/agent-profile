@@ -1,10 +1,12 @@
 # Agent Profile — Current Architecture
 
-This document describes the implementation that exists today. Future
-Task/Outcome/Configuration entities and runtime feedback APIs are proposals in
-`docs/agent-runtime-profile-design.md`, not current behavior. The implemented
-prompt-review surface is an ephemeral deterministic aid; it does not create
-those entities or an experiment/outcome loop.
+This document describes the implementation that exists today.
+Task/Outcome/Configuration persistence, Task-Session links, cohort/experiment
+definitions, and `task-profile/v1` are implemented foundations. Automated
+cohort statistics, causal experiment evaluation, regression decisions, and
+runtime feedback APIs remain proposals in `docs/agent-runtime-profile-design.md`.
+The prompt-review surface remains ephemeral and does not automatically create
+or modify those persisted records.
 
 Agent Profile is a local-first profiler for AI coding-agent sessions. It imports
 local Claude Code, Codex, Zed, MiMo, and OpenCode data, normalizes their different
@@ -50,6 +52,9 @@ replacement, and unavailable sources are not deleted. Full generated-data
 reset is deliberately separate: it requires an exact confirmation phrase,
 cannot run during an import job, deletes `spans` and `sessions` in one
 transaction, and retains `pricing`, `model_context`, and `schema_migrations`.
+Task, Outcome, Configuration Snapshot, cohort, experiment, and logical
+Task-Session records are also retained so imported runtime evidence can be
+restored later without losing delivery context.
 
 Scan results also expose structured `skipReasons`: `unchanged_revision` means a
 matching source fingerprint required no work, while `not_importable` means the
@@ -67,11 +72,12 @@ failures; malformed items that throw are counted separately as failures.
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
 | `apps/server/src/ingestion/import-job-manager.ts` | Deduplicated startup/manual sync and rebuild state, availability, progress, failure isolation, and bounded public status |
 | `apps/server/src/ingestion/session-repository.ts` | Normalized analysis, atomic session/span replacement, and transactional generated-data reset |
+| `apps/server/src/task-repository.ts` | Task/configuration/Outcome/cohort/experiment persistence boundary and Task Profile aggregation inputs |
 | `apps/server/src/routes/scan.ts` | Thin manual/startup scan entry points; contains no import persistence SQL |
 | `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
 | `apps/server/src/db.ts` | Default local database instance, pricing/model-context seed data, and current lookup wrappers |
-| `apps/server/src/routes/` | Health, sessions, aggregate analysis, diagnosis, statistics, pricing, context-window, scan, export, and comparison APIs |
-| `apps/web` | Project/session navigation, dashboards, detail analysis, Agent profiles, ephemeral prompt review, comparisons, statistics, annotations, and configuration UI |
+| `apps/server/src/routes/` | Health, sessions, Tasks/Outcomes/experiments, aggregate analysis, diagnosis, statistics, pricing, context-window, scan, export, and comparison APIs |
+| `apps/web` | Project/session navigation, Task verification workspace, dashboards, detail analysis, Agent profiles, ephemeral prompt review, comparisons, statistics, annotations, and configuration UI |
 
 The API is split by domain under `apps/server/src/routes/`; it is not a single
 monolithic routes file.
@@ -156,7 +162,7 @@ Codex rollouts with runtime turn context remain unaffected.
 
 ## Persistence model
 
-`apps/server/src/database.ts` owns five current internal tables:
+`apps/server/src/database.ts` owns eleven current internal tables:
 
 - `sessions` — source identity and revision metadata (`source_kind`,
   `source_updated_at`, `source_fingerprint`); agent/model/project fields; four
@@ -172,6 +178,17 @@ Codex rollouts with runtime turn context remain unaffected.
   `INSERT OR IGNORE`.
 - `schema_migrations` — ordered, idempotent schema changes and their application
   time.
+- `tasks` — local delivery identity, project/type/status/complexity, and an
+  explicit content mode. Goal/acceptance prose is allowed only in `local_text`.
+- `config_snapshots` — Agent/model identifiers, version labels, and source hash;
+  no rule or prompt body is copied by this model.
+- `task_sessions` — multi-Session Task links, role, timing, and optional
+  Configuration Snapshot. Session IDs remain logical references across reset.
+- `task_outcomes` — nullable build/test/lint/Git/rating/rework/evidence fields;
+  null means not collected and explicit `failed` means failed.
+- `cohorts` — local comparison definitions and lifecycle state.
+- `experiments` — control/candidate configurations, cohort, primary metric,
+  guardrails, evidence state, and bounded decision state.
 
 Prompt-review requests and results are not part of this persistence model. The
 server processes prompt text within one request and neither inserts it into
@@ -358,7 +375,7 @@ page exposes the same contract and privacy boundaries.
 | `POST` | `/api/imports/rebuild` | Force available sources through analysis and atomic replacement despite matching fingerprints |
 | `POST` | `/api/scan` | Scan/import a selected transcript directory |
 | `GET` | `/api/data-management/summary` | Return reset impact counts and the required confirmation phrase |
-| `POST` | `/api/data-management/reset` | Confirm and transactionally delete generated Sessions/Spans while retaining configuration and migrations |
+| `POST` | `/api/data-management/reset` | Confirm and transactionally delete generated Sessions/Spans while retaining pricing, model configuration, migrations, and Task/Outcome/experiment records |
 | `GET` | `/api/sessions` | Session list |
 | `PATCH` | `/api/session/:id` | Update session tags/notes |
 | `GET` | `/api/session/:id` | Session with spans |
@@ -381,6 +398,15 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/profiles/agents` | Versioned process profiles for all observed Agents |
 | `GET` | `/api/profiles/agents/:agent` | One observed Agent profile with peer-relative context |
 | `POST` | `/api/prompt-review` | Ephemeral deterministic prompt review and guarded iteration hints |
+| `GET/POST` | `/api/tasks` | List or create local Tasks |
+| `GET/PATCH` | `/api/tasks/:id` | Read Task detail or update metadata/lifecycle |
+| `GET/POST` | `/api/tasks/:id/sessions` | List or attach Session/configuration links |
+| `PUT` | `/api/tasks/:id/outcome` | Upsert explicit nullable Outcome fields |
+| `GET` | `/api/tasks/:id/profile` | Export coverage-aware `task-profile/v1` |
+| `GET/POST` | `/api/config-snapshots` | List or create version/hash-only Configuration Snapshots |
+| `GET/POST` | `/api/cohorts` | List or create cohort definitions |
+| `GET/POST` | `/api/experiments` | List or create guarded experiment records |
+| `PATCH` | `/api/cohorts/:id`, `/api/experiments/:id` | Update comparison lifecycle/evidence state within database guardrails |
 | `GET/PUT` | `/api/pricing` | Model pricing |
 | `GET/PUT` | `/api/model-context` | Model context-window configuration |
 | `POST` | `/api/recompute-cost` | Recalculate stored costs by span-time pricing and refresh provenance |

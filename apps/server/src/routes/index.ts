@@ -8,6 +8,7 @@ import { registerScanRoutes } from './scan';
 import { registerSessionEvidenceRoutes } from './session-evidence';
 import { registerSessionRoutes } from './sessions';
 import { registerStatsRoutes } from './stats';
+import { registerTaskRoutes } from './tasks';
 
 export function registerRoutes(app: FastifyInstance) {
   registerScanRoutes(app);
@@ -19,4 +20,5 @@ export function registerRoutes(app: FastifyInstance) {
   registerPromptReviewRoutes(app);
   registerHealthRoutes(app);
   registerStatsRoutes(app);
+  registerTaskRoutes(app);
 }

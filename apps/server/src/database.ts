@@ -67,6 +67,112 @@ const MIGRATIONS: Migration[] = [
       addColumn(database, 'sessions', 'agent', "TEXT NOT NULL DEFAULT 'unknown'");
     },
   },
+  {
+    version: 5,
+    name: 'task_outcome_experiments',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id                  TEXT PRIMARY KEY,
+          project_id          TEXT,
+          title               TEXT NOT NULL,
+          type                TEXT NOT NULL,
+          status              TEXT NOT NULL DEFAULT 'planned'
+                              CHECK (status IN ('planned', 'in_progress', 'completed', 'failed', 'cancelled')),
+          content_mode        TEXT NOT NULL DEFAULT 'structured'
+                              CHECK (content_mode IN ('structured', 'local_text')),
+          goal                TEXT,
+          acceptance_criteria TEXT,
+          complexity          TEXT CHECK (complexity IS NULL OR complexity IN ('small', 'medium', 'large')),
+          created_at          INTEGER NOT NULL,
+          updated_at          INTEGER NOT NULL,
+          CHECK (content_mode = 'local_text' OR (goal IS NULL AND acceptance_criteria IS NULL))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tasks_project_status
+          ON tasks(project_id, status, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS config_snapshots (
+          id                      TEXT PRIMARY KEY,
+          agent                   TEXT NOT NULL,
+          model                   TEXT,
+          agent_rules_version     TEXT,
+          tool_policy_version     TEXT,
+          prompt_template_version TEXT,
+          source_hash             TEXT NOT NULL,
+          created_at              INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_config_snapshots_agent_created
+          ON config_snapshots(agent, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS task_sessions (
+          task_id            TEXT NOT NULL,
+          session_id         TEXT NOT NULL,
+          config_snapshot_id TEXT,
+          role               TEXT NOT NULL DEFAULT 'primary'
+                             CHECK (role IN ('primary', 'continuation', 'subagent', 'verification')),
+          started_at         INTEGER,
+          finished_at        INTEGER,
+          created_at         INTEGER NOT NULL,
+          PRIMARY KEY (task_id, session_id),
+          FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+          FOREIGN KEY (config_snapshot_id) REFERENCES config_snapshots(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_task_sessions_session ON task_sessions(session_id);
+
+        CREATE TABLE IF NOT EXISTS task_outcomes (
+          task_id         TEXT PRIMARY KEY,
+          build_status    TEXT CHECK (build_status IS NULL OR build_status IN ('passed', 'failed', 'skipped', 'not_run')),
+          test_status     TEXT CHECK (test_status IS NULL OR test_status IN ('passed', 'failed', 'skipped', 'not_run')),
+          lint_status     TEXT CHECK (lint_status IS NULL OR lint_status IN ('passed', 'failed', 'skipped', 'not_run')),
+          git_commit      TEXT,
+          human_rating    INTEGER CHECK (human_rating IS NULL OR human_rating BETWEEN 1 AND 5),
+          rework_reason   TEXT,
+          completed_at    INTEGER,
+          evidence_json   TEXT CHECK (evidence_json IS NULL OR json_valid(evidence_json)),
+          updated_at      INTEGER NOT NULL,
+          FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS cohorts (
+          id              TEXT PRIMARY KEY,
+          title           TEXT NOT NULL,
+          definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
+          status          TEXT NOT NULL DEFAULT 'active'
+                          CHECK (status IN ('active', 'archived')),
+          created_at      INTEGER NOT NULL,
+          updated_at      INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS experiments (
+          id                  TEXT PRIMARY KEY,
+          title               TEXT NOT NULL,
+          cohort_id           TEXT NOT NULL,
+          control_config_id   TEXT NOT NULL,
+          candidate_config_id TEXT NOT NULL,
+          primary_metric      TEXT NOT NULL,
+          guardrails_json     TEXT NOT NULL CHECK (json_valid(guardrails_json)),
+          status              TEXT NOT NULL DEFAULT 'draft'
+                              CHECK (status IN ('draft', 'running', 'completed', 'cancelled')),
+          evidence_status     TEXT NOT NULL DEFAULT 'not_collected'
+                              CHECK (evidence_status IN ('not_collected', 'insufficient_evidence', 'ready')),
+          decision            TEXT CHECK (decision IS NULL OR decision IN ('keep', 'rollback', 'insufficient_evidence')),
+          created_at          INTEGER NOT NULL,
+          updated_at          INTEGER NOT NULL,
+          FOREIGN KEY (cohort_id) REFERENCES cohorts(id) ON DELETE RESTRICT,
+          FOREIGN KEY (control_config_id) REFERENCES config_snapshots(id) ON DELETE RESTRICT,
+          FOREIGN KEY (candidate_config_id) REFERENCES config_snapshots(id) ON DELETE RESTRICT,
+          CHECK (control_config_id <> candidate_config_id),
+          CHECK (evidence_status = 'ready' OR decision IS NULL OR decision = 'insufficient_evidence')
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_experiments_cohort_status
+          ON experiments(cohort_id, status, updated_at DESC);
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {

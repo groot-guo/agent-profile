@@ -35,5 +35,10 @@ export interface DataManagementSummary {
   pricingRows: number;
   modelContextRows: number;
   migrations: number;
+  tasks: number;
+  outcomes: number;
+  configSnapshots: number;
+  cohorts: number;
+  experiments: number;
   resetConfirmation: string;
 }

@@ -99,6 +99,7 @@ describe('database migrations', () => {
       { version: 2, name: 'cost_provenance' },
       { version: 3, name: 'source_revision' },
       { version: 4, name: 'agent_column' },
+      { version: 5, name: 'task_outcome_experiments' },
     ]);
 
     const legacySession = database
@@ -133,7 +134,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(4);
+    expect(count.count).toBe(5);
     database.close();
   });
 
@@ -142,7 +143,18 @@ describe('database migrations', () => {
     const migrated = createLegacyDatabase();
     applyMigrations(migrated);
 
-    for (const table of ['sessions', 'spans', 'pricing', 'model_context']) {
+    for (const table of [
+      'sessions',
+      'spans',
+      'pricing',
+      'model_context',
+      'tasks',
+      'config_snapshots',
+      'task_sessions',
+      'task_outcomes',
+      'cohorts',
+      'experiments',
+    ]) {
       expect(columnsOf(migrated, table)).toEqual(columnsOf(fresh, table));
     }
 

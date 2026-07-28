@@ -1331,16 +1331,115 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T49 Task/Outcome, cohort, and experiment foundations
 
-- status: planned
+- status: completed
+- started_at: 2026-07-28
 - purpose:
   - implement the missing Task, Configuration Snapshot, Outcome, Task-Session,
     cohort, and experiment model described in the proposal so process metrics
     can be evaluated against explicit results
+- expected outcome:
+  - local users and Agent runtimes can create a Task, attach one or more imported
+    Sessions and a version/hash-only Configuration Snapshot, record explicit
+    verification Outcome fields, and export one Task Profile Report
+  - cohorts and experiments can persist comparison definitions and evidence state
+    without claiming that correlation proves a configuration caused an outcome
+- scope and expected components:
+  1. add an ordered additive migration for `tasks`, `config_snapshots`,
+     `task_sessions`, `task_outcomes`, `cohorts`, and `experiments`, including
+     foreign keys/indexes and upgrade coverage for existing databases
+  2. add a repository/service boundary for validated create/list/get/update,
+     Session attachment, Outcome upsert, and stable Task Profile aggregation;
+     routes must not contain persistence SQL
+  3. expose bounded local APIs for Tasks, configuration snapshots, cohorts,
+     experiments, and `task-profile/v1` JSON export
+  4. add a desktop-first Task workspace in the Web application for creating and
+     reviewing Tasks, attaching Sessions/configuration, recording Outcome, and
+     inspecting coverage-aware process/result evidence
+  5. update current architecture, README, proposal status, Chinese overview, and
+     focused Task/Profile documentation with the implemented contracts
 - dependencies and risks:
   - requires additive schema migrations, explicit missing-versus-failed outcome
     semantics, privacy boundaries for goals/acceptance criteria, APIs, UI, and
     cross-source verification; it must not turn unverified runtime correlation
     into a causal claim
+  - goal/acceptance free text is optional local content and must require an
+    explicit `local_text` content mode; the default structured mode stores no
+    goal or acceptance prose
+  - Configuration Snapshots store identifiers, versions, and hashes by default,
+    not copied rule/prompt bodies or raw prompts
+- acceptance:
+  - existing databases migrate in place and new databases create all entities;
+    generated-data reset continues to remove only Sessions/Spans and does not
+    silently delete Task/Outcome/experiment records
+  - missing Outcome fields remain `null`/not collected and are never converted
+    to failed; failed is accepted only when explicitly recorded
+  - a Task can attach multiple Sessions with roles and optional Configuration
+    Snapshot IDs; invalid references and duplicate links fail predictably
+  - `task-profile/v1` reports Task/configuration/outcome coverage plus aggregated
+    Session process metrics, sample size, limitations, and exportable JSON
+  - cohort/experiment records expose definitions, primary metric, guardrails,
+    lifecycle state, and evidence status; no endpoint emits a causal winner from
+    process metrics alone
+  - focused migration/repository/route/Core tests, full tests, lint, production
+    build, browser workflow checks, and `git diff --check` pass
+- verification plan:
+  - exercise new and migrated SQLite databases, constraints, reset retention,
+    multi-Session aggregation, missing/failed Outcome semantics, API validation,
+    privacy mode, and experiment evidence-state behavior
+  - run full repository tests/lint/build and a local desktop browser flow from
+    Task creation through Session/config attachment, Outcome capture, and report
+    export
+- documentation plan:
+  - update both READMEs, `ARCHITECTURE.md`,
+    `docs/agent-runtime-profile-design.md`, `docs/zh/OVERVIEW.md`, add a focused
+    Task/Outcome document if needed, and record exact changed files/evidence here
+- implemented:
+  - added additive schema migration v5 for Tasks, version/hash-only
+    Configuration Snapshots, Task-Session links, structured Outcomes, cohorts,
+    and experiments; generated Session/Span reset preserves these records and
+    reports their retained counts
+  - added a Task repository boundary and guarded local APIs for lifecycle
+    updates, multi-Session roles, configuration attachment, Outcome capture,
+    cohort/experiment definitions, evidence-state decisions, and the stable
+    `task-profile/v1` report
+  - kept missing verification fields as `null`, explicit `failed` distinct from
+    missing, goal/acceptance prose behind `contentMode=local_text`, and
+    experiment keep/rollback decisions behind `evidenceStatus=ready`
+  - added a desktop-first `/tasks` workspace for Task creation, status changes,
+    configuration snapshots, Session linking, structured verification Outcome,
+    and coverage-aware process/result KPIs
+  - documented the current schema, APIs, privacy boundaries, reset behavior,
+    comparison guardrails, and known limitations in both READMEs, architecture,
+    proposal status, Chinese overview, and `docs/tasks-outcomes.md`
+- verification:
+  - changed-source `biome check --write` — passed for all 16 modified/new T49
+    TypeScript and TSX files; no fixes were required
+  - `pnpm test` — passed: Core 25 files / 186 tests and Server 11 files / 41
+    tests, including migration, reset retention, repository/API validation,
+    privacy mode, missing-versus-failed semantics, aggregation, and experiment
+    evidence-state coverage
+  - `pnpm lint` — passed with no errors; 18 pre-existing advisory warnings and
+    2 informational diagnostics remain outside T49
+  - `pnpm build` — passed: Core TypeScript, Server type check, and Next.js
+    production build including the static `/tasks` route
+  - isolated browser workflow at 1280 x 800 — created a Task and Configuration
+    Snapshot, attached one imported Session, saved passed build/test/lint and Git
+    evidence, and observed `task-profile/v1` update from 0/0 to 1/1 Session
+    coverage with 178.0k tokens, known cost, and `partial` Outcome coverage; the
+    page had no horizontal overflow and emitted no browser-console errors
+  - `git diff --check` — passed
+- completion:
+  - completed_at: 2026-07-28
+  - changed files: Server database/repository/routes/reset tests and behavior;
+    Core Task Profile contract and tests; Web Task workspace, header, import
+    state, and home integration; both READMEs, `ARCHITECTURE.md`, proposal,
+    Chinese overview, `docs/tasks-outcomes.md`, and this roadmap
+  - result: local process evidence can now be attached to an explicit Task and
+    evaluated alongside captured verification Outcomes without treating process
+    efficiency or an experiment record as proof of delivery quality or causality
+  - limitation: Outcome capture is manual/structured rather than integrated with
+    CI, cohorts and experiments persist definitions rather than running jobs, and
+    configuration snapshots deliberately omit prompt/rule bodies
 
 ### T50 scale, project intelligence, responsive UX, and local safety
 

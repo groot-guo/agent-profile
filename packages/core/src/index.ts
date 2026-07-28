@@ -94,4 +94,17 @@ export {
   MAX_EVIDENCE_PREVIEW_CHARACTERS,
   SESSION_EVIDENCE_SCHEMA_VERSION,
 } from './session-evidence';
+export {
+  buildTaskProfile,
+  TASK_PROFILE_SCHEMA_VERSION,
+  type TaskOutcomeEvidence,
+  type TaskProfileConfiguration,
+  type TaskProfileInput,
+  type TaskProfileOutcome,
+  type TaskProfileReport,
+  type TaskProfileSessionSample,
+  type TaskProfileTask,
+  type TaskStatus,
+  type VerificationStatus,
+} from './task-profile';
 export type * from './types';

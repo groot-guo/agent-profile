@@ -696,8 +696,10 @@ function DataManagementPanel({
             {summary.annotatedSessions > 0
               ? `，其中 ${summary.annotatedSessions} 个带标签或备注`
               : ''}
-            。定价、模型窗口和数据库迁移保留。操作前请停止 Server 并备份 apps/server/trace.db（或
-            TRACE_DB_PATH 指定文件）。
+            。定价、模型窗口、数据库迁移，以及 {summary.tasks} 个 Task、{summary.outcomes} 个
+            Outcome、{summary.configSnapshots} 个配置快照、{summary.cohorts} 个 cohort 和{' '}
+            {summary.experiments} 个 experiment 保留。操作前请停止 Server 并备份
+            apps/server/trace.db（或 TRACE_DB_PATH 指定文件）。
           </div>
         ) : (
           <div style={{ marginBottom: SP.sm }}>正在读取影响范围…</div>
