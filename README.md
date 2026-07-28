@@ -64,10 +64,13 @@ The Web development server writes `apps/web/.next-dev`; production builds write
 
 ## First import
 
-On startup, the Server begins one observable background import job. Returning
-users keep their existing Sessions visible while synchronization runs. A first
-run shows source availability, per-source progress, recovery actions, and a
-completion summary instead of a stale generic empty list.
+On startup, the Server begins one observable background import job. With no
+stored Sessions, the Web switches to a dedicated data-preparation page: it
+shows each available source and a source-level progress count instead of
+leaving a generic empty dashboard that can look frozen. With stored Sessions,
+sync or forced rebuild stays non-modal in a persistent progress panel, so the
+existing list and analysis remain usable. Completion automatically refreshes
+the displayed local data.
 
 | Source | Default local location | When it is imported |
 | --- | --- | --- |
@@ -81,6 +84,10 @@ If the list is empty, use the source-aware first-run panel or click
 **重新扫描**. The same deduplicated job used at startup checks all five sources
 and reports imported, updated, skipped, and failed counts. The status API and UI
 do not expose transcript text, full local paths, or source Session identifiers.
+Progress is deliberately source-level: the Server does not report a misleading
+file- or record-level percentage, so one large active source can leave the
+progress count unchanged for a while. Unavailable local sources are excluded
+from the progress denominator.
 
 The Home-page **数据管理** panel separates four operations: refreshing stored
 API data, incremental synchronization, a forced analysis rebuild, and a local

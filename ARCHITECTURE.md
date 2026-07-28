@@ -67,6 +67,18 @@ deduplicates each source, isolates failures, and exposes per-source state
 without blocking server startup. The compatibility scan API still supports a
 selected transcript directory; the Web uses the shared multi-source job instead.
 
+The Web derives its import progress only from that public per-source state. If
+an active job starts with zero stored Sessions, Home renders a dedicated
+data-preparation page with available-source cards, a determinate
+completed-source/available-source count, and an explicit source-level
+limitation. Unavailable sources are excluded from the denominator. During
+sync or forced rebuild when Sessions already exist, Home keeps the list and
+analysis interactive and adds a sticky, non-modal progress panel showing the
+operation, settled-source count, active source names, and failed source names.
+It polls the existing job status and refreshes dashboard data once when the job
+becomes terminal; it does not create a second import pipeline or imply
+file-/record-level progress.
+
 The same job manager also owns an explicit forced-rebuild operation. Rebuild
 bypasses matching source fingerprints but keeps the normal lazy load, analysis,
 and per-Session atomic replacement path. A parse/load failure therefore leaves

@@ -3656,6 +3656,95 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - documentation: update Profile model, Runtime proposal, architecture, README,
   and roadmap to distinguish post-run feedback from future live Runtime hints
 
+### T91 first-run and full-import progress experience
+
+- status: completed
+- started_at: 2026-07-28
+- purpose:
+  - make startup synchronization, manual full-source synchronization, and forced
+    rebuild visibly active so a long local import cannot be mistaken for a
+    frozen page
+- expected interaction:
+  - when no stored Session is available and an import is active, show a dedicated
+    page-level data-preparation state with current operation, source-level state,
+    determinate source completion, explanatory copy, and recovery actions
+  - when stored Sessions remain available, keep the application interactive and
+    show a persistent non-modal progress surface rather than obscuring usable data
+- scope and expected files:
+  1. derive a reusable, tested import-progress view model from the existing
+     public per-source status instead of inventing item-level percentages the
+     Server does not capture
+  2. add a first-run page-level loading experience and an existing-data import
+     progress banner/panel to `apps/web/app/page.tsx`, with styling in the current
+     Web layout/theme surface and no blocking overlay
+  3. retain T62's background-data ownership, polling, stale-data visibility,
+     source failure isolation, and retry behavior; do not add a second import or
+     loading pipeline
+  4. update current UI/architecture/user documentation with the final behavior
+- dependencies, assumptions, and risks:
+  - the Server currently reports source state and terminal result counts, not
+    file-by-file progress; UI progress must therefore be labelled source-level
+    and must not imply a precise percentage of parsing work
+  - full sync/rebuild can take an unknown duration for one large source; active
+    source identity and elapsed state remain more truthful than a fake countdown
+  - all animation must use transform/opacity, preserve layout, and respect
+    `prefers-reduced-motion`; status text must be announced without repeatedly
+    stealing focus
+- acceptance:
+  - first startup with zero Sessions and an active import shows a stable,
+    informative page-level loading state rather than the normal empty dashboard
+  - manual sync/rebuild with existing Sessions leaves the data usable and exposes
+    the operation, completed/available source count, active source names, and
+    failures until a terminal refresh completes
+  - unavailable sources are not shown as pending work; mixed success/failure and
+    no-source states have clear retry/recovery guidance
+  - light/dark themes, reduced motion, keyboard/screen-reader status, and narrow
+    stacked layout remain usable without horizontal overflow or layout shift
+- verification plan:
+  - unit-test derived progress states and first-run/full-import rendering branches;
+    run focused Web lint/tests and production build; exercise active/completed/
+    failed status fixtures in the local browser at desktop and narrow widths; run
+    `git diff --check` and review documentation consistency
+- documentation plan:
+  - update `ARCHITECTURE.md`, bilingual READMEs/Chinese overview where user-visible,
+    `docs/ui-guidelines.md`, and this Task with the actual interaction and any
+    intentionally source-level-only limitation
+- completed_at: 2026-07-28
+- implementation:
+  - added `importProgressView` and tested source-level status derivation; completed
+    and failed sources settle the deterministic count while unavailable sources are
+    excluded from the denominator
+  - added `ImportProgressPanel`: first import with zero stored Sessions renders a
+    source-card data-preparation page; sync/rebuild with existing data renders a
+    sticky non-modal panel in the content area, retaining the Session list and
+    dashboard underneath
+  - retained the existing import owner and polling path; terminal jobs refresh the
+    dashboard once, with no Server/API/schema change and no fake item-level progress
+  - added polite screen-reader status, a single reduced-motion-safe spinner, narrow
+    stacked rules, and explicit source-level/privacy copy
+- changed files:
+  - `apps/web/app/import-state.ts`, `apps/web/app/import-state.test.ts`,
+    `apps/web/app/import-progress.tsx`, `apps/web/app/page.tsx`, and
+    `apps/web/app/layout.tsx`
+  - `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`, `docs/zh/OVERVIEW.md`,
+    `docs/ui-guidelines.md`, and `docs/roadmap.md`
+- verification:
+  - passed `pnpm exec vitest run apps/web/app/import-state.test.ts` (4 tests)
+  - passed focused Biome check for touched Web files and
+    `pnpm --filter agent-profile-web build`
+  - browser smoke: clicked the one `重新扫描` control with 404 existing Sessions;
+    observed the interactive list/dashboard plus `同步本地数据`, `0 / 5` source
+    count, active source names, progressbar, and polite status; terminal refresh
+    removed the panel without removing data. Repeated this at a 720px viewport
+    with no horizontal overflow (710px document width), and under the dark theme
+    with readable panel foreground/background; restored the original light desktop
+    browser settings afterward
+  - passed `git diff --check`
+- limitation:
+  - Server status has no file/record progress, so the UI truthfully reports only
+    available-source completion; a single large active source may keep the count
+    unchanged until it settles
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline. The normal desktop-first

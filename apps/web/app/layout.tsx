@@ -84,6 +84,17 @@ const GLOBAL_CSS = `
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden; word-break: break-word;
   }
+  .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
 
   .fade-in { animation: ap-fade .25s ease; }
   @keyframes ap-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
@@ -442,15 +453,209 @@ const GLOBAL_CSS = `
   }
   .session-list-footer strong { color: var(--c-text); font-weight: 650; }
 
+  /* Import progress: first run owns the page; refresh/rebuild remains non-modal. */
+  .first-run-import-shell {
+    min-height: calc(100vh - var(--header-h));
+    padding: 32px 24px;
+    background: var(--c-bg);
+  }
+  .first-run-import-error {
+    width: min(920px, 100%);
+    margin: 12px auto 0;
+  }
+  .import-progress {
+    color: var(--c-text);
+  }
+  .import-progress-page {
+    width: min(920px, 100%);
+    margin: 0 auto;
+    padding: 32px;
+  }
+  .import-progress-compact {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    flex: 0 0 auto;
+    margin: 12px 16px 0;
+    padding: 12px 16px;
+    border: 1px solid color-mix(in srgb, var(--c-link) 24%, var(--c-borderSoft));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--c-card) 94%, transparent);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(14px);
+  }
+  .import-progress-heading {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+  }
+  .import-progress-heading h1,
+  .import-progress-heading h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+  .import-progress-compact .import-progress-heading h2 { font-size: 14px; }
+  .import-progress-heading p {
+    margin: 2px 0 0;
+    color: var(--c-sub);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .import-progress-eyebrow {
+    margin-bottom: 3px;
+    color: var(--c-link);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+  }
+  .import-progress-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid color-mix(in srgb, var(--c-link) 22%, var(--c-borderSoft));
+    border-top-color: var(--c-link);
+    border-radius: 50%;
+  }
+  .import-progress-spinner[data-active="true"] { animation: ap-spin .9s linear infinite; }
+  .import-progress-spinner[data-active="false"] {
+    border-color: color-mix(in srgb, var(--c-cr) 45%, var(--c-borderSoft));
+    background: color-mix(in srgb, var(--c-cr) 14%, transparent);
+  }
+  .import-progress-count {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: baseline;
+    justify-items: end;
+    column-gap: 4px;
+    color: var(--c-mute);
+    white-space: nowrap;
+  }
+  .import-progress-count strong {
+    color: var(--c-text);
+    font-size: 20px;
+    line-height: 1;
+  }
+  .import-progress-count small {
+    grid-column: 1 / -1;
+    margin-top: 3px;
+    font-size: 11px;
+  }
+  .import-progress-track {
+    height: 6px;
+    margin-top: 16px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--c-borderSoft);
+  }
+  .import-progress-track > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--c-link), var(--c-cr));
+    transition: width .25s ease;
+  }
+  .import-progress-intro {
+    max-width: 700px;
+    margin: 20px 0 0;
+    color: var(--c-sub);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .import-source-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .import-source-card {
+    position: relative;
+    min-width: 0;
+    min-height: 112px;
+    overflow: hidden;
+    padding: 16px;
+    border: 1px solid var(--c-borderSoft);
+    border-radius: 8px;
+    background: var(--c-bg);
+  }
+  .import-source-card[data-state="failed"] {
+    border-color: color-mix(in srgb, var(--c-high) 38%, var(--c-borderSoft));
+  }
+  .import-source-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+  .import-source-heading strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .import-source-state {
+    margin-left: auto;
+    flex: 0 0 auto;
+    color: var(--c-mute);
+    font-size: 11px;
+  }
+  .import-source-card[data-state="scanning"] .import-source-state { color: var(--c-link); }
+  .import-source-card[data-state="failed"] .import-source-state { color: var(--c-high); }
+  .import-source-card p {
+    margin: 12px 0 0;
+    color: var(--c-sub);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .import-source-active-line {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--c-link), transparent);
+  }
+  .import-progress-unavailable,
+  .import-progress-note {
+    margin: 16px 0 0;
+    color: var(--c-mute);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .import-progress-note {
+    padding-top: 12px;
+    border-top: 1px solid var(--c-borderSoft);
+  }
+  .import-progress-compact .import-progress-track { margin-top: 10px; height: 4px; }
+  .import-progress-compact-detail {
+    display: flex;
+    gap: 6px 16px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    color: var(--c-sub);
+    font-size: 12px;
+  }
+  .import-progress-compact-detail [data-failed="true"] { color: var(--c-high); }
+  .import-progress-compact-detail small {
+    margin-left: auto;
+    color: var(--c-mute);
+    font-size: 11px;
+  }
+
   /* Session detail:固定摘要 + 仪器式分析视图,长证据按需展开 */
   .home-content { min-width: 0; }
   .session-detail-frame {
     display: flex;
     flex-direction: column;
     width: 100%;
-    height: 100%;
+    height: auto;
     min-width: 0;
     min-height: 0;
+    flex: 1 1 0;
   }
   .session-detail-toolbar {
     display: flex;
@@ -688,6 +893,12 @@ const GLOBAL_CSS = `
     .session-card-grid,
     .session-analysis-grid { gap: 12px; }
     .session-mini-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .first-run-import-shell { padding: 16px 12px; }
+    .import-progress-page { padding: 20px 16px; }
+    .import-progress-compact { position: static; margin: 10px 12px 0; }
+    .import-progress-heading { align-items: start; }
+    .import-progress-count strong { font-size: 18px; }
+    .import-source-grid { grid-template-columns: minmax(0, 1fr); }
   }
   @media (max-width: 470px) {
     .app-header { padding-inline: 10px !important; gap: 8px !important; }

@@ -8,6 +8,18 @@ export type ImportExperienceState =
   | 'partial-failure'
   | 'ready';
 
+export interface ImportProgressView {
+  operationLabel: string;
+  availableSources: ImportSourceStatus[];
+  unavailableSources: ImportSourceStatus[];
+  activeSources: ImportSourceStatus[];
+  completedSources: ImportSourceStatus[];
+  failedSources: ImportSourceStatus[];
+  settledSources: number;
+  progressPercent: number;
+  statusText: string;
+}
+
 export function importExperienceState(
   loading: boolean,
   sessionCount: number,
@@ -25,8 +37,42 @@ export function importExperienceState(
 export function sourceStatusText(source: ImportSourceStatus): string {
   if (source.state === 'scanning') return '正在导入…';
   if (source.state === 'failed') return '导入失败，可重试';
+  if (source.state === 'completed' && source.result) {
+    return `已完成 · 新增 ${source.result.imported} · 更新 ${source.result.updated} · 跳过 ${source.result.skipped}`;
+  }
   if (source.available) return `已发现 · ${source.storedSessions} 个会话`;
   return '本机未发现';
+}
+
+export function importProgressView(status: ImportJobStatus): ImportProgressView {
+  const availableSources = status.sources.filter((source) => source.available);
+  const unavailableSources = status.sources.filter((source) => !source.available);
+  const activeSources = availableSources.filter((source) => source.state === 'scanning');
+  const completedSources = availableSources.filter((source) => source.state === 'completed');
+  const failedSources = availableSources.filter((source) => source.state === 'failed');
+  const settledSources = completedSources.length + failedSources.length;
+  const progressPercent =
+    availableSources.length > 0 ? Math.round((settledSources / availableSources.length) * 100) : 0;
+  const operationLabel = status.operation === 'rebuild' ? '强制重建分析' : '同步本地数据';
+  const activeText = activeSources.map((source) => source.label).join('、');
+  const failedText = failedSources.map((source) => source.label).join('、');
+  const statusText = status.active
+    ? `${operationLabel}进行中；${settledSources} / ${availableSources.length} 个来源已结束${activeText ? `；正在处理 ${activeText}` : ''}`
+    : failedSources.length > 0
+      ? `${operationLabel}已结束；需要重试 ${failedText}`
+      : `${operationLabel}已完成；${settledSources} / ${availableSources.length} 个来源已结束`;
+
+  return {
+    operationLabel,
+    availableSources,
+    unavailableSources,
+    activeSources,
+    completedSources,
+    failedSources,
+    settledSources,
+    progressPercent,
+    statusText,
+  };
 }
 
 export function summarizeImport(status: ImportJobStatus): string {

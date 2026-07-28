@@ -6,6 +6,7 @@ import { API, type DataManagementSummary, type ImportJobStatus } from './config'
 import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
 import { loadDashboardData, loadImportStatus } from './home-data';
 import { AgentMark } from './icons';
+import { ImportProgressPanel } from './import-progress';
 import { canResetData, summarizeImport, summarizeReset } from './import-state';
 import { projectLabel } from './project-label';
 import {
@@ -313,6 +314,22 @@ export default function HomePage() {
     setQuickView('all');
   };
 
+  const showFirstRunImport = !loading && sessions.length === 0 && Boolean(importStatus?.active);
+  if (showFirstRunImport && importStatus) {
+    return (
+      <div className="first-run-import-shell">
+        <ImportProgressPanel status={importStatus} mode="page" />
+        {error && (
+          <div className="first-run-import-error">
+            <Notice kind="err" onClose={() => setError('')}>
+              {error}
+            </Notice>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className="home-shell"
@@ -521,10 +538,6 @@ export default function HomePage() {
               {error}
             </Notice>
           )}
-          {importStatus &&
-            (importStatus.active || importStatus.sources.some((s) => s.state === 'failed')) && (
-              <ImportStatusSummary status={importStatus} />
-            )}
         </div>
 
         {/* Session 列表 */}
@@ -584,8 +597,20 @@ export default function HomePage() {
       <div
         className="home-content"
         data-selected={selectedId ? 'true' : 'false'}
-        style={{ flex: 1, overflowY: 'auto', background: C.bg }}
+        style={{
+          display: 'flex',
+          flex: 1,
+          flexDirection: 'column',
+          overflowY: 'auto',
+          background: C.bg,
+        }}
       >
+        {sessions.length > 0 &&
+          importStatus &&
+          (importStatus.active ||
+            importStatus.sources.some((source) => source.state === 'failed')) && (
+            <ImportProgressPanel status={importStatus} mode="compact" />
+          )}
         {selectedId ? (
           <div className="session-detail-frame">
             <div
@@ -731,33 +756,6 @@ function DataManagementPanel({
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function ImportStatusSummary({ status }: { status: ImportJobStatus }) {
-  const activeSources = status.sources.filter((source) => source.state === 'scanning');
-  const failedSources = status.sources.filter((source) => source.state === 'failed');
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      style={{
-        padding: `${SP.sm}px ${SP.md}px`,
-        borderRadius: R.md,
-        background: C.bg,
-        color: failedSources.length > 0 ? C.high : C.sub,
-        fontSize: FS.cap,
-        lineHeight: 1.6,
-      }}
-    >
-      {activeSources.length > 0 &&
-        `${status.operation === 'rebuild' ? '正在强制重建' : '正在同步'}：${activeSources
-          .map((source) => source.label)
-          .join('、')}`}
-      {activeSources.length > 0 && failedSources.length > 0 && <br />}
-      {failedSources.length > 0 &&
-        `需要重试：${failedSources.map((source) => source.label).join('、')}`}
     </div>
   );
 }

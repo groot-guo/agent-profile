@@ -3,6 +3,7 @@ import type { ImportJobStatus, ImportSourceStatus } from './config';
 import {
   canResetData,
   importExperienceState,
+  importProgressView,
   sourceStatusText,
   summarizeImport,
   summarizeReset,
@@ -57,6 +58,32 @@ describe('import experience state', () => {
         ]),
       ),
     ).toBe('已检查 8 条记录；新增 2，更新 1，跳过 5，清理 3，失败 1');
+  });
+
+  it('derives truthful source-level progress without counting unavailable sources', () => {
+    const view = importProgressView(
+      status(
+        [
+          source({
+            id: 'claude-code',
+            label: 'Claude Code',
+            state: 'completed',
+            result: { scanned: 8, imported: 2, updated: 1, skipped: 5, removed: 0, failed: 0 },
+          }),
+          source({ id: 'codex', label: 'Codex', state: 'scanning' }),
+          source({ id: 'zed', label: 'Zed', available: false }),
+          source({ id: 'mimo-code', label: 'MiMo Code', state: 'failed' }),
+        ],
+        true,
+      ),
+    );
+
+    expect(view.availableSources).toHaveLength(3);
+    expect(view.unavailableSources.map((item) => item.label)).toEqual(['Zed']);
+    expect(view.activeSources.map((item) => item.label)).toEqual(['Codex']);
+    expect(view.settledSources).toBe(2);
+    expect(view.progressPercent).toBe(67);
+    expect(view.statusText).toContain('正在处理 Codex');
   });
 
   it('requires the exact reset phrase and reports the retained configuration boundary', () => {
