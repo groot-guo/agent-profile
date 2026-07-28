@@ -13,6 +13,9 @@ export interface SessionProjectInput {
  * storage folder as project evidence.
  */
 export function classifySessionProject(session: SessionProjectInput): string {
+  if (session.agent === 'codex' && isCodexManagedDatedWorkspace(session.cwd)) {
+    return CODEX_SESSION_RECORDS_PROJECT;
+  }
   if (typeof session.cwd === 'string' && session.cwd.trim()) return session.cwd;
 
   const claudeProject =
@@ -47,4 +50,16 @@ function claudeProjectFromTranscriptPath(filePath?: string | null): string | und
   const encoded = parts[claudeIndex + 2];
   if (!encoded) return undefined;
   return encoded.startsWith('-') ? `/${encoded.slice(1).replace(/-/g, '/')}` : encoded;
+}
+
+function isCodexManagedDatedWorkspace(cwd?: string | null): boolean {
+  if (!cwd) return false;
+  const parts = cwd.split(/[\\/]+/).filter(Boolean);
+  return parts.some(
+    (part, index) =>
+      part === 'Documents' &&
+      parts[index + 1] === 'Codex' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(parts[index + 2] ?? '') &&
+      Boolean(parts[index + 3]),
+  );
 }

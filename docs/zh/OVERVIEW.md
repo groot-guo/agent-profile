@@ -87,8 +87,9 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   最近 1/7/30/90 天可和 Agent、标题/项目/路径搜索、异常/未定价快捷视图及排序组合。
   筛选与选中状态保存在 URL，浏览器返回可恢复列表；大结果集按 120 条一批增量渲染。
 - 项目分类优先使用来源捕获的 `cwd`；没有该证据的 Codex Session 在列表和统计中统一显示
-  为“Codex 会话记录”。`~/.codex/sessions/YYYY/MM/DD/` 是日期存储分区，不会被当成
-  项目，原始路径与缺失覆盖状态仍保留。
+  为“Codex 会话记录”。Codex Desktop 为无项目会话生成的非空
+  `~/Documents/Codex/YYYY-MM-DD/<session>` 工作目录也使用该分类；它和
+  `~/.codex/sessions/YYYY/MM/DD/` 都是运行/日期分区，不会被当成项目，原始路径仍保留。
 - 来源标题优先；无标题 Session 只在界面中用 Agent、项目和本地开始时间组成可辨识
   标题，不从 prompt、answer 或 reasoning 内容派生，也不把该回退写入数据库。
 - Session 详情固定展示身份、Token 指纹和主要 KPI，再拆分为“概览”“上下文与成本”

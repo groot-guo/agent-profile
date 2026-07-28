@@ -145,7 +145,10 @@ constrained Claude `~/.claude/projects/<encoded>/` layout remains an explicit
 compatibility fallback. Other Sessions without captured project evidence use a
 stable source-record category, displayed for Codex as `Codex 会话记录`. Codex's
 `~/.codex/sessions/YYYY/MM/DD/` layout is only a source-time partition and is
-never inferred as a project. This classification does not alter stored `cwd` or
+never inferred as a project. Likewise, Codex Desktop's generated non-project
+workspace `~/Documents/Codex/YYYY-MM-DD/<session>` is classified as Session
+records even though it supplies a non-empty `cwd`; that runtime-isolation folder
+is not project evidence. This classification does not alter stored `cwd` or
 `filePath` and needs no migration or re-import.
 Source-provided Session names remain authoritative. When one is absent, the Web
 layer derives a display-only Agent/project/local-start-time label from

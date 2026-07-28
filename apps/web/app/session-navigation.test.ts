@@ -82,11 +82,23 @@ describe('flat Session navigation', () => {
     expect(title).not.toContain('opaque-session-id');
   });
 
-  it('classifies Codex Sessions without cwd as one searchable Session-record category', () => {
-    const first = session('dated-a', undefined, 'codex', 100, 0);
+  it('classifies Codex managed dated workspaces as one searchable Session-record category', () => {
+    const first = session(
+      'dated-a',
+      '/Users/example/Documents/Codex/2026-07-27/chat-a',
+      'codex',
+      100,
+      0,
+    );
     first.filePath =
       '/Users/example/.codex/sessions/2026/07/27/rollout-2026-07-27T10-00-00-a.jsonl';
-    const second = session('dated-b', undefined, 'codex', 200, 0);
+    const second = session(
+      'dated-b',
+      '/Users/example/Documents/Codex/2026-07-28/chat-b',
+      'codex',
+      200,
+      0,
+    );
     second.filePath =
       '/Users/example/.codex/sessions/2026/07/28/rollout-2026-07-28T10-00-00-b.jsonl';
 

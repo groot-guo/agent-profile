@@ -106,10 +106,11 @@ titles remain authoritative; an untitled Session gets a display-only
 Agent/project/start-time label instead of an opaque ID. That fallback is not
 persisted and does not inspect or preview prompt, answer, or reasoning content.
 Project labels prefer captured `cwd`. Codex Sessions without that evidence are
-grouped as **Codex 会话记录**; their dated `~/.codex/sessions/YYYY/MM/DD/`
-storage folders remain time partitions and never become project names. The raw
-source path remains available as evidence, and this display/statistics rule does
-not require re-importing Sessions.
+grouped as **Codex 会话记录**. Codex Desktop Sessions whose non-empty `cwd` is a
+generated `~/Documents/Codex/YYYY-MM-DD/<session>` workspace use the same group;
+that workspace and the dated `~/.codex/sessions/YYYY/MM/DD/` source storage are
+runtime/time partitions, not project names. The raw paths remain available as
+evidence, and this display/statistics rule does not require re-importing Sessions.
 Large result sets render in bounded batches instead of creating every row at
 once.
 

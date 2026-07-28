@@ -82,9 +82,10 @@ Server 启动后会创建一个可观察的后台导入任务。没有已存 Ses
 URL 保留。来源提供的标题优先；没有标题时，界面只用 Agent、项目和开始时间组成展示
 标题，不再主显不透明 ID，也不会为此读取、预览或持久化 prompt、answer 或 reasoning
 内容。项目标签优先使用来源捕获的 `cwd`；没有这项项目证据的 Codex Session 统一显示为
-“Codex 会话记录”，`~/.codex/sessions/YYYY/MM/DD/` 只作为日期存储分区，不会被推断成
-项目。该展示与统计规则保留原始路径，不需要重新导入。大结果集按批次渲染，不会一次
-创建全部行。
+“Codex 会话记录”。Codex Desktop 为无项目会话生成的非空
+`~/Documents/Codex/YYYY-MM-DD/<session>` 工作目录也归入同一分类；该工作目录和
+`~/.codex/sessions/YYYY/MM/DD/` 来源目录都只是运行/日期分区，不会被推断成项目。该
+展示与统计规则保留原始路径，不需要重新导入。大结果集按批次渲染，不会一次创建全部行。
 
 **任务**页面在 Session 过程分析之上补充本地交付证据。一个 Task 可关联多个 Session、
 绑定只保存版本/Hash 的 Configuration Snapshot，并在页面记录 build/test/lint/Git Outcome。

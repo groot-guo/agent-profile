@@ -42,6 +42,10 @@ require deleting the local database.
 - `~/.codex/sessions/YYYY/MM/DD/` and archived date-like locations are source
   storage partitions, not project evidence, and are never converted into a
   project name;
+- Codex Desktop non-project conversations can still carry a generated non-empty
+  `cwd` under `~/Documents/Codex/YYYY-MM-DD/<session>`; this managed workspace is
+  runtime isolation rather than project evidence and uses the same
+  `Codex 会话记录` category;
 - response messages/reasoning become LLM evidence;
 - custom tool calls pair with their outputs by call ID;
 - token-count events provide available token aggregates. When Codex reports all

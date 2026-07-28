@@ -3749,21 +3749,22 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 - status: completed
 - started_at: 2026-07-28
+- reopened_at: 2026-07-28
 - completed_at: 2026-07-28
 - estimated size/risk: small-medium / medium; no schema migration or source
   rebuild is expected, but Session navigation and project-based statistics must
   use the same classification contract
 - purpose:
-  - distinguish captured project evidence from Codex's dated rollout storage
-    layout so a missing `session_meta.cwd` never turns `YYYY/MM/DD` or another
-    arbitrary parent folder into a project
+  - distinguish captured project evidence from Codex's dated rollout and managed
+    workspace layouts so neither a missing `session_meta.cwd` nor a generated
+    `Documents/Codex/YYYY-MM-DD/<session>` cwd becomes a project
   - present these records directly as `Codex 会话记录` while retaining date as
     a time-grouping dimension rather than a project identity
 - scope and expected files:
   1. define one explicit project-classification rule for Session navigation and
      aggregate statistics: a non-empty captured `cwd` remains authoritative;
-     Codex without one uses a stable non-path category displayed as
-     `Codex 会话记录`
+     Codex without one, or with a Codex-managed dated workspace cwd, uses a
+     stable non-path category displayed as `Codex 会话记录`
   2. remove the arbitrary-parent-directory fallback for Codex while retaining
      only source-specific path decoding whose project semantics are explicit,
      such as the constrained Claude Code `~/.claude/projects/<encoded>/` layout
@@ -3785,6 +3786,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - dependencies, assumptions, and risks:
   - `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` is a dated source-storage
     partition, not project evidence
+  - Codex Desktop also assigns non-project conversations a non-empty generated
+    workspace under `~/Documents/Codex/YYYY-MM-DD/<session>`; this convention is
+    likewise storage/runtime isolation rather than captured project evidence
   - the 2026-07-28 local probe found all 118 discoverable Codex rollouts and all
     56 currently stored Codex Sessions had a non-empty captured `cwd`; missing
     project coverage therefore needs synthetic fixtures and remains a latent
@@ -3795,9 +3799,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - the display category must not collide with a real filesystem path or imply
     that every Codex Session lacks project evidence
 - acceptance:
-  - a Codex Session with no `cwd` and a file under either
-    `.../.codex/sessions/2026/07/28/` or an archived/date-like location is
-    classified once as `Codex 会话记录`, never as `28`, `07`, `2026`, or an
+  - a Codex Session with no `cwd`, or with a generated cwd under
+    `.../Documents/Codex/2026-07-28/<session>`, is classified once as
+    `Codex 会话记录`, never as the date, generated Session folder, or another
     arbitrary parent folder
   - a Codex Session with captured `cwd` continues to use that exact project
     evidence, and supported Claude project-path fallback behavior does not
@@ -3807,10 +3811,10 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - Session time grouping continues to use `startTime`; no date-derived project
     category is introduced and no data reset or forced rebuild is required
 - verification plan:
-  - add focused Web fixtures for captured-Codex, dated-path/no-`cwd` Codex, and
-    supported Claude fallback cases
-  - add Server statistics fixtures proving missing-`cwd` Codex Sessions share
-    one category across totals, baselines, and anomaly evaluation
+  - add focused Web fixtures for captured-Codex, dated-path/no-`cwd` Codex,
+    non-empty Codex-managed dated workspaces, and supported Claude fallback cases
+  - add Server statistics fixtures proving Codex Sessions without project evidence
+    share one category across totals, baselines, and anomaly evaluation
   - run focused Vitest suites, Web lint/type validation and production build in
     proportion to touched files, then run `git diff --check`
 - documentation plan:
@@ -3831,9 +3835,10 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - added a browser-safe `@agent-profile/core/project` package subpath after the
     first production build demonstrated that importing a runtime helper through
     the Core root barrel would pull Node-only transcript scanners into Webpack
-  - Web navigation now groups dated/no-`cwd` Codex Sessions under the displayed
-    `Codex 会话记录` label across selectors, rows, untitled fallback titles, URL
-    filtering, and free-text search without exposing the internal category key
+  - Web navigation now groups dated/no-`cwd` Codex Sessions and Codex-managed
+    dated workspaces under the displayed `Codex 会话记录` label across selectors,
+    rows, untitled fallback titles, URL filtering, and free-text search without
+    exposing the internal category key
   - Server project totals, baselines, and anomaly lookup now use one extracted,
     tested aggregation path backed by the same Core classifier; stored `cwd` and
     `filePath`, parser fingerprints, schema, and import behavior remain unchanged
@@ -3859,10 +3864,35 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - `pnpm build` — Core TypeScript build, Server no-emit type check, and optimized
     Next.js production build all passed; all 9 Web routes generated successfully
   - project-classification consistency scan and `git diff --check` — passed
-- limitation:
-  - the local 2026-07-28 source/store probe found no current Codex Session without
-    `cwd`, so the corrected branch is covered by synthetic dated-path fixtures
-    rather than a mutated source record or live-data UI smoke test
+- coverage note:
+  - the original no-`cwd` branch remains covered by synthetic fixtures because
+    current Codex rollouts always carry a cwd; the managed-workspace branch is
+    covered by non-empty dated-cwd fixtures and a read-only local database probe
+- follow-up correction:
+  - post-completion user verification showed that the original missing-`cwd`
+    predicate did not match actual non-project Codex Desktop conversations:
+    all 124 then-discoverable rollouts had `cwd`, while 12 rollouts used seven
+    generated `Documents/Codex/YYYY-MM-DD/<session>` workspaces and none of
+    those 12 carried source Git metadata; T92 was reopened to classify this
+    non-empty managed-workspace convention and replace the obsolete limitation
+  - the shared classifier now recognizes a Codex cwd containing the managed
+    `Documents/Codex/YYYY-MM-DD/<session>` structure before accepting a non-empty
+    cwd as project evidence; real project cwd values and the explicit Claude
+    fallback remain unchanged
+  - Web and Server fixtures use multiple non-empty managed workspaces across two
+    dates and prove that navigation, totals, baselines, and anomaly lookup share
+    one `Codex 会话记录` category
+- follow-up verification:
+  - focused Core/Web/Server Vitest run — 3 files and 15 tests passed
+  - full `pnpm exec vitest run` — 43 files and 254 tests passed
+  - `pnpm lint` — completed with no errors and only the previously recorded
+    repository warnings/style suggestions
+  - `pnpm build` — Core TypeScript, Server no-emit type check, and optimized
+    Next.js production build with all 9 routes passed
+  - read-only local database probe — 15 stored Codex Sessions across 12 distinct
+    generated dated workspaces now match the one Session-record classification;
+    no source file, stored cwd, or database row was modified
+  - documentation consistency scan and `git diff --check` — passed
 
 ## Execution Order
 
