@@ -1442,7 +1442,13 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T50 scale, project intelligence, and local safety
 
-- status: planned
+- status: cancelled
+- cancelled_at: 2026-07-28
+- cancellation:
+  - this was an intentionally broad planning placeholder, not an implementation
+    attempt. T79 replaced it with T82–T88 so scale, project evidence, source
+    relationships, and conditional non-local safety can be independently
+    measured, accepted, committed, and reverted if necessary
 - purpose:
   - keep the profiler usable with long histories and large Sessions while
     improving project-level evidence and local operational safety
@@ -2330,8 +2336,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - dependencies and assumptions:
   - depends on T62's single Home-page data owner so navigation does not create a
     second loading pipeline
-  - T50 continues to own replacement of the overall fixed desktop sidebar on
-    narrow mobile layouts; this Task owns discovery inside the current shell
+  - this Task owns discovery inside the current desktop shell; mobile dashboard
+    navigation is intentionally not planned (T77)
 - risks:
   - removing visible folders can hide project context unless every Session row
     carries a concise project label and the active project filter remains visible
@@ -3187,14 +3193,16 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - make the roadmap's execution order agree with the current completed and
     planned Task states
 - scope:
-  - retain T50's scale, project-intelligence, large-history, and local-safety
-    work while removing its mobile/small-screen navigation requirement
+  - retain T50's then-planned scale, project-intelligence, large-history, and
+    local-safety work while removing its mobile/small-screen navigation
+    requirement
   - remove current roadmap claims that a future mobile drawer/navigation Task
     is expected
   - replace the stale execution sequence that still names completed Tasks with
     the four remaining planned Tasks
 - acceptance:
-  - T50 no longer includes mobile navigation or small-screen workflow work
+  - the then-planned T50 no longer includes mobile navigation or small-screen
+    workflow work
   - no current roadmap statement assigns a future mobile navigation redesign
     to T50 or another planned Task
   - the execution-order section lists only Tasks whose current status is
@@ -3214,9 +3222,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - `git diff --check` — passed
 - completion:
   - changed file: `docs/roadmap.md`
-  - result: T50 retains scale, project-intelligence, and local-safety scope;
-    mobile dashboard navigation is no longer planned, and the execution-order
-    section now lists only the four remaining planned Tasks
+  - result: mobile dashboard navigation is no longer planned. T50's remaining
+    scope was later decomposed by T79 into independently planned Tasks.
   - implementation impact: documentation and planning only; no application,
     API, schema, storage, or current desktop behavior changed
 
@@ -3316,18 +3323,359 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     and a Task-workspace UI for the additional human Outcome fields already
     supported by the local model/API
 
+### T79 roadmap decomposition and local performance/memory assessment
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- purpose:
+  - replace the broad planned T50 scope with independently deliverable Tasks and
+    establish a read-only, evidence-based baseline for current local performance
+    and process memory behavior before any optimization is implemented
+- scope:
+  1. inspect the scan/import path, Session list/detail API path, Web rendering
+     path, database access pattern, and production/development process memory
+     under representative local use without changing runtime code
+  2. distinguish a confirmed leak or unbounded retained data from expected cache,
+     source-data, Node/Next development overhead, and one-time import memory
+  3. record measured timings, resident memory, workload/coverage limits, likely
+     bottlenecks, and the smallest safe validation needed for each proposed
+     optimization
+  4. split T50 into explicit planned Tasks for measurement, read/render scale,
+     ingestion scale, project evidence, source-native parent/child evidence, and
+     conditional non-local safety; retain existing independent T70, T71, and T73
+- dependencies and risks:
+  - no performance claim may be based solely on an idle development process or
+    one machine's garbage-collector timing
+  - the investigation must not expose prompt/transcript content, modify source
+    histories, reset generated data, or change the loopback-only security model
+  - append-only import work must preserve source fingerprints, atomic session
+    replacement, and annotation protection; pagination/windowing must preserve
+    URL-restorable filtering and coverage semantics
+- acceptance:
+  - each replacement Task has one purpose, bounded scope, dependencies,
+    acceptance criteria, and verification strategy appropriate to its risk
+  - the roadmap no longer treats unrelated scale, project-intelligence, and
+    security work as one implementation commit
+  - the assessment states whether current evidence shows an abnormal memory
+    pattern, what was actually measured, and which optimization hypotheses are
+    evidence-backed versus deferred pending representative fixtures
+- verification plan:
+  - review call paths with CodeGraph, inspect database/API query and rendering
+    contracts, collect repeatable local process/RSS samples during controlled
+    health/list/detail/scan operations where available, scan for unbounded
+    retention patterns, review the roadmap diff, and run `git diff --check`
+- documentation plan:
+  - update this roadmap and the current architecture/performance documentation
+    only where the assessment confirms an implemented behavior or an explicit
+    remaining limitation; do not represent proposed optimization as current
+    behavior
+- assessment:
+  - observed workload: local development Server/Web with a warm SQLite database
+    containing 404 Sessions and 61,083 Spans; `trace.db` was 114.9 MB with a
+    16.6 MB WAL, while the recorded imported source metadata totalled about
+    194 MB across 78,009 source lines. The stored Span metadata column totalled
+    58.18 MB (1,584 bytes on average; 21,084 bytes maximum).
+  - warm local request samples: health was 9.8 ms; the full 404-row
+    `/api/sessions` response was 325,838 bytes in 37.5 ms; `/api/stats` was
+    36,784 bytes in 352.8 ms; the largest available 2,756-Span Session's
+    `/analysis` response was 2,133,258 bytes in 274.5 ms; and its no-content
+    evidence response was 1,516,743 bytes in 96.5 ms. These are one-machine,
+    warm-cache development samples, not product SLOs.
+  - process memory: idle API RSS sampled at roughly 14–40 MB and the Next Web
+    process at roughly 26–28 MB. Repeating the large analysis request produced
+    transient API RSS samples from about 104 MB to 248 MB; the evidence request
+    reached about 93 MB. After requests stopped, samples returned to about
+    14–22 MB within roughly 20–30 seconds. This is consistent with temporary
+    parsing/serialization allocation and V8 heap reclamation, not confirmed
+    unbounded retention or a memory leak.
+  - confirmed scale boundaries: `/api/sessions` reads and transfers every
+    summary and filters/sorts in the browser; its `ORDER BY start_time` uses a
+    temporary SQLite B-tree because no start-time index exists. Span lookups use
+    `session_id` but also sort through a temporary B-tree because no
+    `(session_id, start_time)` index exists. `/api/stats` reads all summaries
+    and builds distributions in process. Detail analysis reads all selected
+    spans, all project spans for its relative score, and performs a synchronous
+    local Git lookup; evidence loads all events before its client-side batch
+    renderer limits DOM rows.
+  - conclusion: current desktop-scale use is healthy at this data size, but
+    memory and latency will scale with the largest Session and project rather
+    than with the visible DOM batch. T82–T85 are evidence-backed optimization
+    work; no code, source data, database reset, or security behavior changed in
+    this assessment
+- verification:
+  - CodeGraph review — confirmed the Home full-list/client-filter contract,
+    revision skip-before-load import coordinator, detail project's full-span
+    score path, and evidence report's full-event response contract
+  - SQLite inspection — confirmed the current database counts, metadata size,
+    source-size coverage, index list, and temporary-B-tree query plans without
+    reading transcript/prompt content
+  - local read-only API/RSS samples — repeated health/list/stats/detail/evidence
+    requests and process RSS sampling; no persistent growth remained after the
+    large requests completed
+  - `git diff --check` — passed
+- implementation:
+  - cancelled the unstarted T50 umbrella and created independently planned T80
+    through T90: Outcome workspace, definition workflow, fixture/budget,
+    discovery, detail/evidence, JSONL ingestion, project, relationship,
+    conditional safety, cohort evaluation, and post-run feedback work
+  - documented the current full-response, full-Span, revision-replacement, and
+    bounded-DOM-only behavior in `ARCHITECTURE.md` without changing it
+- completion:
+  - changed files: `docs/roadmap.md` and `ARCHITECTURE.md`
+  - result: the next implementation can target a measured, single-purpose
+    contract rather than the former T50 umbrella; current local memory has no
+    confirmed persistent-growth defect, while large-detail peak allocation and
+    unbounded response/query paths are explicit planned optimization work
+  - limitation: no production-mode, cold-cache, concurrent-user, or synthetic
+    large-history benchmark has run yet; T82 owns a reproducible cross-machine
+    fixture and budget methodology
+
+### T80 Task Outcome evidence workspace completion
+
+- status: planned
+- estimated size/risk: medium / medium; existing schema and API reduce storage
+  risk, while coverage semantics and evidence-form validation require focused UI
+  and contract testing
+- purpose: make the implemented Task/Outcome model usable for real local
+  delivery verification rather than leaving the Task workspace unable to record
+  every field required for `verified` Outcome coverage
+- dependencies: T49 data model; no cohort statistics or external CI integration
+- scope: expose human rating, rework reason, completion time, and bounded
+  structured evidence alongside build/test/lint/Git fields; retain explicit
+  null/unknown semantics and local-text privacy modes
+- acceptance: a user can create or update every supported Outcome field from
+  the workspace; the displayed coverage state agrees with `task-profile/v1`;
+  invalid evidence is rejected without silently degrading to success/failure
+- verification: focused Core/Server/Web tests, production Web build, and a local
+  Task Profile smoke check covering not-collected, partial, verified, and failed
+  evidence states
+- documentation: update README, architecture, Task/Outcome guide, Chinese
+  overview, and this Task with the actual UI field/coverage behavior
+
+### T81 Cohort and Experiment definition workspace
+
+- status: planned
+- estimated size/risk: medium / medium; mostly existing persistence exposure, but
+  the UI must not imply an automatically calculated winner
+- purpose: expose the existing guarded local Cohort/Experiment records so users
+  can define comparable Task scope and control/candidate configurations before
+  any automatic result calculation exists
+- dependencies: T80; T49 persistence contracts
+- scope: create/view/update local Cohort and Experiment definitions, required
+  comparison scope, primary metric, guardrails, evidence status, and constrained
+  keep/rollback decisions; omit automatic distributions, winners, and causality
+- acceptance: the workspace cannot label a configuration better without the
+  existing ready-evidence guardrail; every definition states its Task scope and
+  missing Outcome coverage; raw prompts/rule bodies remain unpersisted
+- verification: repository/API guardrail tests, focused Web interaction tests,
+  production build, and documentation consistency review
+- documentation: update Profile model, Task/Outcome guide, architecture, READMEs,
+  and this Task to keep persistence distinct from statistical evaluation
+
+### T82 representative scale fixtures and performance budgets
+
+- status: planned
+- estimated size/risk: medium / low runtime risk; its main difficulty is making
+  fixtures representative and memory measurements repeatable
+- purpose: turn the T79 observations into repeatable non-content fixtures and
+  measured budgets before performance changes choose an implementation strategy
+- dependencies: T73 source-attribution correction must land before benchmark
+  fixtures become a long-term baseline
+- scope: define representative Session/project/source-size fixtures, benchmark
+  list/stats/detail/evidence/unchanged-sync paths, capture time, response size,
+  database query plan, and process high-water memory, and record justified
+  desktop budgets without asserting cross-machine SLOs
+- acceptance: a contributor can reproduce the benchmark without local transcript
+  content; the suite identifies regressions in bounded response work or retained
+  memory; budgets and workload coverage are documented
+- verification: deterministic benchmark/fixture run, repeated-process memory
+  samples, query-plan check, and CI-suitable focused regression check
+- documentation: add the final measurement method, supported scale envelope,
+  and known fixture limits to architecture/performance documentation and roadmap
+
+### T83 bounded Session discovery and statistics data contract
+
+- status: planned
+- estimated size/risk: large / high; changes public API/query behavior and Home
+  navigation state, so compatibility and exact filter semantics are central
+- purpose: remove the all-summary transfer and browser-wide filtering/sorting
+  path while preserving flat time navigation and URL-restorable discovery
+- dependencies: T82; coordinate with T70 so loading feedback and API changes do
+  not duplicate the same Web transition work
+- scope: design a cursor/page and server-side filter/sort contract with total or
+  facet coverage where needed; add measured SQLite indexes such as start-time
+  and filter-supporting composites; move statistics work to bounded or set-based
+  aggregation where results remain semantically identical
+- acceptance: large histories transfer/render only the current discovery window;
+  project/Agent/time/query/quick-view/sort semantics and URL restoration remain
+  correct; selected Session/back navigation remains stable; no index changes
+  alter metric meaning or source coverage
+- verification: API contract/query-plan tests, large-fixture browser navigation
+  checks, timing/response-size comparison against T82, focused lint, and build
+- documentation: update API, Home navigation, performance boundaries, and Task
+  evidence in architecture, README/overview where user-visible, and roadmap
+
+### T84 bounded Session detail and evidence retrieval
+
+- status: planned
+- estimated size/risk: large / high; touches diagnosis inputs, evidence privacy,
+  coverage language, API contracts, and browser state
+- purpose: prevent one large Session or project from creating avoidable API and
+  browser memory peaks while retaining complete, explicitly scoped evidence
+- dependencies: T82; must coordinate endpoint changes with T70 and the existing
+  privacy-safe evidence contract
+- scope: separate summary/analysis from paged or cursor-addressable evidence;
+  avoid parsing/serializing metadata that is unnecessary for a selected view;
+  replace project-relative-score full-Span loading with equivalent bounded or
+  aggregate computation; replace synchronous request-path Git work where needed
+- acceptance: a detail page explains when evidence is partial/windowed and lets
+  a user reach all stored events; default no-content requests do not load raw
+  content merely to report coverage; peak memory and response work meet T82's
+  documented budgets without changing diagnosis/metric semantics
+- verification: Core/Server contract tests, large-Session/project memory and
+  timing samples, browser paging/filter checks, privacy regression checks, build
+- documentation: update detail/evidence API, coverage/limitation language,
+  architecture, Chinese overview, and roadmap with exact bounded behavior
+
+### T85 append-only JSONL import for Claude Code and Codex
+
+- status: planned
+- estimated size/risk: extra-large / high; source mutation patterns and parser
+  equivalence make a safe fallback/checkpoint design mandatory
+- purpose: reduce repeated parsing work for growing transcript sources without
+  weakening the cross-source revision and atomic-replacement guarantees
+- dependencies: T82; source-specific design review for Claude Code and Codex
+  JSONL append, truncation, rewrite, sidechain, and legacy-ID behavior
+- scope: add safe per-source append checkpoints with full-parse fallback; measure
+  unchanged, appended, rewritten, truncated, and malformed histories; do not
+  apply JSONL assumptions to Zed, MiMo, or OpenCode SQLite adapters
+- acceptance: appended histories produce the same normalized Session/Span result
+  as a clean full parse; rewrites/truncations safely fall back; failed parsing
+  retains last good generated data; annotations and revision fingerprints remain
+  correct
+- verification: parser/ingestion equivalence fixtures, recovery/retry tests,
+  benchmark comparison against T82, type/build checks, and local sync inspection
+- documentation: update source-adapter contracts, recovery behavior, scale
+  boundaries, and roadmap verification evidence
+
+### T86 project-level cross-Session evidence
+
+- status: planned
+- estimated size/risk: large / medium-high; project identity and heterogeneous
+  source coverage require a new aggregation/report contract
+- purpose: provide a coverage-aware Project Profile for observed file/tool,
+  resource, reliability, and trend evidence without relabelling it as code
+  quality or configuration causality
+- dependencies: T73 source-faithful attribution; T83 data-access contract
+- scope: define project identity/scope, cross-Session aggregation, time range,
+  sample and source coverage, file/tool trend semantics, and a Project analysis
+  surface; retain missing evidence as not captured
+- acceptance: every project conclusion exposes Sessions, time range, source and
+  metric coverage; no derived file/tool trend claims a complete repository or
+  delivery-quality verdict; different source coverage remains visible
+- verification: Core aggregation tests with coverage gaps, API/UI scope tests,
+  production build, and representative local read-only inspection
+- documentation: update Profile taxonomy, architecture, stats/multi-agent
+  guidance, README/Chinese overview as appropriate, and roadmap
+
+### T87 source-native parent and child Session evidence
+
+- status: planned
+- estimated size/risk: large / high; likely additive migration and per-source
+  identity behavior must remain atomically replaceable
+- purpose: preserve and present parent/child Session relationships only where a
+  source supplies stable structural evidence, without manufacturing a universal
+  Task graph
+- dependencies: T73 and source-adapter contract review; potential migration plan
+- scope: inventory source-native relation IDs, add an additive relationship
+  model only for proven links, retain existing Span sidechain evidence, and show
+  unavailable/ambiguous relation coverage explicitly
+- acceptance: no relationship is inferred from path, prompt, title, timing, or
+  model heuristics; source updates replace links atomically; reset/reimport and
+  user annotations preserve the documented semantics
+- verification: parser/adapter/repository migration tests, source fixtures for
+  linked/missing/ambiguous cases, reset/reimport checks, and UI coverage checks
+- documentation: update schema, source adapter, evidence limitations, and
+  roadmap documentation with actual supported sources
+
+### T88 conditional non-local access safety
+
+- status: planned
+- estimated size/risk: large / high and conditional; actual size depends on the
+  deployment and identity model selected by a future product decision
+- purpose: define and implement authentication, directory authorization,
+  backup/export, and threat-model controls only if the product is intentionally
+  exposed beyond the local trusted-machine use case
+- dependency: an explicit user/product decision to support non-loopback access
+- scope: threat model first; then narrow authentication/authorization, safe
+  origin/export controls, operational recovery guidance, and security tests as
+  required by the chosen deployment model
+- acceptance: no default loopback workflow regresses; no remote exposure is
+  documented or enabled without an agreed threat model and tested controls
+- verification: security design review, negative authorization tests, deployment
+  smoke checks, and updated operational documentation
+- documentation: update configuration, privacy, architecture, README, and
+  roadmap only after a concrete deployment decision
+
+### T89 comparable cohort/configuration Runtime Profile evaluation
+
+- status: planned
+- estimated size/risk: extra-large / high; statistical, Outcome, privacy, storage,
+  API, and interpretation contracts must agree before implementation
+- purpose: calculate distributional, Outcome-guarded comparisons for comparable
+  Tasks rather than treating a persisted Experiment definition as an outcome
+- dependencies: T80, T81, representative Outcome data, and an approved minimum
+  sample/coverage/statistical decision design
+- scope: define comparable-task constraints, coverage thresholds, distribution
+  statistics, regressions, evidence-sufficient/insufficient decisions, and
+  neutral report/API semantics; no universal Agent ranking
+- acceptance: missing Outcome remains missing; one Task cannot establish a
+  configuration effect; every decision shows sample, scope, coverage, guardrail,
+  and limitations
+- verification: synthetic statistical fixtures, Core/API tests, privacy review,
+  and documentation/model consistency review
+- documentation: promote only actually implemented cohort evaluation behavior
+  from proposal to current-state documents and record remaining limits
+
+### T90 bounded verified post-run feedback
+
+- status: planned
+- estimated size/risk: medium-large / high; recommendations become Runtime-facing
+  product behavior and therefore need strict evidence and staleness contracts
+- purpose: make verified cohort findings consumable after a Task completes,
+  without automatic prompt/rule rewrites or in-run Agent control
+- dependencies: T89 and an explicit consumer/privacy contract
+- scope: versioned, coverage-aware post-run finding records and presentation;
+  opt-in, bounded evidence references; stale/insufficient-evidence suppression
+- acceptance: each recommendation links to its cohort evidence and limitations;
+  no raw prompt/chain-of-thought transfer, automatic configuration mutation, or
+  causal claim beyond T89's decision contract
+- verification: Core/API/UI contract tests, privacy/redaction review, and
+  representative post-run user-flow check
+- documentation: update Profile model, Runtime proposal, architecture, README,
+  and roadmap to distinguish post-run feedback from future live Runtime hints
+
 ## Execution Order
 
-There is no active `in_progress` implementation Task. The remaining planned
-work is:
+T79 completed the documentation/assessment baseline. The normal desktop-first
+implementation order is:
 
-1. T50 scale, project intelligence, and local safety.
-2. T70 Session-navigation loading performance and transition feedback.
-3. T71 model-context and analysis-configuration audit.
-4. T73 MiMo external Claude Code history exclusion.
+1. T73 MiMo external Claude Code history exclusion, to protect source identity.
+2. T82 representative scale fixtures and performance budgets.
+3. T70 Session-navigation loading feedback, then T83 bounded discovery and T84
+   bounded detail/evidence retrieval; they share the main desktop navigation
+   path but keep transition UX and data-contract risk separately reviewable.
+4. T71 model-context and analysis-configuration audit.
+5. T80 Task Outcome evidence workspace, followed by T81 Cohort/Experiment
+   definition workflow.
+6. T85 append-only JSONL import, then T86 project evidence and T87 source-native
+   parent/child evidence.
+7. T89 comparable cohort evaluation, followed by T90 verified post-run feedback.
 
-T50 retains large-history performance, project evidence, and local-safety
-scope. Mobile dashboard navigation is intentionally not planned.
+T88 is conditional on a product decision to support non-local access and is not
+part of the default local-first sequence. Mobile dashboard navigation remains
+intentionally out of scope.
 
 ## Task Lifecycle
 

@@ -133,6 +133,27 @@ non-content metadata; it does not store a replacement title or inspect prompt,
 answer, or reasoning content. Only 120 matching rows render initially, with
 explicit incremental batches for larger result sets.
 
+### Current scale boundaries
+
+The 120-row Web render limit bounds DOM creation only. The current Home request
+still returns all Session summaries, and the browser performs its filtering,
+sorting, project counting, and time grouping over that complete response.
+`/api/stats` likewise reads all Session summaries and calculates several
+distributions in-process. Session detail analysis and evidence reports load the
+complete stored Span set for the selected Session; the analysis endpoint also
+loads all stored Spans for the selected Session's project when calculating the
+current project-relative score. These are correct current behaviors, not
+large-history performance guarantees.
+
+The source import coordinator discovers all source items but skips an unchanged
+item before loading/parsing it. When a source revision changes, the complete
+normalized Session is parsed and atomically replaces its stored Spans. This
+preserves revision and annotation guarantees, but transcript append-only parsing
+is not implemented. T82–T85 in `docs/roadmap.md` own performance fixtures,
+bounded read/render contracts, and source-safe incremental-import work; they
+must not change metric, privacy, or atomic-replacement semantics merely to
+improve throughput.
+
 ## Current data sources
 
 | Agent | Local source | Import model |
