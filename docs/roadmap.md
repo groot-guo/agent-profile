@@ -3994,16 +3994,216 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     no source file, stored cwd, or database row was modified
   - documentation consistency scan and `git diff --check` — passed
 
+### T93 Session sidebar hierarchy and compact data synchronization
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- estimated size/risk: medium / medium; the change is Web-only and preserves the
+  existing import/reset APIs, but async state, destructive-action separation,
+  responsive layout, and accessible progress feedback require focused checks
+- purpose:
+  - make the Session list the sidebar's primary content instead of repeating
+    totals, equal-weight operations, and an expandable data-management panel
+  - replace the oversized existing-data import panel with compact, truthful,
+    non-blocking synchronization feedback while retaining T91's full first-run
+    preparation experience
+- scope and expected files:
+  1. simplify `apps/web/app/page.tsx` so the default sidebar has one primary
+     `同步数据` action, one compact secondary-action menu, fewer repeated totals,
+     and no inline destructive-management expansion
+  2. move forced rebuild and generated-data reset into a focused modal/dialog
+     that loads its impact summary on demand, separates the danger zone, traps
+     neither list space nor normal navigation, and retains the existing explicit
+     confirmation contract
+  3. refactor `ImportProgressPanel` compact mode into a 32–40px status surface
+     near the sync action/list, with source-level count and a thin progress line;
+     details remain progressively disclosed and no record-level percentage is
+     invented
+  4. preserve background polling, stale Session visibility, source failure
+     isolation, terminal dashboard refresh, first-run page mode, reduced motion,
+     and polite screen-reader announcements
+  5. update styling and current UI/architecture documentation with the final
+     behavior; no Server API, schema, importer, or metric change is in scope
+- dependencies, assumptions, and risks:
+  - follows T91 and intentionally revises only its existing-data presentation;
+    the first-run no-Session state remains page-level
+  - source status is the only reliable progress granularity, so a large active
+    source may leave the settled-source count unchanged for some time
+  - menus and dialogs must be keyboard reachable, Escape-dismissable, labelled,
+    and must not leave background controls accidentally actionable while open
+- acceptance:
+  - with stored Sessions, starting sync leaves the list and selected detail
+    usable and shows only a compact status row with active operation, settled /
+    available sources, and expandable source details
+  - completion produces a bounded success summary; partial failure names failed
+    sources and exposes a recovery path without a persistent large panel
+  - refresh-list, rebuild, and reset remain available but are visually subordinate
+    to sync; rebuild/reset no longer consume permanent sidebar height
+  - the sidebar has one clear result-count presentation and remains usable at
+    desktop and <=760px widths without overlap, hidden controls, or avoidable
+    layout shift
+- verification plan:
+  - add or update focused import-state/component interaction tests where practical;
+    run focused Web tests and Biome checks, production Web build, browser smoke for
+    active/completed/failed sync and data-management dialog at desktop/narrow
+    widths, plus keyboard/Escape and reduced-motion checks; run `git diff --check`
+- documentation plan:
+  - update `ARCHITECTURE.md`, `docs/ui-guidelines.md`, README/Chinese overview only
+    where user-visible current-state language changes, and record actual changed
+    files and verification results here before completion
+- implementation:
+  - reduced the default data-operation area to one `同步数据` primary action and
+    one keyboard-accessible more menu containing `刷新显示` and `数据管理`; the
+    previous equal-weight three-button row and inline expansion were removed
+  - moved forced rebuild and confirmed generated-data reset into a native modal
+    dialog with a labelled rebuild section, visually isolated danger zone,
+    Escape handling, and focus restoration to the invoking more-actions control
+  - replaced the existing-data content-area import card with a compact sidebar
+    details row: collapsed state shows operation, active source summary, and
+    settled/available count over a two-pixel source progress line; expansion
+    shows per-source status and unavailable-source coverage
+  - retained the full T91 first-run preparation page, import owner/polling path,
+    stale Session visibility, source failure semantics, terminal refresh, and
+    source-level-only progress contract; short jobs are delayed 400 ms so they
+    finish without flashing a transient loading panel
+  - removed the redundant Session-list footer totals, auto-dismissed successful
+    operation feedback after five seconds, and aligned Home/dashboard copy on
+    `同步数据`
+- changed files:
+  - Web: `apps/web/app/page.tsx`, `apps/web/app/import-progress.tsx`,
+    `apps/web/app/layout.tsx`, and `apps/web/app/dashboard.tsx`
+  - documentation: `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/ui-guidelines.md`, `docs/zh/OVERVIEW.md`, and this roadmap
+- verification:
+  - focused import/navigation Vitest runs passed; the final full run passed 44
+    files and 259 tests
+  - `pnpm lint` completed with no errors; the repository's existing 18 warnings
+    and 2 informational diagnostics remain outside T93/T94
+  - root `pnpm build` passed Core TypeScript, Server no-emit type checking, and
+    the optimized Next.js build with all 9 routes generated
+  - browser smoke on the local 260-Session dataset confirmed the modal impact
+    summary, disabled reset until exact confirmation, explicit close, Escape
+    dismissal, and focus return; both normal sync and rebuild completed inside
+    the 400 ms compact-status delay and therefore produced no loading flash while
+    refreshing the list
+  - light/dark and 376px checks retained usable Session rows and data actions;
+    browser console error/warning capture was empty and `git diff --check` passed
+- limitation:
+  - current local sources finish too quickly to hold the expanded active state in
+    a browser smoke fixture; its long-running branch is still driven by the same
+    tested source-level view model and production-compiled component. The Server
+    still cannot report file/record progress, so one large source can keep the
+    settled count unchanged until it completes
+
+### T94 searchable grouped project picker and compact filter responsiveness
+
+- status: completed
+- started_at: 2026-07-28
+- completed_at: 2026-07-28
+- estimated size/risk: medium / medium; project identity remains unchanged, but
+  a custom combobox must preserve URL restoration, filtering semantics, keyboard
+  navigation, long-path readability, and large-option performance
+- purpose:
+  - replace the native long project `<select>` with a compact searchable picker
+    that presents project name, parent path, special Session-record categories,
+    and counts as distinct information rather than one truncated option string
+  - prevent Agent and secondary filters from shrinking into unreadable labels
+- dependencies: T93 establishes the final sidebar hierarchy and available space;
+  T92 remains the source of truth for project classification and display labels
+- scope and expected files:
+  1. add a dependency-free accessible project combobox/popup for the Home sidebar;
+     search matches display name and full project key, selection continues to use
+     the canonical project key in URL/navigation state
+  2. group special Session-record categories separately and organize filesystem
+     projects by recent activity without duplicating options; show short project
+     name as primary text, parent path as secondary text, and count as tabular data
+  3. add pure navigation/view-model helpers and focused tests for grouping,
+     ordering, labels, path decomposition, and search behavior
+  4. make Agent chips non-shrinking with a bounded wrap/scroll strategy and place
+     secondary filters behind progressive disclosure where needed on narrow
+     screens; include compact global-header rules because browser verification
+     identified that header as the source of a 376px horizontal overflow
+  5. update responsive styling and relevant UI documentation; do not change Core
+     classification, Server aggregates, stored cwd/filePath, or API contracts
+- acceptance:
+  - a user can find and select long or similarly named projects without relying
+    on a truncated native option; the selected project and browser URL restore
+    exactly after reload/back navigation
+  - special `Codex 会话记录`-style categories are clearly separated from filesystem
+    projects and never shown with a fake parent path
+  - keyboard users can open, search, move through, select, and dismiss the picker;
+    focus returns predictably and screen readers receive expanded/selected state
+  - Agent labels and counts remain readable without overlap at 376px and narrow
+    stacked layouts; the Session list retains a practical minimum viewport
+- verification plan:
+  - focused helper and interaction tests, Biome checks, production Web build, and
+    browser smoke with long paths, special categories, keyboard navigation,
+    desktop/narrow widths, light/dark themes, and `git diff --check`
+- documentation plan:
+  - update `docs/ui-guidelines.md`, architecture/current user documentation where
+    the picker behavior is described, and this Task with final evidence
+- implementation:
+  - added a dependency-free accessible project picker with a labelled trigger,
+    focused search combobox, listbox/option state, Arrow Up/Down and Enter
+    selection, Escape/outside dismissal, and focus restoration
+  - added pure project-picker view-model helpers: special Session-record projects
+    form their own group; filesystem projects are ordered by latest Session into
+    non-duplicated recent/other groups; every item carries short name, parent path,
+    count, last-used time, and the canonical project key
+  - project search matches display name and filesystem path but deliberately does
+    not expose or match the internal key of a Session-record category; URL state,
+    exact filtering, T92 classification, Server aggregates, and stored paths are
+    unchanged
+  - moved result-view and Agent filters behind one progressive-disclosure row,
+    kept active-filter counts and clear-all visible, and changed Agent chips to
+    non-shrinking wrapped items so labels/counts no longer collapse into ellipses
+  - changed the <=760px Home layout from a fixed sidebar height to an independent
+    260px-minimum Session list window; compacted the <=470px global header after
+    browser measurement showed its brand/navigation spacing caused horizontal
+    overflow
+- changed files:
+  - Web: new `apps/web/app/project-picker.tsx`, plus
+    `apps/web/app/session-navigation.ts`,
+    `apps/web/app/session-navigation.test.ts`, `apps/web/app/page.tsx`,
+    `apps/web/app/layout.tsx`, and `apps/web/app/header.tsx`
+  - documentation: `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/ui-guidelines.md`, `docs/zh/OVERVIEW.md`, and this roadmap
+- verification:
+  - focused project/navigation and import-state tests passed 12 tests; the final
+    full Vitest run passed 44 files and 259 tests
+  - root `pnpm build` and `pnpm lint` completed as recorded in T93, with no new
+    lint errors or diagnostics in changed files
+  - local-browser desktop smoke showed 51 grouped project categories with special
+    `Codex 会话记录`, recent and other sections; duplicate names such as `tools`
+    and `default` remained distinguishable by parent path
+  - keyboard smoke searched `agent-profile`, moved to the sole filesystem match,
+    selected it with Arrow Down/Enter, restored focus to the trigger, wrote the
+    canonical encoded project path to the URL, and rendered exactly its 22 rows;
+    Escape closed the picker and restored trigger focus
+  - at a 376x800 viewport the product document width stayed 368px inside the
+    viewport, the sidebar was 366px, the Session list remained 416px high, the
+    project popover stayed between x=16 and x=350, and all six Agent chips wrapped
+    with readable labels/counts and no overlap; light/dark screenshots and an
+    empty browser console completed the visual check
+  - documentation consistency scan and `git diff --check` passed
+- limitation:
+  - grouping is intentionally based on the latest stored Session timestamp rather
+    than persisted user favourites; T83 may later move project facets to a bounded
+    Server discovery contract, but must preserve this canonical-key and coverage
+    behavior
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded
 Codex non-project classification fix, T73 restored MiMo source attribution, and
-T82 established the representative performance baseline. The remaining normal
-desktop-first implementation order is:
+T82 established the representative performance baseline. T93/T94 then completed
+the compact Home synchronization, data-management, project-picker, and responsive
+sidebar interaction layer. The remaining normal desktop-first implementation order is:
 
-1. T70 Session-navigation loading feedback, then T83 bounded discovery and T84
-   bounded detail/evidence retrieval; they share the main desktop navigation
-   path but keep transition UX and data-contract risk separately reviewable.
+1. T83 bounded discovery, then T84 bounded detail/evidence retrieval; they share
+   the main desktop navigation path but keep data-contract risks separately
+   reviewable and must preserve T93/T94 interaction semantics.
 2. T71 model-context and analysis-configuration audit.
 3. T80 Task Outcome evidence workspace, followed by T81 Cohort/Experiment
    definition workflow.

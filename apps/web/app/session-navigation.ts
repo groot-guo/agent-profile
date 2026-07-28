@@ -6,6 +6,16 @@ import { AGENT_LABELS } from './theme';
 export type SessionSort = 'time' | 'cost' | 'tokens' | 'cache' | 'duration';
 export type SessionQuickView = 'all' | 'anomaly' | 'unpriced';
 export type SessionTimeRange = 'all' | '1d' | '7d' | '30d' | '90d';
+export type ProjectPickerGroup = 'records' | 'recent' | 'other';
+
+export interface ProjectPickerOption {
+  project: string;
+  name: string;
+  parentPath: string;
+  count: number;
+  lastUsedAt: number;
+  group: ProjectPickerGroup;
+}
 
 export interface SessionNavigationState {
   agent: string;
@@ -87,6 +97,67 @@ export function projectOptions(
   return [...counts.entries()]
     .map(([project, count]) => ({ project, count }))
     .sort((a, b) => b.count - a.count || a.project.localeCompare(b.project));
+}
+
+export function projectPickerOptions(
+  sessions: SessionSummary[],
+  recentLimit = 6,
+): ProjectPickerOption[] {
+  const projects = new Map<string, { count: number; lastUsedAt: number }>();
+  for (const session of sessions) {
+    const project = sessionProject(session);
+    const current = projects.get(project);
+    if (current) {
+      current.count += 1;
+      current.lastUsedAt = Math.max(current.lastUsedAt, session.startTime);
+    } else {
+      projects.set(project, { count: 1, lastUsedAt: session.startTime });
+    }
+  }
+
+  const records: ProjectPickerOption[] = [];
+  const filesystem: ProjectPickerOption[] = [];
+  for (const [project, summary] of projects) {
+    const option = {
+      project,
+      name: projectLabel(project),
+      parentPath: projectParentPath(project),
+      count: summary.count,
+      lastUsedAt: summary.lastUsedAt,
+      group: 'other' as ProjectPickerGroup,
+    };
+    if (isSessionRecordsProject(project)) {
+      records.push({ ...option, parentPath: '', group: 'records' });
+    } else {
+      filesystem.push(option);
+    }
+  }
+
+  records.sort((a, b) => b.lastUsedAt - a.lastUsedAt || b.count - a.count);
+  filesystem.sort(
+    (a, b) =>
+      b.lastUsedAt - a.lastUsedAt || b.count - a.count || a.project.localeCompare(b.project),
+  );
+  return [
+    ...records,
+    ...filesystem.map<ProjectPickerOption>((option, index) => ({
+      ...option,
+      group: index < Math.max(0, recentLimit) ? 'recent' : 'other',
+    })),
+  ];
+}
+
+export function filterProjectPickerOptions(
+  options: ProjectPickerOption[],
+  query: string,
+): ProjectPickerOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return options;
+  return options.filter((option) =>
+    `${option.name}\n${option.parentPath}${option.group === 'records' ? '' : `\n${option.project}`}`
+      .toLowerCase()
+      .includes(normalizedQuery),
+  );
 }
 
 export function groupSessionsByTime(
@@ -192,4 +263,12 @@ function formatLocalStart(timestamp: number): string {
   const hour = String(date.getHours()).padStart(2, '0');
   const minute = String(date.getMinutes()).padStart(2, '0');
   return `${month}-${day} ${hour}:${minute}`;
+}
+
+function projectParentPath(project: string): string {
+  if (isSessionRecordsProject(project) || project === '/') return '';
+  const normalized = project.replace(/\/+$/, '');
+  const separator = normalized.lastIndexOf('/');
+  if (separator < 0) return '';
+  return normalized.slice(0, separator) || '/';
 }

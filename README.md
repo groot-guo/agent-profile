@@ -68,20 +68,21 @@ On startup, the Server begins one observable background import job. With no
 stored Sessions, the Web switches to a dedicated data-preparation page: it
 shows each available source and a source-level progress count instead of
 leaving a generic empty dashboard that can look frozen. With stored Sessions,
-sync or forced rebuild stays non-modal in a persistent progress panel, so the
-existing list and analysis remain usable. Completion automatically refreshes
-the displayed local data.
+sync or forced rebuild stays non-modal in one compact sidebar status row, so the
+existing list and analysis remain usable. The row shows truthful source-level
+completion and expands on demand for per-source detail; completion automatically
+refreshes the displayed local data.
 
 | Source | Default local location | When it is imported |
 | --- | --- | --- |
-| Claude Code | `~/.claude/projects` | startup and “重新扫描” |
-| Codex | `~/.codex/sessions` | startup and “重新扫描” |
-| Zed | local Zed `threads.db` | startup and “重新扫描” when present |
-| MiMo | local `mimocode.db` | startup and “重新扫描” when present |
-| OpenCode | `~/.local/share/opencode/opencode.db` | startup and “重新扫描” when present |
+| Claude Code | `~/.claude/projects` | startup and “同步数据” |
+| Codex | `~/.codex/sessions` | startup and “同步数据” |
+| Zed | local Zed `threads.db` | startup and “同步数据” when present |
+| MiMo | local `mimocode.db` | startup and “同步数据” when present |
+| OpenCode | `~/.local/share/opencode/opencode.db` | startup and “同步数据” when present |
 
 If the list is empty, use the source-aware first-run panel or click
-**重新扫描**. The same deduplicated job used at startup checks all five sources
+**同步数据**. The same deduplicated job used at startup checks all five sources
 and reports imported, updated, skipped, and failed counts. The status API and UI
 do not expose transcript text, full local paths, or source Session identifiers.
 Progress is deliberately source-level: the Server does not report a misleading
@@ -89,19 +90,22 @@ file- or record-level percentage, so one large active source can leave the
 progress count unchanged for a while. Unavailable local sources are excluded
 from the progress denominator.
 
-The Home-page **数据管理** panel separates four operations: refreshing stored
-API data, incremental synchronization, a forced analysis rebuild, and a local
-generated-data reset. Forced rebuild reprocesses unchanged available sources
+The Home sidebar keeps **同步数据** as its single primary data action. A compact
+more-actions menu contains **刷新显示** and opens **数据管理** as a modal, so
+forced rebuild and generated-data reset never consume Session-list height.
+Forced rebuild reprocesses unchanged available sources
 while preserving Session tags/notes, pricing, model-context configuration,
 migrations, and Sessions whose source is currently unavailable. Reset is a
 separate danger-zone action that requires the displayed confirmation phrase.
 
 Sessions appear in one recent-first list with lightweight time boundaries; no
 project folder needs to be expanded before opening a Session. Each row retains
-its project label. An exact project selector with counts, all/1/7/30/90-day
-range selection, Agent chips, free-text title/project/path search,
-anomaly/unpriced quick views, and sorting compose together and remain in the URL
-when a Session is opened or the browser goes back. Source-provided Session
+its project label. A searchable grouped project picker separates Session-record
+categories from recently used and other filesystem projects, displaying short
+name, parent path, and count without losing the canonical project key. It composes
+with all/1/7/30/90-day range selection, progressively disclosed Agent and quick
+views, free-text title/project/path search, and sorting; stable state remains in
+the URL when a Session is opened or the browser goes back. Source-provided Session
 titles remain authoritative; an untitled Session gets a display-only
 Agent/project/start-time label instead of an opaque ID. That fallback is not
 persisted and does not inspect or preview prompt, answer, or reasoning content.
@@ -228,7 +232,7 @@ multi-source import job instead.
 ### No sessions appear
 
 1. Confirm that a supported source exists at one of the default locations.
-2. Follow the per-source startup status; use **重新扫描** to retry any available
+2. Follow the per-source startup status; use **同步数据** to retry any available
    source.
 3. For a custom transcript directory, start with
    `AUTO_SCAN_DIR=/absolute/path pnpm dev`.

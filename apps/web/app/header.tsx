@@ -80,6 +80,7 @@ export function Header() {
           A
         </span>
         <span
+          className="app-brand-name"
           style={{
             fontSize: 15,
             fontWeight: 600,

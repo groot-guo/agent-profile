@@ -73,11 +73,22 @@ data-preparation page with available-source cards, a determinate
 completed-source/available-source count, and an explicit source-level
 limitation. Unavailable sources are excluded from the denominator. During
 sync or forced rebuild when Sessions already exist, Home keeps the list and
-analysis interactive and adds a sticky, non-modal progress panel showing the
-operation, settled-source count, active source names, and failed source names.
+analysis interactive and adds one compact, expandable status row beside the
+sidebar data action. Its collapsed state shows the operation and settled/available
+source count; expansion shows active, completed, unavailable, and failed source
+detail without turning the result into file- or record-level progress.
 It polls the existing job status and refreshes dashboard data once when the job
 becomes terminal; it does not create a second import pipeline or imply
 file-/record-level progress.
+
+Home keeps `同步数据` as the single primary data action. `刷新显示` is subordinate
+in a more-actions menu, while forced rebuild and generated-data reset live in a
+modal with an explicit danger zone and the existing reset phrase. Session discovery
+uses a dependency-free searchable project combobox: special Session-record
+categories are grouped separately, filesystem projects show short name plus parent
+path and recent/other grouping, and selection still stores the canonical project
+key in the URL. Agent and quick-view filters are progressively disclosed; their
+active values remain visible through the filter count and preserve URL semantics.
 
 The same job manager also owns an explicit forced-rebuild operation. Rebuild
 bypasses matching source fingerprints but keeps the normal lazy load, analysis,

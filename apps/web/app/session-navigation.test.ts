@@ -3,10 +3,12 @@ import { CODEX_SESSION_RECORDS_PROJECT } from '@agent-profile/core/project';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SESSION_NAVIGATION,
+  filterProjectPickerOptions,
   filterSessions,
   groupSessionsByTime,
   parseSessionNavigation,
   projectOptions,
+  projectPickerOptions,
   serializeSessionNavigation,
   sessionDisplayTitle,
   sessionProject,
@@ -123,6 +125,69 @@ describe('flat Session navigation', () => {
     const claude = session('claude', undefined, 'claude-code', 100, 0);
     claude.filePath = '/Users/example/.claude/projects/-Users-example-repo/session.jsonl';
     expect(sessionProject(claude)).toBe('/Users/example/repo');
+  });
+
+  it('builds non-duplicated project-picker groups with short names, parent paths, and recency', () => {
+    const records = session(
+      'records',
+      '/Users/example/Documents/Codex/2026-07-28/chat-a',
+      'codex',
+      500,
+      0,
+    );
+    records.filePath = '/Users/example/.codex/sessions/2026/07/28/rollout-a.jsonl';
+    const options = projectPickerOptions(
+      [
+        session('older-alpha', '/Users/example/GitHub/alpha', 'codex', 100, 0),
+        session('newer-alpha', '/Users/example/GitHub/alpha', 'claude-code', 400, 0),
+        session('beta', '/Users/example/GitLab/beta', 'codex', 300, 0),
+        session('gamma', '/Users/example/gamma', 'codex', 200, 0),
+        records,
+      ],
+      2,
+    );
+
+    expect(options).toEqual([
+      {
+        project: CODEX_SESSION_RECORDS_PROJECT,
+        name: 'Codex 会话记录',
+        parentPath: '',
+        count: 1,
+        lastUsedAt: 500,
+        group: 'records',
+      },
+      {
+        project: '/Users/example/GitHub/alpha',
+        name: 'alpha',
+        parentPath: '/Users/example/GitHub',
+        count: 2,
+        lastUsedAt: 400,
+        group: 'recent',
+      },
+      {
+        project: '/Users/example/GitLab/beta',
+        name: 'beta',
+        parentPath: '/Users/example/GitLab',
+        count: 1,
+        lastUsedAt: 300,
+        group: 'recent',
+      },
+      {
+        project: '/Users/example/gamma',
+        name: 'gamma',
+        parentPath: '/Users/example',
+        count: 1,
+        lastUsedAt: 200,
+        group: 'other',
+      },
+    ]);
+    expect(filterProjectPickerOptions(options, 'GitLab/beta').map((option) => option.name)).toEqual(
+      ['beta'],
+    );
+    expect(filterProjectPickerOptions(options, 'Codex 会话').map((option) => option.name)).toEqual([
+      'Codex 会话记录',
+    ]);
+    expect(filterProjectPickerOptions(options, 'agent-profile')).toEqual([]);
   });
 
   it('groups recent Sessions by time and bounds a 400-row render', () => {

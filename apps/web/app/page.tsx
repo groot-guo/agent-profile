@@ -1,7 +1,6 @@
 'use client';
 
 import type { SessionSummary } from '@agent-profile/core';
-import { isSessionRecordsProject } from '@agent-profile/core/project';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API, type DataManagementSummary, type ImportJobStatus } from './config';
 import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
@@ -10,12 +9,13 @@ import { AgentMark } from './icons';
 import { ImportProgressPanel } from './import-progress';
 import { canResetData, summarizeImport, summarizeReset } from './import-state';
 import { projectLabel } from './project-label';
+import { ProjectPicker } from './project-picker';
 import {
   DEFAULT_SESSION_NAVIGATION,
   filterSessions,
   groupSessionsByTime,
   parseSessionNavigation,
-  projectOptions,
+  projectPickerOptions,
   type SessionQuickView,
   type SessionSort,
   type SessionTimeRange,
@@ -46,13 +46,16 @@ export default function HomePage() {
   const [projectFilter, setProjectFilter] = useState('');
   const [timeRange, setTimeRange] = useState<SessionTimeRange>('all');
   const [quickView, setQuickView] = useState<SessionQuickView>('all');
+  const [showSecondaryFilters, setShowSecondaryFilters] = useState(false);
   const [navigationReady, setNavigationReady] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(SESSION_RENDER_BATCH);
   const [showDataManagement, setShowDataManagement] = useState(false);
+  const [showCompactImport, setShowCompactImport] = useState(false);
   const [dataSummary, setDataSummary] = useState<DataManagementSummary | null>(null);
   const [resetConfirmation, setResetConfirmation] = useState('');
   const [resetting, setResetting] = useState(false);
   const sessionListRef = useRef<HTMLElement | null>(null);
+  const actionMenuRef = useRef<HTMLDetailsElement | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     const { sessions: sessionList, stats } = await loadDashboardData(API);
@@ -118,6 +121,7 @@ export default function HomePage() {
       setSortBy(state.sort);
       setQuickView(state.quickView);
       setSelectedId(state.selectedId);
+      setShowSecondaryFilters(state.agent !== 'all' || state.quickView !== 'all');
       setNavigationReady(true);
     };
     applyLocation();
@@ -154,6 +158,29 @@ export default function HomePage() {
   }, [agentFilter, projectFilter, quickView, search, sortBy, timeRange]);
 
   useEffect(() => {
+    const closeMenu = (event: MouseEvent) => {
+      if (!actionMenuRef.current?.contains(event.target as Node)) {
+        actionMenuRef.current?.removeAttribute('open');
+      }
+    };
+    const closeMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') actionMenuRef.current?.removeAttribute('open');
+    };
+    document.addEventListener('pointerdown', closeMenu);
+    document.addEventListener('keydown', closeMenuOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu);
+      document.removeEventListener('keydown', closeMenuOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!scanResult) return;
+    const timer = window.setTimeout(() => setScanResult(''), 5000);
+    return () => window.clearTimeout(timer);
+  }, [scanResult]);
+
+  useEffect(() => {
     if (selectedId || !navigationReady) return;
     const saved = Number(window.sessionStorage.getItem(SESSION_SCROLL_KEY) ?? 0);
     window.requestAnimationFrame(() => {
@@ -173,6 +200,7 @@ export default function HomePage() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const status = (await response.json()) as ImportJobStatus;
       setImportStatus(status);
+      setShowDataManagement(false);
       if (!status.active) {
         await fetchDashboardData();
         setScanResult(summarizeImport(status));
@@ -194,6 +222,8 @@ export default function HomePage() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const status = (await response.json()) as ImportJobStatus;
       setImportStatus(status);
+      setShowDataManagement(false);
+      window.requestAnimationFrame(() => actionMenuRef.current?.querySelector('summary')?.focus());
       if (!status.active) {
         await fetchDashboardData();
         setScanResult(summarizeImport(status));
@@ -211,10 +241,10 @@ export default function HomePage() {
     return summary;
   };
 
-  const toggleDataManagement = async () => {
-    const next = !showDataManagement;
-    setShowDataManagement(next);
-    if (!next || dataSummary) return;
+  const openDataManagement = async () => {
+    actionMenuRef.current?.removeAttribute('open');
+    setShowDataManagement(true);
+    setDataSummary(null);
     try {
       await loadDataSummary();
     } catch (err: unknown) {
@@ -240,6 +270,8 @@ export default function HomePage() {
       setResetConfirmation('');
       await Promise.all([fetchDashboardData(), fetchImportStatus(), loadDataSummary()]);
       setScanResult(summarizeReset(result.deleted));
+      setShowDataManagement(false);
+      window.requestAnimationFrame(() => actionMenuRef.current?.querySelector('summary')?.focus());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'reset failed');
     } finally {
@@ -248,6 +280,29 @@ export default function HomePage() {
   };
 
   const scanning = importStatus?.active ?? false;
+  const importHasFailures =
+    importStatus?.sources.some((source) => source.state === 'failed') ?? false;
+
+  useEffect(() => {
+    if (importHasFailures && !scanning) {
+      setShowCompactImport(true);
+      return;
+    }
+    if (!scanning) {
+      setShowCompactImport(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowCompactImport(true), 400);
+    return () => window.clearTimeout(timer);
+  }, [importHasFailures, scanning]);
+
+  const refreshDashboard = () => {
+    actionMenuRef.current?.removeAttribute('open');
+    setLoading(true);
+    Promise.allSettled([fetchDashboardData(), fetchImportStatus()]).finally(() =>
+      setLoading(false),
+    );
+  };
 
   const navigationState = useMemo(
     () => ({
@@ -266,7 +321,7 @@ export default function HomePage() {
     () => filterSessions(sessions, anomalyIds, navigationState),
     [anomalyIds, navigationState, sessions],
   );
-  const projects = useMemo(() => projectOptions(sessions), [sessions]);
+  const projects = useMemo(() => projectPickerOptions(sessions), [sessions]);
   const visibleSessions = visibleSessionSlice(filtered, visibleLimit);
   const timeGroups = groupSessionsByTime(visibleSessions);
 
@@ -288,6 +343,7 @@ export default function HomePage() {
     timeRange !== 'all',
     quickView !== 'all',
   ].filter(Boolean).length;
+  const secondaryFilterCount = [agentFilter !== 'all', quickView !== 'all'].filter(Boolean).length;
 
   const selectSession = (id: string) => {
     if (sessionListRef.current) {
@@ -313,6 +369,7 @@ export default function HomePage() {
     setAgentFilter('all');
     setTimeRange('all');
     setQuickView('all');
+    setShowSecondaryFilters(false);
   };
 
   const showFirstRunImport = !loading && sessions.length === 0 && Boolean(importStatus?.active);
@@ -369,23 +426,12 @@ export default function HomePage() {
           </label>
 
           <div className="session-filter-grid">
-            <label className="session-filter-field session-filter-field-wide">
-              <span>项目范围</span>
-              <select
-                aria-label="筛选项目"
-                value={projectFilter}
-                onChange={(event) => setProjectFilter(event.target.value)}
-              >
-                <option value="">全部项目 · {sessions.length}</option>
-                {projects.map(({ project, count }) => (
-                  <option key={project} value={project}>
-                    {projectLabel(project)} · {count}
-                    {isSessionRecordsProject(project) ? '' : ` — ${project}`}
-                  </option>
-                ))}
-              </select>
-              <ChevronGlyph />
-            </label>
+            <ProjectPicker
+              options={projects}
+              totalCount={sessions.length}
+              value={projectFilter}
+              onChange={setProjectFilter}
+            />
             <label className="session-filter-field">
               <span>时间范围</span>
               <select
@@ -418,127 +464,136 @@ export default function HomePage() {
             </label>
           </div>
 
-          <div className="session-filter-section-head">
-            <span>结果视图</span>
-            <span className="tnum">
-              {hasActiveFilters ? `${activeFilterCount} 项筛选` : '无额外筛选'}
-            </span>
-          </div>
-          <fieldset className="session-quick-view" aria-label="结果视图">
-            {(
-              [
-                ['all', '全部'],
-                ['anomaly', '异常'],
-                ['unpriced', '未定价'],
-              ] as Array<[SessionQuickView, string]>
-            ).map(([value, label]) => {
-              const active = quickView === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setQuickView(value)}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </fieldset>
+          <details
+            className="session-secondary-filters"
+            open={showSecondaryFilters}
+            onToggle={(event) => setShowSecondaryFilters(event.currentTarget.open)}
+          >
+            <summary>
+              <span>
+                <strong>更多筛选</strong>
+                <small>结果视图、Agent</small>
+              </span>
+              <span className="tnum">
+                {secondaryFilterCount > 0 ? `${secondaryFilterCount} 项已启用` : '可选'}
+              </span>
+              <ChevronGlyph />
+            </summary>
+            <div className="session-secondary-filter-body">
+              <div className="session-filter-section-head">
+                <span>结果视图</span>
+                <span className="tnum">
+                  {hasActiveFilters ? `${activeFilterCount} 项筛选` : '无额外筛选'}
+                </span>
+              </div>
+              <fieldset className="session-quick-view" aria-label="结果视图">
+                {(
+                  [
+                    ['all', '全部'],
+                    ['anomaly', '异常'],
+                    ['unpriced', '未定价'],
+                  ] as Array<[SessionQuickView, string]>
+                ).map(([value, label]) => {
+                  const active = quickView === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setQuickView(value)}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </fieldset>
+
+              <div className="session-filter-section-head session-agent-heading">
+                <span>Agent 范围</span>
+                <span className="tnum">{agents.length - 1} 个来源</span>
+              </div>
+              <div className="session-agent-filter">
+                {agents.map((agent) => {
+                  const active = agentFilter === agent;
+                  const color =
+                    agent === 'all' ? C.link : AGENT_COLORS[agent] || AGENT_COLORS.unknown;
+                  return (
+                    <button
+                      key={agent}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setAgentFilter(agent)}
+                      style={{ '--agent-color': color } as React.CSSProperties}
+                    >
+                      {agent !== 'all' && <AgentMark agent={agent} size={18} />}
+                      <span>
+                        {agent === 'all'
+                          ? '全部'
+                          : agent === 'claude-code'
+                            ? 'Claude'
+                            : agent === 'mimo-code'
+                              ? 'MiMo'
+                              : AGENT_LABELS[agent] || agent}
+                      </span>
+                      <span className="tnum">{agentCounts.get(agent)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </details>
           {hasActiveFilters && (
             <button type="button" className="session-filter-clear" onClick={clearFilters}>
               清除全部筛选
             </button>
           )}
-
-          <div className="session-filter-section-head session-agent-heading">
-            <span>Agent 范围</span>
-            <span className="tnum">{agents.length - 1} 个来源</span>
-          </div>
-          <div className="session-agent-filter">
-            {agents.map((agent) => {
-              const active = agentFilter === agent;
-              const color = agent === 'all' ? C.link : AGENT_COLORS[agent] || AGENT_COLORS.unknown;
-              return (
-                <button
-                  key={agent}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setAgentFilter(agent)}
-                  style={{ '--agent-color': color } as React.CSSProperties}
-                >
-                  {agent !== 'all' && <AgentMark agent={agent} size={18} />}
-                  <span>
-                    {agent === 'all'
-                      ? '全部'
-                      : agent === 'claude-code'
-                        ? 'Claude'
-                        : agent === 'mimo-code'
-                          ? 'MiMo'
-                          : AGENT_LABELS[agent] || agent}
-                  </span>
-                  <span className="tnum">{agentCounts.get(agent)}</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         <div className="session-sidebar-operations">
           <div className="session-operation-actions">
             <button
-              className="session-data-management-toggle"
+              className="session-sync-button"
               type="button"
-              onClick={toggleDataManagement}
-              disabled={scanning || resetting}
-              title="强制重建分析，或在危险区清空本地生成数据"
-            >
-              {showDataManagement ? '收起' : '数据管理'}
-            </button>
-            <SoftButton
-              variant="primary"
               onClick={onScan}
               disabled={scanning}
-              tip="检查 Claude Code、Codex、Zed、MiMo Code 与 OpenCode，导入新增或变化的会话"
-              tipAlign="start"
-              style={{ flex: 1 }}
+              aria-busy={scanning}
+              title="检查所有可用来源，导入新增或变化的 Session"
             >
-              {scanning ? '扫描中…' : '重新扫描'}
-            </SoftButton>
-            <SoftButton
-              onClick={() => {
-                setLoading(true);
-                Promise.allSettled([fetchDashboardData(), fetchImportStatus()]).finally(() =>
-                  setLoading(false),
-                );
-              }}
-              tip="重新加载列表(不扫描文件)"
-              tipAlign="end"
-              style={{ flex: 1 }}
-            >
-              刷新列表
-            </SoftButton>
+              {scanning && <span className="session-sync-spinner" aria-hidden="true" />}
+              <span>{scanning ? '同步中' : '同步数据'}</span>
+            </button>
+            <details className="session-action-menu" ref={actionMenuRef}>
+              <summary aria-label="更多数据操作" title="更多数据操作">
+                <MoreGlyph />
+              </summary>
+              <div className="session-action-menu-popover">
+                <button type="button" onClick={refreshDashboard}>
+                  <strong>刷新显示</strong>
+                  <span>重新读取当前列表，不扫描来源文件</span>
+                </button>
+                <button type="button" onClick={openDataManagement} disabled={scanning || resetting}>
+                  <strong>数据管理</strong>
+                  <span>强制重建或清空本地生成数据</span>
+                </button>
+              </div>
+            </details>
           </div>
-          {showDataManagement && (
-            <DataManagementPanel
-              summary={dataSummary}
-              scanning={scanning}
-              resetting={resetting}
-              confirmation={resetConfirmation}
-              onConfirmationChange={setResetConfirmation}
-              onRebuild={onRebuild}
-              onReset={onReset}
-            />
+          {showCompactImport && importStatus && (
+            <ImportProgressPanel status={importStatus} mode="compact" />
           )}
           {scanResult && (
-            <Notice kind="ok" onClose={() => setScanResult('')}>
-              {scanResult}
-            </Notice>
+            <div className="session-operation-notice">
+              <Notice kind="ok" onClose={() => setScanResult('')}>
+                {scanResult}
+              </Notice>
+            </div>
           )}
           {error && (
-            <Notice kind="err" onClose={() => setError('')}>
-              {error}
-            </Notice>
+            <div className="session-operation-notice">
+              <Notice kind="err" onClose={() => setError('')}>
+                {error}
+              </Notice>
+            </div>
           )}
         </div>
 
@@ -549,7 +604,7 @@ export default function HomePage() {
           ) : filtered.length === 0 ? (
             <Empty
               text="没有匹配的会话"
-              hint={hasActiveFilters ? '试试清除筛选条件' : '点击「重新扫描」导入本地会话'}
+              hint={hasActiveFilters ? '试试清除筛选条件' : '点击「同步数据」导入本地会话'}
             />
           ) : (
             <>
@@ -584,15 +639,6 @@ export default function HomePage() {
             </>
           )}
         </section>
-
-        {/* 底栏 */}
-        <div className="session-list-footer">
-          <span>
-            已显示 <strong className="tnum">{visibleSessions.length}</strong> /{' '}
-            <span className="tnum">{filtered.length}</span>
-          </span>
-          <span className="tnum">{projects.length} 个项目</span>
-        </div>
       </div>
 
       {/* ======== 内容区 ======== */}
@@ -607,12 +653,6 @@ export default function HomePage() {
           background: C.bg,
         }}
       >
-        {sessions.length > 0 &&
-          importStatus &&
-          (importStatus.active ||
-            importStatus.sources.some((source) => source.state === 'failed')) && (
-            <ImportProgressPanel status={importStatus} mode="compact" />
-          )}
         {selectedId ? (
           <div className="session-detail-frame">
             <div
@@ -667,58 +707,109 @@ export default function HomePage() {
           />
         )}
       </div>
+      <DataManagementDialog
+        open={showDataManagement}
+        summary={dataSummary}
+        scanning={scanning}
+        resetting={resetting}
+        confirmation={resetConfirmation}
+        onConfirmationChange={setResetConfirmation}
+        onClose={() => {
+          setShowDataManagement(false);
+          setResetConfirmation('');
+          window.requestAnimationFrame(() =>
+            actionMenuRef.current?.querySelector('summary')?.focus(),
+          );
+        }}
+        onRebuild={onRebuild}
+        onReset={onReset}
+      />
     </div>
   );
 }
 
-function DataManagementPanel({
+function DataManagementDialog({
+  open,
   summary,
   scanning,
   resetting,
   confirmation,
   onConfirmationChange,
+  onClose,
   onRebuild,
   onReset,
 }: {
+  open: boolean;
   summary: DataManagementSummary | null;
   scanning: boolean;
   resetting: boolean;
   confirmation: string;
   onConfirmationChange: (value: string) => void;
+  onClose: () => void;
   onRebuild: () => void;
   onReset: () => void;
 }) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || !open || dialog.open) return;
+    dialog.showModal();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onClose();
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [onClose, open]);
+
+  if (!open) return null;
+
   return (
-    <div
-      style={{
-        padding: SP.md,
-        border: `1px solid ${C.border}`,
-        borderRadius: R.md,
-        background: C.bg,
-        fontSize: FS.cap,
-        color: C.sub,
-        lineHeight: 1.55,
+    <dialog
+      ref={dialogRef}
+      className="data-management-dialog"
+      aria-labelledby="data-management-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
       }}
     >
-      <div style={{ fontWeight: 600, color: C.text, marginBottom: SP.xs }}>推荐：强制重建分析</div>
-      <div style={{ marginBottom: SP.sm }}>
-        重新解析所有可用来源，即使来源指纹未变化。原有标签、备注、定价和模型窗口配置会保留；不可用来源的已有数据不会被删除。
+      <div className="data-management-dialog-heading">
+        <div>
+          <span>Local data</span>
+          <h2 id="data-management-title">数据管理</h2>
+          <p>维护本地生成的分析数据；普通同步请使用侧栏的“同步数据”。</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="关闭数据管理弹窗">
+          <CloseGlyph />
+        </button>
       </div>
-      <SoftButton variant="primary" onClick={onRebuild} disabled={scanning || resetting}>
-        {scanning ? '任务进行中…' : '强制重建'}
-      </SoftButton>
 
-      <div
-        style={{
-          marginTop: SP.md,
-          paddingTop: SP.md,
-          borderTop: `1px solid ${C.high}55`,
-          color: C.high,
-        }}
-      >
-        <div style={{ fontWeight: 600, marginBottom: SP.xs }}>危险区：清空本地分析数据</div>
+      <section className="data-management-rebuild" aria-labelledby="data-rebuild-title">
+        <div>
+          <h3 id="data-rebuild-title">强制重建分析</h3>
+          <p>
+            重新解析所有可用来源，即使来源指纹未变化。标签、备注、定价和模型窗口配置会保留；不可用来源的已有数据不会被删除。
+          </p>
+        </div>
+        <SoftButton variant="primary" onClick={onRebuild} disabled={scanning || resetting}>
+          {scanning ? '任务进行中…' : '开始重建'}
+        </SoftButton>
+      </section>
+
+      <section className="data-management-danger" aria-labelledby="data-reset-title">
+        <div>
+          <span>Danger zone</span>
+          <h3 id="data-reset-title">永久清空生成数据</h3>
+        </div>
         {summary ? (
-          <div style={{ marginBottom: SP.sm }}>
+          <p>
             将删除 {summary.sessions} 个会话和 {summary.spans} 个 Span
             {summary.annotatedSessions > 0
               ? `，其中 ${summary.annotatedSessions} 个带标签或备注`
@@ -727,27 +818,21 @@ function DataManagementPanel({
             Outcome、{summary.configSnapshots} 个配置快照、{summary.cohorts} 个 cohort 和{' '}
             {summary.experiments} 个 experiment 保留。操作前请停止 Server 并备份
             apps/server/trace.db（或 TRACE_DB_PATH 指定文件）。
-          </div>
+          </p>
         ) : (
-          <div style={{ marginBottom: SP.sm }}>正在读取影响范围…</div>
+          <p>正在读取影响范围…</p>
         )}
         {summary && (
-          <>
+          <div className="data-management-confirmation">
+            <label htmlFor="data-reset-confirmation">
+              输入 <strong>{summary.resetConfirmation}</strong> 确认
+            </label>
             <input
+              id="data-reset-confirmation"
               aria-label="本地数据重置确认"
               placeholder={`输入 ${summary.resetConfirmation}`}
               value={confirmation}
               onChange={(event) => onConfirmationChange(event.target.value)}
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                marginBottom: SP.sm,
-                padding: '6px 8px',
-                border: `1px solid ${C.border}`,
-                borderRadius: R.sm,
-                background: C.card,
-                color: C.text,
-              }}
             />
             <SoftButton
               onClick={onReset}
@@ -755,10 +840,10 @@ function DataManagementPanel({
             >
               {resetting ? '正在清空…' : '永久清空生成数据'}
             </SoftButton>
-          </>
+          </div>
         )}
-      </div>
-    </div>
+      </section>
+    </dialog>
   );
 }
 
@@ -812,6 +897,29 @@ function ChevronGlyph() {
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MoreGlyph() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="m7 7 10 10M17 7 7 17"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
       />
     </svg>
   );

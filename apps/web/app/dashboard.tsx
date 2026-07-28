@@ -221,7 +221,7 @@ export function DashboardView({
           </Line>
           <Line>未知模型的成本不估算,统一显示「未定价」</Line>
           <Line>
-            启动与“重新扫描”共享任务状态，检查 Claude Code、Codex、Zed、MiMo Code 和 OpenCode
+            启动与“同步数据”共享任务状态，检查 Claude Code、Codex、Zed、MiMo Code 和 OpenCode
           </Line>
         </div>
       </Card>
