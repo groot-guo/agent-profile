@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@agent-profile/core": "workspace:*",
+    "@agent-profile/contracts": "workspace:*",
     "@fastify/cors": "^10.0.0",
     "better-sqlite3": "^11.0.0",
     "fastify": "^5.0.0",

@@ -203,7 +203,8 @@ pnpm dev
 
 ## 当前产品边界
 
-- 目前没有桌面安装包；`pnpm start` 是受支持的非 watch 本地启动入口。
+- 目前还没有可安装的 `agent-profile` CLI 或桌面安装包。仓库已经具备可由后续 CLI
+  直接复用的应用 Runtime，但当前受支持的非 watch 本地启动入口仍是 `pnpm start`。
 - Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型。
   自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化

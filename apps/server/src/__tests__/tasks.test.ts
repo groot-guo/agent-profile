@@ -101,7 +101,9 @@ describe('Task/Outcome foundations', () => {
     databases.push(database);
     seedSession(database, 'session-api');
     const app = Fastify();
-    registerTaskRoutes(app, database);
+    registerTaskRoutes(app, {
+      database,
+    });
 
     const rejected = await app.inject({
       method: 'POST',

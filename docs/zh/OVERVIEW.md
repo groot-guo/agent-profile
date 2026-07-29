@@ -39,14 +39,20 @@ Task 是把过程证据连接到交付结果的边界，不是产品唯一目的
 ```text
 Claude Code JSONL ─┐
 Codex rollout JSONL ┤
-Zed SQLite + zstd ──┼→ 来源适配器 → 导入协调器 → 统一 Session/Span
-MiMo SQLite ────────┤                                   ↓
-OpenCode SQLite ────┘                           分析 + 会话仓储
-                                                        ↓
-                                                     SQLite
-                                                        ↓
-                                               Fastify API → Next.js UI
+Zed SQLite + zstd ──┼→ 来源适配器 → Import Runtime/导入协调器
+MiMo SQLite ────────┤                              ↓
+OpenCode SQLite ────┘                      分析 + 会话仓储
+                                                   ↓
+生产入口 → App Runtime ─────────────────────────→ SQLite
+                  ↓
+             Fastify 适配器 → Next.js UI
 ```
+
+当前 `AppRuntime` 是应用组合边界：生产启动只创建一个选定的 SQLite 连接，并围绕它创建
+定价/模型窗口解析器、每 Runtime 独立的导入服务与任务管理器、时钟和幂等关闭操作。
+Fastify 只适配显式传入的 Runtime；路由不再创建生产数据库或导入单例。后续 CLI 计划直接
+调用同一 Runtime，但目前还没有可安装的 `agent-profile` 命令，日常入口仍是源码仓库中的
+`pnpm dev`/`pnpm start`。
 
 各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
 每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新

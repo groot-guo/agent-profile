@@ -256,8 +256,9 @@ pnpm dev
 
 ## Current product boundaries
 
-- There is no packaged desktop application yet. `pnpm start` is the supported
-  non-watch local launcher.
+- There is no packaged `agent-profile` CLI or desktop application yet. The
+  repository now has a reusable application Runtime for a future CLI, but
+  `pnpm start` remains the supported non-watch local launcher.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
   local foundations. Automated cohort statistics, regression detection,
   causal experiment conclusions, and Runtime feedback/SDK integration are not

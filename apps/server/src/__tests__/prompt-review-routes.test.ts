@@ -121,7 +121,10 @@ function createApp() {
   const database = createDatabase(':memory:');
   databases.push(database);
   const app = Fastify({ logger: false });
-  registerPromptReviewRoutes(app, database);
+  registerPromptReviewRoutes(app, {
+    database,
+    clock: () => Date.now(),
+  });
   return { app, database };
 }
 

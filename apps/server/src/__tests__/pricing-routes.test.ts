@@ -3,25 +3,31 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createDatabase } from '../database';
+import { registerPricingRoutes } from '../routes/pricing';
+import { registerScanRoutes } from '../routes/scan';
+import type { AppRuntime } from '../runtime';
+import { createRuntime } from '../runtime';
 
 describe('pricing route validation', () => {
   const app = Fastify();
   const scanDir = mkdtempSync(join(tmpdir(), 'agent-profile-t39-'));
+  let runtime: AppRuntime;
 
   beforeAll(async () => {
-    process.env.TRACE_DB_PATH = ':memory:';
-    const { registerPricingRoutes } = await import('../routes/pricing');
-    const { registerScanRoutes } = await import('../routes/scan');
-    registerPricingRoutes(app);
-    registerScanRoutes(app);
+    runtime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+    });
+    registerPricingRoutes(app, runtime);
+    registerScanRoutes(app, runtime);
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
-    const { closeDb } = await import('../db');
-    closeDb();
-    delete process.env.TRACE_DB_PATH;
+    await runtime.close();
     rmSync(scanDir, { recursive: true, force: true });
   });
 
@@ -100,8 +106,7 @@ describe('pricing route validation', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ scanned: 1, imported: 1 });
 
-    const { db } = await import('../db');
-    const span = db
+    const span = runtime.database
       .prepare(
         `SELECT cost_currency as costCurrency,
           pricing_effective_from as pricingEffectiveFrom,

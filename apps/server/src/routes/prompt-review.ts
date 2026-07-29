@@ -4,9 +4,10 @@ import {
   reviewPromptStructure,
 } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
-import type { DatabaseConnection } from '../database';
-import { db } from '../db';
+import type { AppRuntime } from '../runtime';
 import { buildProfileReport } from './profiles';
+
+type PromptReviewRuntime = Pick<AppRuntime, 'database' | 'clock'>;
 
 interface PromptReviewBody {
   prompt: string;
@@ -27,8 +28,9 @@ const promptReviewBodySchema = {
 
 export function registerPromptReviewRoutes(
   app: FastifyInstance,
-  database: DatabaseConnection = db,
+  runtime: PromptReviewRuntime,
 ): void {
+  const { database } = runtime;
   app.post<{ Body: PromptReviewBody }>(
     '/api/prompt-review',
     { schema: { body: promptReviewBodySchema } },
@@ -39,7 +41,7 @@ export function registerPromptReviewRoutes(
       }
 
       const agentProfile = request.body.agent
-        ? buildProfileReport(database).profiles.find(
+        ? buildProfileReport(database, runtime.clock()).profiles.find(
             (profile) => profile.agent === request.body.agent,
           )
         : undefined;

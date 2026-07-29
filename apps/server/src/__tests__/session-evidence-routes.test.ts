@@ -81,7 +81,9 @@ function createApp() {
   const database = createDatabase(':memory:');
   databases.push(database);
   const app = Fastify({ logger: false });
-  registerSessionEvidenceRoutes(app, database);
+  registerSessionEvidenceRoutes(app, {
+    database,
+  });
   return { app, database };
 }
 

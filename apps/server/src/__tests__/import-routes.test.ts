@@ -1,21 +1,30 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createDatabase } from '../database';
+import { registerScanRoutes } from '../routes/scan';
+import type { AppRuntime } from '../runtime';
+import { createRuntime } from '../runtime';
 
 describe('import status routes', () => {
   const app = Fastify();
+  let runtime: AppRuntime;
 
   beforeAll(async () => {
-    process.env.TRACE_DB_PATH = ':memory:';
-    const { registerScanRoutes } = await import('../routes/scan');
-    registerScanRoutes(app);
+    runtime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+    });
+    registerScanRoutes(app, runtime);
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
-    const { closeDb } = await import('../db');
-    closeDb();
-    delete process.env.TRACE_DB_PATH;
+    await runtime.close();
   });
 
   it('returns bounded source state without local paths or transcript identifiers', async () => {
@@ -49,16 +58,52 @@ describe('import status routes', () => {
     expect(response.statusCode).toBe(400);
   });
 
+  it('waits for direct compatibility scans before closing the Runtime database', async () => {
+    const scanDirectory = mkdtempSync(join(tmpdir(), 'agent-profile-close-scan-'));
+    const closingRuntime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+    });
+    try {
+      writeFileSync(
+        join(scanDirectory, 'session.jsonl'),
+        `${JSON.stringify({
+          uuid: 'turn-1',
+          sessionId: 'close-scan-session',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            model: 'deepseek-v4-flash',
+            content: [{ type: 'text', text: 'done' }],
+            usage: { input_tokens: 1000, output_tokens: 100 },
+          },
+        })}\n`,
+      );
+
+      const scan = closingRuntime.imports.runCompatibilityScan(scanDirectory);
+      await closingRuntime.close();
+      await expect(scan).resolves.toMatchObject({ imported: 1, failed: 0 });
+    } finally {
+      await closingRuntime.close();
+      rmSync(scanDirectory, { recursive: true, force: true });
+    }
+  });
+
   it('requires explicit confirmation and resets only generated analysis data', async () => {
-    const { db } = await import('../db');
-    db.prepare(
-      `INSERT INTO sessions (id, file_path, agent, start_time, imported_at, tags)
-       VALUES ('reset-session', 'fixture://reset', 'fixture', 1, 1, 'important')`,
-    ).run();
-    db.prepare(
-      `INSERT INTO spans (id, session_id, type, name, start_time)
-       VALUES ('reset-span', 'reset-session', 'llm_turn', 'fixture', 1)`,
-    ).run();
+    runtime.database
+      .prepare(
+        `INSERT INTO sessions (id, file_path, agent, start_time, imported_at, tags)
+         VALUES ('reset-session', 'fixture://reset', 'fixture', 1, 1, 'important')`,
+      )
+      .run();
+    runtime.database
+      .prepare(
+        `INSERT INTO spans (id, session_id, type, name, start_time)
+         VALUES ('reset-span', 'reset-session', 'llm_turn', 'fixture', 1)`,
+      )
+      .run();
 
     const summary = await app.inject({ method: 'GET', url: '/api/data-management/summary' });
     expect(summary.statusCode).toBe(200);
@@ -85,6 +130,8 @@ describe('import status routes', () => {
         migrations: expect.any(Number),
       },
     });
-    expect(db.prepare('SELECT COUNT(*) as count FROM sessions').get()).toEqual({ count: 0 });
+    expect(runtime.database.prepare('SELECT COUNT(*) as count FROM sessions').get()).toEqual({
+      count: 0,
+    });
   });
 });

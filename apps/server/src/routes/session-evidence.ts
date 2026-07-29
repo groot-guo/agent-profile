@@ -4,9 +4,10 @@ import {
   type SessionSummary,
 } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
-import type { DatabaseConnection } from '../database';
-import { db } from '../db';
+import type { AppRuntime } from '../runtime';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
+
+type SessionEvidenceRuntime = Pick<AppRuntime, 'database'>;
 
 interface EvidenceQuery {
   content?: EvidenceContentMode;
@@ -22,8 +23,9 @@ const evidenceQuerySchema = {
 
 export function registerSessionEvidenceRoutes(
   app: FastifyInstance,
-  database: DatabaseConnection = db,
+  runtime: SessionEvidenceRuntime,
 ): void {
+  const { database } = runtime;
   app.get<{ Params: { id: string }; Querystring: EvidenceQuery }>(
     '/api/session/:id/evidence',
     { schema: { querystring: evidenceQuerySchema } },

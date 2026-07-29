@@ -13,10 +13,13 @@ import {
   type Span,
 } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
-import { db, getModelContext, getPricing } from '../db';
+import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
+import type { AppRuntime, ContextWindowResolver, PricingResolver } from '../runtime';
 import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
+
+type SessionRuntime = Pick<AppRuntime, 'database' | 'pricingResolver' | 'contextWindowResolver'>;
 
 interface GitCommit {
   hash: string;
@@ -28,14 +31,16 @@ interface GitCommit {
 function scoreSession(
   session: SessionSummary,
   spans: Span[],
+  pricingResolver: PricingResolver,
+  contextWindowResolver: ContextWindowResolver,
   diagnosis?: Pick<DiagnosisResult, 'totalWastedCost'>,
 ): EfficiencyScore {
   const efficiency = analyzeEfficiency(spans);
   const result =
     diagnosis ||
     diagnoseSessionSync({ ...session, spans } as SessionDetail, {
-      pricingLookup: getPricing,
-      contextWindowLookup: getModelContext,
+      pricingLookup: pricingResolver,
+      contextWindowLookup: contextWindowResolver,
     });
   const totalTokens =
     session.inputTokens +
@@ -52,11 +57,14 @@ function scoreSession(
   );
 }
 
-function loadSpansForSessions(sessionIds: string[]): Map<string, Span[]> {
+function loadSpansForSessions(
+  database: DatabaseConnection,
+  sessionIds: string[],
+): Map<string, Span[]> {
   const spansBySession = new Map<string, Span[]>();
   if (sessionIds.length === 0) return spansBySession;
   const placeholders = sessionIds.map(() => '?').join(',');
-  const rows = db
+  const rows = database
     .prepare(
       `SELECT ${SPAN_COLS} FROM spans WHERE session_id IN (${placeholders}) ORDER BY start_time ASC`,
     )
@@ -113,7 +121,11 @@ function withoutStoredContent(span: Span): Span {
   return safeSpan;
 }
 
-export function registerSessionRoutes(app: FastifyInstance) {
+export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRuntime): void {
+  const { database, pricingResolver, contextWindowResolver } = runtime;
+  const db = database;
+  const getPricing = pricingResolver;
+  const getModelContext = contextWindowResolver;
   app.get('/api/sessions', async () => {
     return db
       .prepare(
@@ -205,9 +217,9 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .all(req.params.id) as Record<string, unknown>[];
     const spans = rows.map(parseSpanRow);
     const detail = { ...session, spans } as SessionDetail;
-    const diagnosis = await diagnoseDetail(detail);
+    const diagnosis = await diagnoseDetail(detail, runtime);
     const efficiency = analyzeEfficiency(spans);
-    const score = scoreSession(session, spans, diagnosis);
+    const score = scoreSession(session, spans, getPricing, getModelContext, diagnosis);
 
     if (session.cwd) {
       const cohort = db
@@ -217,9 +229,18 @@ export function registerSessionRoutes(app: FastifyInstance) {
            WHERE cwd = ? AND ${primarySessionPredicate()}`,
         )
         .all(session.cwd) as SessionSummary[];
-      const spansBySession = loadSpansForSessions(cohort.map((candidate) => candidate.id));
+      const spansBySession = loadSpansForSessions(
+        db,
+        cohort.map((candidate) => candidate.id),
+      );
       const cohortScores = cohort.map(
-        (candidate) => scoreSession(candidate, spansBySession.get(candidate.id) || []).score,
+        (candidate) =>
+          scoreSession(
+            candidate,
+            spansBySession.get(candidate.id) || [],
+            getPricing,
+            getModelContext,
+          ).score,
       );
       score.cohortSize = cohortScores.length;
       score.percentile =
@@ -299,7 +320,7 @@ export function registerSessionRoutes(app: FastifyInstance) {
       .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
       .all(req.params.id) as Record<string, unknown>[];
     const spans = rows.map(parseSpanRow);
-    const score = scoreSession(session, spans);
+    const score = scoreSession(session, spans, getPricing, getModelContext);
     // A score is comparable only within the same project. Load the cohort's
     // spans in one query, then rank by the same composite score shown in UI.
     if (session.cwd) {
@@ -310,9 +331,18 @@ export function registerSessionRoutes(app: FastifyInstance) {
            WHERE cwd = ? AND ${primarySessionPredicate()}`,
         )
         .all(session.cwd) as SessionSummary[];
-      const spansBySession = loadSpansForSessions(cohort.map((candidate) => candidate.id));
+      const spansBySession = loadSpansForSessions(
+        db,
+        cohort.map((candidate) => candidate.id),
+      );
       const cohortScores = cohort.map(
-        (candidate) => scoreSession(candidate, spansBySession.get(candidate.id) || []).score,
+        (candidate) =>
+          scoreSession(
+            candidate,
+            spansBySession.get(candidate.id) || [],
+            getPricing,
+            getModelContext,
+          ).score,
       );
       score.cohortSize = cohortScores.length;
       score.percentile =

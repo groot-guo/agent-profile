@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "next dev -H 127.0.0.1 -p 3001",
     "build": "next build",
-    "start": "next start -H 127.0.0.1 -p 3001"
+    "start": "next start -H 127.0.0.1 -p 3001",
+    "test": "vitest run"
   },
   "dependencies": {
     "@agent-profile/core": "workspace:*",
+    "@agent-profile/contracts": "workspace:*",
     "@lobehub/icons": "^5.14.0",
     "next": "^15.0.0",
     "react": "^19.0.0",
@@ -19,6 +21,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "vitest": "^4.1.10",
     "typescript": "^5.5.0"
   }
 }

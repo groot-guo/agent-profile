@@ -5,8 +5,10 @@ import {
 } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
-import { db } from '../db';
 import { primarySessionPredicate } from '../primary-sessions';
+import type { AppRuntime } from '../runtime';
+
+type ProfileRuntime = Pick<AppRuntime, 'database' | 'clock'>;
 
 interface ProfileRow {
   id: string;
@@ -31,13 +33,11 @@ interface ProfileRow {
   sidechainTools: number;
 }
 
-export function registerProfileRoutes(
-  app: FastifyInstance,
-  database: DatabaseConnection = db,
-): void {
-  app.get('/api/profiles/agents', async () => buildProfileReport(database));
+export function registerProfileRoutes(app: FastifyInstance, runtime: ProfileRuntime): void {
+  const { database } = runtime;
+  app.get('/api/profiles/agents', async () => buildProfileReport(database, runtime.clock()));
   app.get<{ Params: { agent: string } }>('/api/profiles/agents/:agent', async (request, reply) => {
-    const report = buildProfileReport(database);
+    const report = buildProfileReport(database, runtime.clock());
     const profile = report.profiles.find((candidate) => candidate.agent === request.params.agent);
     if (!profile) {
       return reply.status(404).send({

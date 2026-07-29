@@ -4463,43 +4463,109 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     `packages/contracts` is a new package or an equivalent isolated boundary
     remain implementation decisions for T98/T99
 
-### T98 module contracts and Server application composition
+### T98 module contracts and reusable Runtime/HTTP composition
 
-- status: planned
+- status: completed
+- started_at: 2026-07-29
+- completed_at: 2026-07-29
 - estimated size/risk: large / medium-high; behavior should remain compatible,
-  but application construction, dependency injection, test entry points, and
-  package boundaries affect every later module migration
+  but runtime construction, dependency injection, test entry points, and
+  package boundaries affect the future CLI and every later module migration
 - purpose:
-  - establish the minimum enforceable module contract so a contributor can
-    change one domain through its documented interfaces and focused tests
-    without tracing the entire Server or Web implementation
+  - establish the minimum enforceable contract and framework-neutral Runtime
+    composition that both the future CLI and the existing Fastify adapter can
+    reuse without importing process-global production state
 - dependencies:
   - T97 design baseline; no product feature or schema change is required
 - scope:
-  1. add a framework-neutral versioned contracts package or equivalent isolated
-     contract boundary, starting only with contracts needed by the first module
-  2. introduce a Server application factory and explicit production composition
-     so routes/services receive database, clock, and external providers rather
-     than importing process-global dependencies
-  3. define the module README/ownership template and a lightweight dependency
-     check that prevents forbidden route-to-SQL and cross-module repository
-     imports for migrated modules
-  4. make the documented root test command include Core, Server, and Web tests
-     while preserving the current build/start commands
+  1. add a framework-neutral contracts package, but expose only exact contracts
+     consumed by an implemented Server/Web vertical slice rather than broad or
+     speculative Core re-exports
+  2. introduce one explicit Runtime lifecycle owning the production SQLite
+     connection, pricing/context resolvers, source definitions, import job state,
+     clock, and close behavior; Fastify remains a thin adapter over that Runtime
+  3. remove route-level production fallbacks and import-time database/import-job
+     singletons so production, tests, and the future CLI use explicitly supplied
+     state
+  4. add one lightweight dependency check for the boundaries already enforced;
+     complex modules document ownership proportionally, and analytical read
+     repositories may explicitly join across owned tables without mutating them
+  5. make the documented root test command include boundary, Core, Server, and
+     Web tests while preserving current build/start behavior
 - acceptance:
-  - production startup behavior and all current endpoints remain compatible
-  - a migrated module can run route/service/repository tests with in-memory
-    SQLite and fixed dependencies without environment-before-import ordering
-  - dependency checks and module documentation make allowed imports, table
-    ownership, and focused test commands explicit
+  - production startup opens one selected SQLite database, imports and HTTP
+    routes use that same connection, and shutdown closes that connection
+  - all current endpoints remain compatible and focused tests can create two
+    isolated in-memory Runtimes without environment-before-import ordering or
+    writes to the production database
+  - route registrars require an explicit Runtime and no longer import the global
+    database singleton; the import manager is constructed per Runtime
+  - contracts used by the first migrated vertical slice match the actual public
+    response and are consumed by both producer and client
+  - one cwd-independent dependency check enforces only the boundaries that are
+    implemented in this Task
 - verification:
-  - application-factory and compatibility tests, dependency-rule fixture tests,
-    complete Core/Server/Web tests, root build, lint, startup/health smoke, and
-    `git diff --check`
+  - Runtime/application-factory isolation and compatibility tests; import-route
+    tests against injected SQLite; dependency-rule fixture tests; complete
+    Core/Server/Web tests; root build and lint; startup/health smoke with a
+    temporary database; `git diff --check`
 - documentation:
-  - update current architecture and contributor commands only for the
-    composition/test behavior actually implemented; keep the proposal updated
-    with any approved deviations
+  - update current architecture and contributor commands only for composition
+    behavior actually implemented; update the modular proposal to make Runtime
+    the center and CLI/Fastify adapters its consumers
+- implementation:
+  - added `AppRuntime` and production/test factories that own one explicitly
+    selected SQLite connection, pricing/model-context resolvers, a clock, one
+    per-Runtime import service/job manager, and idempotent close behavior
+  - separated Fastify construction into `createApp(runtime, options)`; the
+    process entry owns startup imports, listener configuration, signals, and
+    closure of the same HTTP application and Runtime
+  - moved source definitions, compatibility scanning, rebuild/reset, and idle
+    coordination into `ImportRuntime`; removed import-time database,
+    Session-repository, and import-job-manager singletons
+  - changed route registrars to require explicit Runtime capabilities and
+    removed production database fallbacks; analytical routes retain their
+    current SQL and response behavior while using the injected connection
+  - introduced `@agent-profile/contracts` for the exact implemented import and
+    data-management response slice consumed by both Server and Web
+  - added one cwd-independent boundary script and Server fixture test covering
+    contracts purity, explicit route Runtime dependencies, and prohibited
+    route-level production database/default dependency fallbacks
+  - revised the modular design and future Tasks T101-T103 so the CLI calls the
+    Runtime directly, while Fastify remains the optional Web compatibility
+    adapter; no CLI command or release artifact is claimed as implemented
+- changed files:
+  - application composition: new `apps/server/src/{runtime,app}.ts`, new
+    `apps/server/src/ingestion/import-runtime.ts`, and updated production entry,
+    database helpers, routes, scale benchmark, and focused tests
+  - contracts and Web consumption: new `packages/contracts`, updated Server/Web
+    package metadata and `apps/web/app/config.ts`
+  - boundary verification: new `scripts/check-module-boundaries.mjs`, root
+    command, and Server boundary/application-factory tests
+  - documentation: `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/modular-architecture-design.md`, `docs/module-readme-template.md`,
+    `docs/zh/OVERVIEW.md`, and this roadmap
+- verification:
+  - dependency installation restored 717 packages and passed supply-chain
+    policy validation for all 808 lock entries
+  - focused Server and Web TypeScript, Server Vitest (14 files / 55 tests), Web Vitest
+    (4 files / 16 tests), optimized Web build, and the standalone boundary
+    command passed
+  - root `pnpm test` passed 32 files / 172 tests across Core, Server, and Web;
+    the boundary fixture is included in the Server suite
+  - root `pnpm build` passed Core and Contracts TypeScript builds, Server
+    no-emit checking, and the optimized nine-route Web production build
+  - root `pnpm lint` passed all 121 files with the unchanged 18 warnings and two
+    informational diagnostics; focused T98 files have no lint errors
+  - temporary-database startup smoke with automatic transcript scanning disabled
+    listened on `127.0.0.1:33198`, returned `GET /api/health` as
+    `{"ok":true,...}`, created only the selected `/tmp` SQLite file, and
+    exited on `SIGINT`
+  - `node scripts/check-module-boundaries.mjs` and `git diff --check` passed
+- limitation:
+  - the current user launcher remains source-checkout `pnpm start`; T101-T103
+    own the installable CLI, terminal workflows, `serve`, production artifacts,
+    stable per-user data location, and release packaging
 
 ### T99 Model Catalog and pricing-schedule Server module
 
@@ -4589,6 +4655,100 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - update READMEs, architecture, Chinese overview, UI guidance, configuration
     design, and this Task with the final workflow and limitations
 
+### T101 CLI foundation and local Runtime entry point
+
+- status: planned
+- estimated size/risk: large / medium; it introduces the primary product entry
+  point but should reuse T98 composition without changing evidence semantics
+- purpose:
+  - provide the first installable `agent-profile` command and make local Runtime
+    operations available without starting the Web application
+- dependencies:
+  - T98 reusable Runtime/HTTP composition
+- scope:
+  1. add a CLI package and `agent-profile` binary entry point
+  2. implement help, version, doctor, configuration/data-path resolution,
+     human-readable output, `--json`, and stable error/exit behavior
+  3. create and close the same Runtime used by Fastify; do not call local HTTP
+     endpoints to perform CLI operations
+  4. define the initial CLI output contracts without claiming unimplemented
+     commands or comparison results
+- acceptance:
+  - an installed workspace binary can report version/help, diagnose local source
+    and database availability, select the local data path, and exit without
+    leaking database handles or starting the Web application
+- verification:
+  - CLI parsing/output/exit tests, temporary-database smoke, package build,
+    root tests/build/lint, and `git diff --check`
+- documentation:
+  - update README/architecture/Chinese overview only for commands that ship and
+    record installation and local-data behavior
+
+### T102 CLI synchronization, Session queries, and reports
+
+- status: planned
+- estimated size/risk: extra-large / medium-high; existing route SQL must become
+  reusable read/import services without changing stored evidence or API output
+- purpose:
+  - make the core profiling workflow usable from the terminal before requiring
+    the optional Web interface
+- dependencies:
+  - T101 CLI foundation; coordinate T83/T84 bounded Session query work
+- scope:
+  1. add `sources`, `sync`, and bounded progress/result output using the Runtime
+     import service rather than the Fastify job route
+  2. add bounded Session list/detail/evidence commands with explicit filters,
+     coverage, pagination, and content-preview controls
+  3. add Session, Agent Process Profile, Task Profile, and statistics report
+     commands only where the underlying implemented report already exists
+  4. share application/query services between CLI and compatibility HTTP routes;
+     do not duplicate SQL or metric formulas in command handlers
+- acceptance:
+  - a user can synchronize supported local sources and inspect current Session
+    and implemented Profile evidence entirely through the CLI with equivalent
+    unknown/coverage semantics to the Web/API
+- verification:
+  - command and service tests with in-memory/fixture data, compatibility API
+    tests, large-result bounds, full tests/build/lint, and `git diff --check`
+- documentation:
+  - document exact commands, output schemas, privacy/content controls, and known
+    source limitations
+
+### T103 CLI `serve` command and distributable local application
+
+- status: planned
+- estimated size/risk: extra-large / high; production assets, native SQLite,
+  zstd availability, data paths, ports, and shutdown must work per platform
+- purpose:
+  - replace source-checkout `pnpm start` as the eventual user launcher while
+    retaining the Web as an optional visualization surface
+- dependencies:
+  - T101; T102 for the primary terminal workflow; Web packaging decision
+- scope:
+  1. add `agent-profile serve` using the same Runtime and Fastify adapter, with
+     explicit port/origin configuration, health readiness, optional browser
+     opening, and graceful shutdown
+  2. produce a real Server/CLI production build without `tsx` or TypeScript
+     source execution
+  3. package the existing Web through the smallest verified approach; evaluate
+     Next standalone versus a static SPA before committing to two production
+     processes
+  4. move default mutable data to a stable per-user application-data location
+     and preserve explicit override/backup behavior
+  5. define an initial Node-based package, then platform archives for native
+     dependencies and zstd; a single-file executable remains a later option
+- acceptance:
+  - a user can install a release, run `agent-profile serve`, open the local UI,
+    synchronize data, stop cleanly, upgrade application files without losing the
+    database, and use the CLI without pnpm or a source checkout
+- verification:
+  - production artifact smoke on supported platform/architecture targets,
+    native dependency and zstd checks, port/shutdown/data-upgrade tests, full
+    tests/build/lint, and `git diff --check`
+- documentation:
+  - add installation, launcher, data location, backup/restore, platform support,
+    and release limitations after the artifact exists
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded
@@ -4598,16 +4758,20 @@ the compact Home synchronization, data-management, project-picker, and responsiv
 sidebar interaction layer. T95 then established one current primary-Session
 scope while retaining child records, and T97 documented the module and Model
 Catalog target without changing runtime behavior. The remaining normal
-desktop-first implementation order is:
+CLI-first implementation order is:
 
-1. T98 module contracts and Server application composition.
-2. T71 model-context and analysis-configuration audit, followed by T99 Model
-   Catalog Server extraction/data contracts and T100 configuration workspace.
-3. T83 bounded discovery, then T84 bounded detail/evidence retrieval; implement
-   them through the new module/query boundaries, coordinate T70 transition
-   feedback, and preserve T93/T94 interaction semantics.
-4. T80 Task Outcome evidence workspace, followed by T81 Cohort/Experiment
-   definition workflow and the corresponding Task/Comparison repository split.
+1. T101 CLI foundation, then coordinate T83 bounded discovery and T84 bounded
+   detail/evidence retrieval with T102 CLI synchronization/query/report work so
+   CLI and compatibility HTTP routes share the same services.
+2. T103 `serve` and distribution after the terminal workflow is useful; retain
+   the current Web until the production packaging comparison selects Next
+   standalone or a static SPA.
+3. T71 model-context and analysis-configuration audit, followed by T99 Model
+   Catalog Runtime extraction/data contracts, then CLI operations; T100 remains
+   the later optional Web configuration workspace.
+4. T80 Task Outcome evidence work after the Runtime/CLI foundation; T81
+   Cohort/Experiment workflow remains deferred until Task/Outcome usage is
+   established and must not drive the initial CLI architecture.
 5. T87 source-native parent/child evidence before T86 project-level aggregation,
    so Project Profile accounting is designed against proven relationship
    coverage rather than the temporary primary-only boundary.

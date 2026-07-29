@@ -1,15 +1,9 @@
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { Pricing } from '@agent-profile/core';
-import { createDatabase, lookupPricing } from './database';
-
-const serverDir = dirname(fileURLToPath(import.meta.url));
-export const databasePath = process.env.TRACE_DB_PATH || resolve(serverDir, '..', 'trace.db');
-export const db = createDatabase(databasePath);
+import type { DatabaseConnection } from './database';
 
 // Default seed prices are CNY per million tokens. INSERT OR IGNORE preserves
 // existing and user-edited rows; effective_from=0 is the earliest known price.
-db.exec(`
+export function seedPricingDefaults(database: DatabaseConnection): void {
+  database.exec(`
   INSERT OR IGNORE INTO pricing (model, input_price, cache_creation_price, cache_read_price, output_price, effective_from) VALUES
     -- DeepSeek
     ('deepseek-v4-flash', 1, 1, 0.02, 2, 0),
@@ -48,8 +42,10 @@ db.exec(`
     -- Claude Code internal placeholder
     ('<synthetic>', 0, 0, 0, 0, 0)
 `);
+}
 
-db.exec(`
+export function seedModelContextDefaults(database: DatabaseConnection): void {
+  database.exec(`
   INSERT OR IGNORE INTO model_context (model, context_window) VALUES
     -- Audited 2026-07-27. Vendor specification entry points:
     -- DeepSeek: https://api-docs.deepseek.com/quick_start/pricing
@@ -78,19 +74,15 @@ db.exec(`
     ('doubao-pro', 131072),
     ('mimo-v2.5-pro', 131072)
 `);
-
-export function getPricing(model?: string, at?: number): Pricing | undefined {
-  return lookupPricing(db, model, at);
 }
 
-export function getModelContext(model?: string): number | undefined {
+export function getModelContextForDb(
+  database: DatabaseConnection,
+  model?: string,
+): number | undefined {
   if (!model) return undefined;
-  const row = db
+  const row = database
     .prepare('SELECT context_window as contextWindow FROM model_context WHERE model = ?')
     .get(model) as { contextWindow: number } | undefined;
   return row?.contextWindow;
-}
-
-export function closeDb() {
-  db.close();
 }

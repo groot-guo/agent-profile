@@ -1,37 +1,43 @@
-import cors from '@fastify/cors';
-import Fastify from 'fastify';
+import { createApp } from './app';
 import { config } from './config';
-import { closeDb } from './db';
-import { registerRoutes } from './routes/index';
-import { startStartupImports } from './routes/scan';
+import { createProductionRuntime } from './runtime';
 
-const app = Fastify({ logger: true });
+const runtime = createProductionRuntime({
+  autoScanDir: config.autoScanDir,
+  defaultScanDir: config.defaultScanDir,
+  onImportError: (source, error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${source.id} import failed: ${message}\n`);
+  },
+});
+const app = createApp(runtime, { webOrigins: config.webOrigins });
+let isShuttingDown = false;
 
-await app.register(cors, { origin: config.webOrigins });
-
-registerRoutes(app);
+async function shutdown(exitCode: number): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  await app.close();
+  await runtime.close();
+  process.exit(exitCode);
+}
 
 try {
   await app.listen({ port: config.port, host: config.host });
-  console.log(`Trace Server running at http://${config.host}:${config.port}`);
+  app.log.info(`Trace Server running at http://${config.host}:${config.port}`);
   if (!['127.0.0.1', 'localhost', '::1'].includes(config.host)) {
     app.log.warn(
       'The API is listening beyond loopback without authentication; use only on a trusted network.',
     );
   }
-
-  // All startup imports use the same observable, deduplicated job state as the UI.
-  await startStartupImports();
-} catch (err) {
-  app.log.error(err);
-  process.exit(1);
+  await runtime.imports.startStartupImports();
+} catch (error) {
+  app.log.error(error);
+  await shutdown(1);
 }
 
-process.on('SIGINT', () => {
-  closeDb();
-  process.exit(0);
+process.once('SIGINT', () => {
+  void shutdown(0);
 });
-process.on('SIGTERM', () => {
-  closeDb();
-  process.exit(0);
+process.once('SIGTERM', () => {
+  void shutdown(0);
 });

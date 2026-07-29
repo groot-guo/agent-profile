@@ -1,9 +1,11 @@
 import { classifySessionProject, identifyModel, type ModelIdentityKind } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
-import { db } from '../db';
 import { primarySessionPredicate } from '../primary-sessions';
+import type { AppRuntime } from '../runtime';
 import { SESSION_COLS } from './shared';
+
+type StatsRuntime = Pick<AppRuntime, 'database'>;
 
 interface StatsOverview {
   totalSessions: number;
@@ -62,7 +64,7 @@ interface DistributionData {
 
 type StatsQueryConnection = Pick<DatabaseConnection, 'prepare'>;
 
-export function loadDashboardSpanAggregates(database: StatsQueryConnection = db) {
+export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
   const modelRows = database
     .prepare(
       `SELECT COALESCE(spans.model, 'unknown') as model,
@@ -277,7 +279,9 @@ function percentile(values: number[], quantile: number): number {
   return sorted[Math.floor(sorted.length * quantile)] || 0;
 }
 
-export function registerStatsRoutes(app: FastifyInstance) {
+export function registerStatsRoutes(app: FastifyInstance, runtime: StatsRuntime) {
+  const { database } = runtime;
+  const db = database;
   app.get('/api/stats', async () => {
     const sessions = db
       .prepare(
@@ -371,7 +375,7 @@ export function registerStatsRoutes(app: FastifyInstance) {
     const { byProject, baselineProjects, anomalySessions } = buildProjectStats(sessions);
 
     // By model (from spans)
-    const { modelMap, recentTools } = loadDashboardSpanAggregates();
+    const { modelMap, recentTools } = loadDashboardSpanAggregates(database);
     const { byModel, modelDistribution } = buildModelViews(modelMap);
 
     // Distributions

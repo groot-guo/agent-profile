@@ -1,8 +1,9 @@
 import type { Pricing, PricingCurrency, PricingUnit } from '@agent-profile/core';
 import { COST_CALCULATOR_VERSION, COST_CURRENCY, COST_UNIT, calcCost } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
-import { db, getPricing } from '../db';
+import type { AppRuntime } from '../runtime';
 
+type PricingRuntime = Pick<AppRuntime, 'database' | 'pricingResolver' | 'clock'>;
 interface PricingBody {
   model: string;
   inputPrice: number;
@@ -45,9 +46,10 @@ const modelContextBodySchema = {
   },
 } as const;
 
-export function registerPricingRoutes(app: FastifyInstance) {
+export function registerPricingRoutes(app: FastifyInstance, runtime: PricingRuntime): void {
+  const { database, pricingResolver, clock } = runtime;
   app.get('/api/pricing', async () => {
-    return db
+    return database
       .prepare(
         `SELECT model, input_price as inputPrice, cache_creation_price as cacheCreationPrice,
       cache_read_price as cacheReadPrice, output_price as outputPrice, currency, unit,
@@ -62,9 +64,10 @@ export function registerPricingRoutes(app: FastifyInstance) {
     { schema: { body: pricingBodySchema } },
     async (req) => {
       const b = req.body;
-      const effectiveFrom = b.effectiveFrom ?? Date.now();
-      db.prepare(
-        `INSERT INTO pricing (model, input_price, cache_creation_price, cache_read_price,
+      const effectiveFrom = b.effectiveFrom ?? clock();
+      database
+        .prepare(
+          `INSERT INTO pricing (model, input_price, cache_creation_price, cache_read_price,
         output_price, currency, unit, effective_from)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(model, effective_from) DO UPDATE SET
@@ -74,16 +77,17 @@ export function registerPricingRoutes(app: FastifyInstance) {
         output_price = excluded.output_price,
         currency = excluded.currency,
         unit = excluded.unit`,
-      ).run(
-        b.model,
-        b.inputPrice,
-        b.cacheCreationPrice,
-        b.cacheReadPrice,
-        b.outputPrice,
-        b.currency ?? COST_CURRENCY,
-        b.unit ?? COST_UNIT,
-        effectiveFrom,
-      );
+        )
+        .run(
+          b.model,
+          b.inputPrice,
+          b.cacheCreationPrice,
+          b.cacheReadPrice,
+          b.outputPrice,
+          b.currency ?? COST_CURRENCY,
+          b.unit ?? COST_UNIT,
+          effectiveFrom,
+        );
       return {
         ok: true,
         currency: b.currency ?? COST_CURRENCY,
@@ -94,7 +98,7 @@ export function registerPricingRoutes(app: FastifyInstance) {
   );
 
   app.get('/api/model-context', async () => {
-    return db
+    return database
       .prepare(`SELECT model, context_window as contextWindow FROM model_context ORDER BY model`)
       .all();
   });
@@ -104,17 +108,19 @@ export function registerPricingRoutes(app: FastifyInstance) {
     { schema: { body: modelContextBodySchema } },
     async (req) => {
       const b = req.body;
-      db.prepare(
-        `INSERT INTO model_context (model, context_window) VALUES (?, ?)
+      database
+        .prepare(
+          `INSERT INTO model_context (model, context_window) VALUES (?, ?)
       ON CONFLICT(model) DO UPDATE SET context_window = excluded.context_window`,
-      ).run(b.model, b.contextWindow);
+        )
+        .run(b.model, b.contextWindow);
       return { ok: true };
     },
   );
 
   // 按每个 LLM span 的发生时间重新选择生效 pricing，并重建 session cost。
   app.post('/api/recompute-cost', async () => {
-    const spans = db
+    const spans = database
       .prepare(`SELECT id, session_id as sessionId, type, model,
       start_time as startTime, input_tokens as inputTokens,
       cache_creation_tokens as cacheCreationTokens, cache_read_tokens as cacheReadTokens,
@@ -133,20 +139,22 @@ export function registerPricingRoutes(app: FastifyInstance) {
 
     let updatedSpans = 0;
     const sessionCosts = new Map<string, { cost: number; unknown: number }>();
-    const calculatedAt = Date.now();
+    const calculatedAt = clock();
 
-    const updateSpan = db.prepare(`UPDATE spans SET cost = ?, cost_unknown = ?,
+    const updateSpan = database.prepare(`UPDATE spans SET cost = ?, cost_unknown = ?,
       cost_currency = ?, pricing_effective_from = ?, cost_calculated_at = ?,
       cost_calculator_version = ? WHERE id = ?`);
-    const updateSession = db.prepare(`UPDATE sessions SET total_cost = ?, cost_unknown_count = ?,
+    const updateSession =
+      database.prepare(`UPDATE sessions SET total_cost = ?, cost_unknown_count = ?,
       cost_currency = ?, cost_calculated_at = ?, cost_calculator_version = ? WHERE id = ?`);
-    const resetSessions = db.prepare(`UPDATE sessions SET total_cost = 0, cost_unknown_count = 0,
+    const resetSessions =
+      database.prepare(`UPDATE sessions SET total_cost = 0, cost_unknown_count = 0,
       cost_currency = ?, cost_calculated_at = ?, cost_calculator_version = ?`);
 
-    const run = db.transaction(() => {
+    const run = database.transaction(() => {
       resetSessions.run(COST_CURRENCY, calculatedAt, COST_CALCULATOR_VERSION);
       for (const s of spans) {
-        const pricing = getPricing(s.model, s.startTime);
+        const pricing = pricingResolver(s.model, s.startTime);
         const { cost, unknown } = calcCost(
           {
             id: s.id,

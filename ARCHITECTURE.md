@@ -41,20 +41,28 @@ code-quality verdict.
 ```text
 Claude Code JSONL ─┐
 Codex rollout JSONL ┤
-Zed SQLite + zstd ──┼─→ source adapters ─→ import coordinator
-MiMo SQLite ────────┤                              │
-OpenCode SQLite ────┘                              ▼
-                                      normalized session/spans
-                                                   │
-                                                   ▼
-                                      analyzer → session repository
-                                                   │
-                                                   ▼
-                                                SQLite
-                                                   │
-                                                   ▼
-                                      Fastify API → Next.js UI
+Zed SQLite + zstd ──┼─→ source adapters ─→ Import Runtime/import coordinator
+MiMo SQLite ────────┤                                      │
+OpenCode SQLite ────┘                                      ▼
+                                              analyzer → session repository
+                                                               │
+                                                               ▼
+Production entry → App Runtime ─────────────────────────────→ SQLite
+                       │
+                       └─→ Fastify adapter → Next.js UI
 ```
+
+`AppRuntime` is the current application composition boundary. Production creates
+one selected SQLite connection, then constructs pricing and model-context
+resolvers, one per-Runtime import service/job manager, a clock, and one
+idempotent close operation around that connection. `createApp(runtime, options)`
+only adapts the supplied Runtime to Fastify; route registrars receive explicit
+Runtime capabilities and do not create a production database or import manager.
+The process entry point starts background imports and owns HTTP/signal shutdown,
+closing Fastify and the same Runtime. Tests can therefore create isolated
+in-memory Runtimes without environment-before-import ordering. A future CLI is
+planned to call the Runtime directly, but no packaged `agent-profile` command is
+implemented yet.
 
 Scanning is revision-based. Each source item provides a source kind, source
 update time, and stable fingerprint. The coordinator skips matching revisions,
@@ -118,15 +126,19 @@ as requiring manual action instead of presenting them as retryable parse errors.
 | Component | Current responsibility |
 | --- | --- |
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
+| `packages/contracts` (`@agent-profile/contracts`) | Framework-neutral public contracts for implemented cross-package vertical slices; currently the import/data-management responses consumed by Server and Web |
 | `packages/core/src/scanners/transcript.ts` | Source-neutral async JSONL discovery and NDJSON reading shared by Claude Code and Codex, with compatibility sync helpers |
+| `apps/server/src/runtime.ts` | Explicit application lifecycle for one database connection, pricing/context resolvers, import state, clock, and shutdown |
+| `apps/server/src/app.ts` | Fastify composition adapter over an explicitly supplied Runtime and HTTP options |
+| `apps/server/src/ingestion/import-runtime.ts` | Per-Runtime source definitions, import job manager, Session repository, compatibility scan, rebuild/reset, and idle coordination |
 | `apps/server/src/ingestion/*-adapter.ts` | Source-specific discovery, revision fingerprinting, lazy loading, and parser invocation |
 | `apps/server/src/ingestion/import-coordinator.ts` | Shared skip/import/update/failure decisions across every source |
 | `apps/server/src/ingestion/import-job-manager.ts` | Deduplicated startup/manual sync and rebuild state, availability, progress, failure isolation, and bounded public status |
 | `apps/server/src/ingestion/session-repository.ts` | Normalized analysis, atomic session/span replacement, and transactional generated-data reset |
 | `apps/server/src/task-repository.ts` | Task/configuration/Outcome/cohort/experiment persistence boundary and Task Profile aggregation inputs |
-| `apps/server/src/routes/scan.ts` | Thin manual/startup scan entry points; contains no import persistence SQL |
+| `apps/server/src/routes/scan.ts` | Thin HTTP import/data-management adapter over the Runtime import service; contains no import persistence SQL or production fallback |
 | `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
-| `apps/server/src/db.ts` | Default local database instance, pricing/model-context seed data, and current lookup wrappers |
+| `apps/server/src/db.ts` | Pricing/model-context default seeding and database-scoped model-context lookup helpers; it does not own a process-global connection |
 | `apps/server/src/routes/` | Health, sessions, Tasks/Outcomes/experiments, aggregate analysis, diagnosis, statistics, pricing, context-window, scan, export, and comparison APIs |
 | `apps/web` | Project/session navigation, Task verification workspace, dashboards, detail analysis, Agent profiles, ephemeral prompt review, comparisons, statistics, annotations, and configuration UI |
 

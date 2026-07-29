@@ -96,7 +96,10 @@ function createApp() {
   const database = createDatabase(':memory:');
   databases.push(database);
   const app = Fastify();
-  registerProfileRoutes(app, database);
+  registerProfileRoutes(app, {
+    database,
+    clock: () => Date.now(),
+  });
   return { app, database };
 }
 

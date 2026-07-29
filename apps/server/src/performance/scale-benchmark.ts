@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import Fastify, { type FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { createDatabase, lookupPricing } from '../database';
 import { SessionRepository } from '../ingestion/session-repository';
 import {
@@ -71,13 +71,16 @@ try {
   const unchanged = await measureUnchangedSync(repository, fixture.sessions);
   fixtureDatabase.close();
 
-  process.env.TRACE_DB_PATH = databasePath;
   process.env.AUTO_SCAN_DIR = '';
   process.env.LLM_API_KEY = '';
-  const app = Fastify({ logger: false });
-  const { registerRoutes } = await import('../routes/index');
-  const { closeDb } = await import('../db');
-  registerRoutes(app);
+  const { createApp } = await import('../app');
+  const { createProductionRuntime } = await import('../runtime');
+  const runtime = createProductionRuntime({
+    databasePath,
+    autoScanDir: null,
+    defaultScanDir: '~/.claude/projects',
+  });
+  const app = createApp(runtime, { logger: false, webOrigins: [] });
   await app.ready();
 
   const endpoints = {
@@ -112,7 +115,7 @@ try {
   };
 
   await app.close();
-  closeDb();
+  await runtime.close();
   const finalMaxRssBytes = maxRssBytes();
   const budgetFailures = evaluateBudgets(endpoints, unchanged.durationMs, finalMaxRssBytes);
   const report: BenchmarkReport = {

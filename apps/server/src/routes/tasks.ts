@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { DatabaseConnection } from '../database';
-import { db } from '../db';
+import type { AppRuntime } from '../runtime';
 import { TaskModelError, TaskRepository } from '../task-repository';
 
-export function registerTaskRoutes(app: FastifyInstance, database: DatabaseConnection = db) {
+type TaskRuntime = Pick<AppRuntime, 'database'>;
+
+export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
+  const { database } = runtime;
   const repository = new TaskRepository(database);
 
   app.get('/api/tasks', async () => ({ tasks: repository.listTasks() }));
