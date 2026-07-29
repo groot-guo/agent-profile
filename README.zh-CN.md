@@ -56,6 +56,12 @@ Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web
 ./packages/cli/bin/agent-profile.mjs help
 ./packages/cli/bin/agent-profile.mjs version --json
 ./packages/cli/bin/agent-profile.mjs doctor --data-dir ./local-data
+./packages/cli/bin/agent-profile.mjs sources --json
+./packages/cli/bin/agent-profile.mjs sync --source codex --source zed
+./packages/cli/bin/agent-profile.mjs sessions --limit 20 --json
+./packages/cli/bin/agent-profile.mjs stats --json
+./packages/cli/bin/agent-profile.mjs profiles --json
+./packages/cli/bin/agent-profile.mjs task-profile <task-id> --json
 ```
 
 `doctor` 会创建并关闭与 Server 相同的应用 Runtime，检查选中的 SQLite 数据库和五种
@@ -63,10 +69,25 @@ Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web
 `agent-profile-cli/v1`。它不会启动 HTTP，也不会导入来源数据。打开 Runtime 可能会创建
 所选数据库，并执行常规增量 migration 和默认定价/模型窗口数据初始化。
 
-`doctor` 的数据库路径优先级依次为 `--database`、`--data-dir/trace.db`、
+CLI Runtime 命令的数据库路径优先级依次为 `--database`、`--data-dir/trace.db`、
 `TRACE_DB_PATH` 和现有的 `apps/server/trace.db` 默认值。成功 exit code 为 `0`，命令用法
-错误为 `2`，Runtime 失败为 `1`。同步、Session 查询、报告、`serve` 和正式发行制品不在
-这个初始 CLI 基础范围内。
+错误为 `2`，Runtime 失败为 `1`。报告、`serve` 和正式发行制品不在这个初始 CLI 基础范围内。
+
+`sources` 会刷新本地来源可用性并输出已存主链 Session 计数，但不会返回本地路径或
+transcript 标识。`sync` 使用与 API 相同的 Runtime 导入服务，等待所选来源进入终态后输出
+逐来源结果。不传 `--source` 时选择全部支持的来源，重复该选项可选择多个来源。它不会启动
+HTTP，但会把派生的本地 Session/Span 数据导入所选数据库；详细 Session/证据查询和
+过程/Profile 报告仍在开发中。
+
+`sessions` 返回当前主链 Session 的有界摘要页：默认 20 条、最多 100 条，按开始时间和 ID
+排序。把上一份 JSON 报告中的不透明 `nextCursor` 通过 `--cursor` 传回即可继续翻页。报告不含
+本地路径、transcript 标识、Span metadata 或内容；详细 Session 分析、证据时间线和按需脱敏预览
+仍以 Web/API 为主。
+
+`stats`、`profiles` 与 `task-profile <id>` 分别输出已经实现的汇总统计、Agent Process
+Profile 和显式 Task Profile。JSON 会保留原报告的指标覆盖度与 limitations。过程证据不能证明
+交付质量；Agent Profile 的相对观察不是通用质量排名，Task Profile 只覆盖其显式关联的 Session
+与本地记录的 Outcome 证据。
 
 ## 第一次导入数据
 
@@ -221,9 +242,10 @@ pnpm dev
 
 ## 当前产品边界
 
-- workspace 已包含首个 `agent-profile` CLI package 和源码 binary，支持 `help`、
-  `version` 与 `doctor`，但尚未发布正式发行包或桌面应用。CLI 同步、查询、报告与
-  `serve` 仍是后续能力；`pnpm start` 仍是受支持的非 watch Web 启动入口。
+- workspace 的 `agent-profile` CLI package 和源码 binary 支持 `help`、`version`、
+  `doctor`、`sources`、`sync` 和有界 `sessions`，但尚未发布正式发行包或桌面应用。详细
+  Session/证据查看与 `serve` 仍在开发中；也可通过 `stats`、`profiles` 和
+  `task-profile <id>` 查看既有报告；`pnpm start` 仍是受支持的非 watch Web 启动入口。
 - Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型。
   自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化

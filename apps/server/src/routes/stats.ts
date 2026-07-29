@@ -62,6 +62,20 @@ interface DistributionData {
   agentDistribution: { agent: string; count: number; tokens: number }[];
 }
 
+export interface StatsReport {
+  overview: StatsOverview;
+  byAgent: AgentStats[];
+  byProject: ProjectStats[];
+  byModel: ModelStats[];
+  recentTools: ToolFrequency[];
+  distribution: DistributionData;
+  baseline?: {
+    projects: ReturnType<typeof buildProjectStats>['baselineProjects'];
+    anomalySessions: string[];
+  };
+  trends?: { day: string; tokens: number; cost: number; sessions: number; avgCacheHit: number }[];
+}
+
 type StatsQueryConnection = Pick<DatabaseConnection, 'prepare'>;
 
 export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
@@ -279,183 +293,184 @@ function percentile(values: number[], quantile: number): number {
   return sorted[Math.floor(sorted.length * quantile)] || 0;
 }
 
-export function registerStatsRoutes(app: FastifyInstance, runtime: StatsRuntime) {
-  const { database } = runtime;
+export function buildStatsReport(database: DatabaseConnection): StatsReport {
   const db = database;
-  app.get('/api/stats', async () => {
-    const sessions = db
-      .prepare(
-        `SELECT ${SESSION_COLS}
+  const sessions = db
+    .prepare(
+      `SELECT ${SESSION_COLS}
          FROM sessions
          WHERE ${primarySessionPredicate()}
          ORDER BY start_time DESC`,
-      )
-      .all() as Record<string, unknown>[];
+    )
+    .all() as Record<string, unknown>[];
 
-    if (sessions.length === 0) {
-      return {
-        overview: {
-          totalSessions: 0,
-          totalTokens: 0,
-          totalCost: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          avgCacheHitRate: 0,
-          avgPeakContext: 0,
-          sessionsWithCostUnknown: 0,
-        },
-        byAgent: [] as AgentStats[],
-        byProject: [] as ProjectStats[],
-        byModel: [] as ModelStats[],
-        recentTools: [] as ToolFrequency[],
-        distribution: { costBins: [], tokenBins: [], modelDistribution: [], agentDistribution: [] },
-      };
-    }
-
-    // Overview
-    let totalTokens = 0,
-      totalCost = 0,
-      totalInput = 0,
-      totalOutput = 0,
-      sumCacheHit = 0,
-      sumPeak = 0,
-      unknownCost = 0;
-    for (const s of sessions) {
-      const input = (s.inputTokens as number) || 0;
-      const cc = (s.cacheCreationTokens as number) || 0;
-      const cr = (s.cacheReadTokens as number) || 0;
-      const out = (s.outputTokens as number) || 0;
-      totalInput += input;
-      totalOutput += out;
-      totalTokens += input + cc + cr + out;
-      totalCost += (s.totalCost as number) || 0;
-      sumCacheHit += (s.cacheHitRate as number) || 0;
-      sumPeak += (s.peakContextTokens as number) || 0;
-      if ((s.costUnknownCount as number) > 0) unknownCost++;
-    }
-    const overview: StatsOverview = {
-      totalSessions: sessions.length,
-      totalTokens,
-      totalCost,
-      totalInputTokens: totalInput,
-      totalOutputTokens: totalOutput,
-      avgCacheHitRate: sumCacheHit / sessions.length,
-      avgPeakContext: Math.round(sumPeak / sessions.length),
-      sessionsWithCostUnknown: unknownCost,
-    };
-
-    // By agent
-    const agentMap = new Map<
-      string,
-      { sessions: number; tokens: number; cost: number; cacheHit: number }
-    >();
-    for (const s of sessions) {
-      const a = (s.agent as string) || 'unknown';
-      const entry = agentMap.get(a) || { sessions: 0, tokens: 0, cost: 0, cacheHit: 0 };
-      entry.sessions++;
-      entry.tokens +=
-        ((s.inputTokens as number) || 0) +
-        ((s.cacheCreationTokens as number) || 0) +
-        ((s.cacheReadTokens as number) || 0) +
-        ((s.outputTokens as number) || 0);
-      entry.cost += (s.totalCost as number) || 0;
-      entry.cacheHit += (s.cacheHitRate as number) || 0;
-      agentMap.set(a, entry);
-    }
-    const byAgent: AgentStats[] = [...agentMap.entries()]
-      .map(([agent, e]) => ({
-        agent,
-        sessions: e.sessions,
-        totalTokens: e.tokens,
-        totalCost: e.cost,
-        avgCacheHitRate: e.cacheHit / e.sessions,
-      }))
-      .sort((a, b) => b.sessions - a.sessions);
-
-    const { byProject, baselineProjects, anomalySessions } = buildProjectStats(sessions);
-
-    // By model (from spans)
-    const { modelMap, recentTools } = loadDashboardSpanAggregates(database);
-    const { byModel, modelDistribution } = buildModelViews(modelMap);
-
-    // Distributions
-    const sessionTokens = sessions.map(
-      (s) =>
-        ((s.inputTokens as number) || 0) +
-        ((s.cacheCreationTokens as number) || 0) +
-        ((s.cacheReadTokens as number) || 0) +
-        ((s.outputTokens as number) || 0),
-    );
-    const sessionCosts = sessions.map((s) => (s.totalCost as number) || 0);
-
-    const costBins = buildLogBins(sessionCosts, [
-      { label: '¥0', thresholds: [0, 0.001] },
-      { label: '¥0-0.01', thresholds: [0.001, 0.01] },
-      { label: '¥0.01-0.1', thresholds: [0.01, 0.1] },
-      { label: '¥0.1-1', thresholds: [0.1, 1] },
-      { label: '¥1-5', thresholds: [1, 5] },
-      { label: '¥5+', thresholds: [5, null] },
-    ]);
-
-    const tokenBins = buildLogBins(sessionTokens, [
-      { label: '<1k', thresholds: [0, 1_000] },
-      { label: '1k-10k', thresholds: [1_000, 10_000] },
-      { label: '10k-100k', thresholds: [10_000, 100_000] },
-      { label: '100k-500k', thresholds: [100_000, 500_000] },
-      { label: '500k-1M', thresholds: [500_000, 1_000_000] },
-      { label: '1M+', thresholds: [1_000_000, null] },
-    ]);
-
-    const agentDist = [...agentMap.entries()].map(([agent, e]) => ({
-      agent,
-      count: e.sessions,
-      tokens: e.tokens,
-    }));
-
-    const distribution: DistributionData = {
-      costBins,
-      tokenBins,
-      modelDistribution,
-      agentDistribution: agentDist,
-    };
-
-    // Time series trends: daily aggregation
-    const dailyMap = new Map<
-      string,
-      { tokens: number; cost: number; sessions: number; cacheHit: number }
-    >();
-    for (const s of sessions) {
-      const day = new Date(s.startTime as number).toISOString().slice(0, 10);
-      const entry = dailyMap.get(day) || { tokens: 0, cost: 0, sessions: 0, cacheHit: 0 };
-      entry.tokens +=
-        ((s.inputTokens as number) || 0) +
-        ((s.cacheCreationTokens as number) || 0) +
-        ((s.cacheReadTokens as number) || 0) +
-        ((s.outputTokens as number) || 0);
-      entry.cost += (s.totalCost as number) || 0;
-      entry.sessions++;
-      entry.cacheHit += (s.cacheHitRate as number) || 0;
-      dailyMap.set(day, entry);
-    }
-    const trends = [...dailyMap.entries()]
-      .map(([day, e]) => ({
-        day,
-        tokens: e.tokens,
-        cost: e.cost,
-        sessions: e.sessions,
-        avgCacheHit: e.sessions > 0 ? e.cacheHit / e.sessions : 0,
-      }))
-      .sort((a, b) => a.day.localeCompare(b.day));
-
+  if (sessions.length === 0) {
     return {
-      overview,
-      byAgent,
-      byProject,
-      byModel,
-      recentTools,
-      distribution,
-      baseline: { projects: baselineProjects, anomalySessions },
-      trends,
+      overview: {
+        totalSessions: 0,
+        totalTokens: 0,
+        totalCost: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        avgCacheHitRate: 0,
+        avgPeakContext: 0,
+        sessionsWithCostUnknown: 0,
+      },
+      byAgent: [] as AgentStats[],
+      byProject: [] as ProjectStats[],
+      byModel: [] as ModelStats[],
+      recentTools: [] as ToolFrequency[],
+      distribution: { costBins: [], tokenBins: [], modelDistribution: [], agentDistribution: [] },
     };
-  });
+  }
+
+  // Overview
+  let totalTokens = 0,
+    totalCost = 0,
+    totalInput = 0,
+    totalOutput = 0,
+    sumCacheHit = 0,
+    sumPeak = 0,
+    unknownCost = 0;
+  for (const s of sessions) {
+    const input = (s.inputTokens as number) || 0;
+    const cc = (s.cacheCreationTokens as number) || 0;
+    const cr = (s.cacheReadTokens as number) || 0;
+    const out = (s.outputTokens as number) || 0;
+    totalInput += input;
+    totalOutput += out;
+    totalTokens += input + cc + cr + out;
+    totalCost += (s.totalCost as number) || 0;
+    sumCacheHit += (s.cacheHitRate as number) || 0;
+    sumPeak += (s.peakContextTokens as number) || 0;
+    if ((s.costUnknownCount as number) > 0) unknownCost++;
+  }
+  const overview: StatsOverview = {
+    totalSessions: sessions.length,
+    totalTokens,
+    totalCost,
+    totalInputTokens: totalInput,
+    totalOutputTokens: totalOutput,
+    avgCacheHitRate: sumCacheHit / sessions.length,
+    avgPeakContext: Math.round(sumPeak / sessions.length),
+    sessionsWithCostUnknown: unknownCost,
+  };
+
+  // By agent
+  const agentMap = new Map<
+    string,
+    { sessions: number; tokens: number; cost: number; cacheHit: number }
+  >();
+  for (const s of sessions) {
+    const a = (s.agent as string) || 'unknown';
+    const entry = agentMap.get(a) || { sessions: 0, tokens: 0, cost: 0, cacheHit: 0 };
+    entry.sessions++;
+    entry.tokens +=
+      ((s.inputTokens as number) || 0) +
+      ((s.cacheCreationTokens as number) || 0) +
+      ((s.cacheReadTokens as number) || 0) +
+      ((s.outputTokens as number) || 0);
+    entry.cost += (s.totalCost as number) || 0;
+    entry.cacheHit += (s.cacheHitRate as number) || 0;
+    agentMap.set(a, entry);
+  }
+  const byAgent: AgentStats[] = [...agentMap.entries()]
+    .map(([agent, e]) => ({
+      agent,
+      sessions: e.sessions,
+      totalTokens: e.tokens,
+      totalCost: e.cost,
+      avgCacheHitRate: e.cacheHit / e.sessions,
+    }))
+    .sort((a, b) => b.sessions - a.sessions);
+
+  const { byProject, baselineProjects, anomalySessions } = buildProjectStats(sessions);
+
+  // By model (from spans)
+  const { modelMap, recentTools } = loadDashboardSpanAggregates(database);
+  const { byModel, modelDistribution } = buildModelViews(modelMap);
+
+  // Distributions
+  const sessionTokens = sessions.map(
+    (s) =>
+      ((s.inputTokens as number) || 0) +
+      ((s.cacheCreationTokens as number) || 0) +
+      ((s.cacheReadTokens as number) || 0) +
+      ((s.outputTokens as number) || 0),
+  );
+  const sessionCosts = sessions.map((s) => (s.totalCost as number) || 0);
+
+  const costBins = buildLogBins(sessionCosts, [
+    { label: '¥0', thresholds: [0, 0.001] },
+    { label: '¥0-0.01', thresholds: [0.001, 0.01] },
+    { label: '¥0.01-0.1', thresholds: [0.01, 0.1] },
+    { label: '¥0.1-1', thresholds: [0.1, 1] },
+    { label: '¥1-5', thresholds: [1, 5] },
+    { label: '¥5+', thresholds: [5, null] },
+  ]);
+
+  const tokenBins = buildLogBins(sessionTokens, [
+    { label: '<1k', thresholds: [0, 1_000] },
+    { label: '1k-10k', thresholds: [1_000, 10_000] },
+    { label: '10k-100k', thresholds: [10_000, 100_000] },
+    { label: '100k-500k', thresholds: [100_000, 500_000] },
+    { label: '500k-1M', thresholds: [500_000, 1_000_000] },
+    { label: '1M+', thresholds: [1_000_000, null] },
+  ]);
+
+  const agentDist = [...agentMap.entries()].map(([agent, e]) => ({
+    agent,
+    count: e.sessions,
+    tokens: e.tokens,
+  }));
+
+  const distribution: DistributionData = {
+    costBins,
+    tokenBins,
+    modelDistribution,
+    agentDistribution: agentDist,
+  };
+
+  // Time series trends: daily aggregation
+  const dailyMap = new Map<
+    string,
+    { tokens: number; cost: number; sessions: number; cacheHit: number }
+  >();
+  for (const s of sessions) {
+    const day = new Date(s.startTime as number).toISOString().slice(0, 10);
+    const entry = dailyMap.get(day) || { tokens: 0, cost: 0, sessions: 0, cacheHit: 0 };
+    entry.tokens +=
+      ((s.inputTokens as number) || 0) +
+      ((s.cacheCreationTokens as number) || 0) +
+      ((s.cacheReadTokens as number) || 0) +
+      ((s.outputTokens as number) || 0);
+    entry.cost += (s.totalCost as number) || 0;
+    entry.sessions++;
+    entry.cacheHit += (s.cacheHitRate as number) || 0;
+    dailyMap.set(day, entry);
+  }
+  const trends = [...dailyMap.entries()]
+    .map(([day, e]) => ({
+      day,
+      tokens: e.tokens,
+      cost: e.cost,
+      sessions: e.sessions,
+      avgCacheHit: e.sessions > 0 ? e.cacheHit / e.sessions : 0,
+    }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+
+  return {
+    overview,
+    byAgent,
+    byProject,
+    byModel,
+    recentTools,
+    distribution,
+    baseline: { projects: baselineProjects, anomalySessions },
+    trends,
+  };
+}
+
+export function registerStatsRoutes(app: FastifyInstance, runtime: StatsRuntime): void {
+  app.get('/api/stats', async () => buildStatsReport(runtime.database));
 }

@@ -16,6 +16,7 @@ import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
 import type { AppRuntime, ContextWindowResolver, PricingResolver } from '../runtime';
+import { listPrimarySessionSummaries } from '../session-discovery-service';
 import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
@@ -127,14 +128,7 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
   const getPricing = pricingResolver;
   const getModelContext = contextWindowResolver;
   app.get('/api/sessions', async () => {
-    return db
-      .prepare(
-        `SELECT ${SESSION_COLS}
-         FROM sessions
-         WHERE ${primarySessionPredicate()}
-         ORDER BY start_time DESC`,
-      )
-      .all() as SessionSummary[];
+    return listPrimarySessionSummaries(db);
   });
 
   // 标注 session

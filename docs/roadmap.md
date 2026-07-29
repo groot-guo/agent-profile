@@ -4744,7 +4744,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T102 CLI synchronization, Session queries, and reports
 
-- status: planned
+- status: completed
+- started_at: 2026-07-29
+- completed_at: 2026-07-29
 - estimated size/risk: extra-large / medium-high; existing route SQL must become
   reusable read/import services without changing stored evidence or API output
 - purpose:
@@ -4755,22 +4757,122 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - scope:
   1. add `sources`, `sync`, and bounded progress/result output using the Runtime
      import service rather than the Fastify job route
-  2. add bounded Session list/detail/evidence commands with explicit filters,
-     coverage, pagination, and content-preview controls
+  2. add a bounded Session discovery command with stable pagination; retain the
+     existing Web/API as the primary Session detail and evidence surface until
+     T83/T84 establish their broader query contracts
   3. add Session, Agent Process Profile, Task Profile, and statistics report
      commands only where the underlying implemented report already exists
   4. share application/query services between CLI and compatibility HTTP routes;
      do not duplicate SQL or metric formulas in command handlers
 - acceptance:
-  - a user can synchronize supported local sources and inspect current Session
-    and implemented Profile evidence entirely through the CLI with equivalent
-    unknown/coverage semantics to the Web/API
+  - a user can synchronize supported local sources, inspect bounded current
+    Session discovery, and read implemented Profile reports through the CLI;
+    detailed Session/evidence inspection remains available through the existing
+    Web/API without a second CLI-specific query contract
 - verification:
   - command and service tests with in-memory/fixture data, compatibility API
     tests, large-result bounds, full tests/build/lint, and `git diff --check`
 - documentation:
   - document exact commands, output schemas, privacy/content controls, and known
     source limitations
+- delivery plan:
+  1. extract the bounded source-status/synchronization service currently used by
+     the HTTP adapter, then add `sources` and `sync` CLI commands over the
+     shared Runtime service with versioned text/JSON output
+  2. extract bounded Session discovery from the compatibility routes before
+     adding the CLI command; keep a cursor-compatible extension point, while
+     detailed filters, evidence paging, and opt-in redacted preview remain the
+     existing Web/API path pending T83/T84
+  3. expose only already implemented statistics, Agent Process Profile, and
+     Task Profile reports through shared read services, with explicit coverage
+     and no configuration-quality claims
+- assumptions and risks:
+  - routes must become thin adapters over shared services; CLI handlers may not
+    duplicate route SQL or Core metric/report formulas
+  - every list/detail command needs an explicit bound and cursor/filter contract;
+    source transcript content remains omitted by default, and any preview stays
+    opt-in, redacted, bounded, and labelled as parser-truncated when applicable
+  - synchronization must retain ImportRuntime deduplication, source failure
+    isolation, revision replacement, and ordinary forced-rebuild/reset contracts
+  - T83/T84 scope is coordinated here only where the shipped shared services
+    safely preserve current API output; unsupported filters or reports remain
+    separate, documented follow-up work
+- implementation (phase 1: source operations):
+  - extracted `getImportStatus`, `startImport`, and `runImport` from the scan
+    route into one Server import service; it owns source validation, operation
+    conflict handling, primary stored-Session counts, job start/wait behavior,
+    and public status shaping
+  - changed compatibility import routes to thin HTTP adapters over that service,
+    preserving their 202/400/409 behavior and existing response schema
+  - added CLI `sources` and `sync [--source <id>]` contracts and commands;
+    `sources` refreshes availability only, while `sync` waits for selected
+    sources to reach terminal status and closes the Runtime in all outcomes
+- decision (phase 2: simplified Session access):
+  - CLI will initially expose only bounded Session discovery. The Web/API
+    remains the primary detail and evidence experience, including its opt-in
+    redacted preview controls; this avoids introducing a second public query
+    contract before T83/T84 define the full filter, pagination, and memory
+    behavior.
+  - the shared discovery service will use a stable cursor and explicit limit so
+    later CLI filters and evidence commands can extend it without restoring an
+    all-session transfer.
+- implementation (phase 2: bounded Session discovery):
+  - extracted the legacy primary-Session list query into a shared Server service;
+    the compatibility route retains its existing array response through that
+    service, while the CLI uses a safe-column query that never selects paths or
+    Span metadata
+  - added stable `start_time`/ID cursor pagination with a default limit of 20
+    and maximum of 100, then exposed it as `agent-profile sessions [--limit]
+    [--cursor]` with text and `agent-profile-cli/v1` JSON reports
+  - CLI discovery returns only primary Session summaries and omits Session names,
+    local paths, transcript identifiers, Span metadata, and content; detailed
+    analysis, evidence, and redacted previews remain the Web/API surface
+- implementation (phase 3: existing reports):
+  - extracted a shared read service over the existing Statistics, Agent Process
+    Profile, and TaskRepository Profile builders; compatibility routes retain
+    the same calculations and response shapes
+  - added `agent-profile stats`, `agent-profile profiles`, and
+    `agent-profile task-profile <id>` with compact text summaries and complete
+    `agent-profile-cli/v1` JSON envelopes around the existing reports
+  - preserved unknown-cost, sample, coverage, Outcome, comparison, and
+    limitation semantics; no command adds quality rankings, delivery claims, or
+    configuration-causality conclusions
+- verification (phase 1):
+  - RED tests failed before implementation for the missing import service and
+    unsupported CLI commands; focused Server tests then passed 15 files / 58
+    tests and CLI tests passed 1 file / 14 tests
+  - focused Server/Contracts/CLI TypeScript builds, Biome checks, and
+    `git diff --check` passed; the CLI child-process `sources --json` smoke uses
+    a temporary database, checks all five source statuses, and imports no data
+- verification (phase 2):
+  - RED tests failed for the missing shared discovery service and unsupported
+    `sessions` CLI command before implementation
+  - focused Server tests passed 17 files / 61 tests and CLI tests passed 1 file /
+    16 tests; Contracts, Server, and CLI TypeScript builds passed
+- verification (phase 3):
+  - RED test failed for the absent shared report service before implementation
+  - focused Server tests passed 18 files / 63 tests and CLI tests passed 1 file /
+    18 tests, including workspace-binary `stats` and `profiles` smoke checks on
+    an empty temporary database; Contracts, Server, and CLI TypeScript builds
+    passed
+- completion verification:
+  - `pnpm test` passed: Core 28 files / 202 tests, Server 18 files / 63 tests,
+    Web 4 files / 16 tests, and CLI 1 file / 19 tests
+  - `pnpm build` passed for Contracts, Core, Server, Web, and CLI
+  - `pnpm lint` completed successfully; its 18 existing warnings and 2 infos
+    are outside the T102-modified lines. `git diff --check` passed
+  - pre-commit review found and resolved two defects: `sync` now writes its
+    terminal report and exits `1` when a requested source failed, and default
+    `sessions` output omits Session names that could contain stored reasoning;
+    CLI and Server regression tests cover both results
+  - changed files: `.gitignore`, `apps/server/package.json`, Server import,
+    report, and Session-discovery services with their tests and compatibility
+    routes; CLI main, runner, and runner tests; CLI Contracts; and current-state
+    documentation in `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`, and
+    `docs/zh/OVERVIEW.md`
+- remaining work:
+  - detailed Session/evidence CLI commands are deferred to the broader T83/T84
+    data-contract work
 
 ### T103 CLI `serve` command and distributable local application
 

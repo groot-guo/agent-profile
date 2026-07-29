@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { getTaskProfileReport } from '../reports-service';
 import type { AppRuntime } from '../runtime';
 import { TaskModelError, TaskRepository } from '../task-repository';
 
@@ -56,7 +57,7 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
   );
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/profile', async (request, reply) =>
-    respond(reply, 200, () => repository.buildProfile(request.params.id)),
+    respond(reply, 200, () => getTaskProfileReport(runtime, request.params.id)),
   );
 
   app.get('/api/config-snapshots', async () => ({

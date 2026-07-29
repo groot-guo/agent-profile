@@ -68,6 +68,12 @@ The source workspace also provides the first `agent-profile` CLI entry point:
 ./packages/cli/bin/agent-profile.mjs help
 ./packages/cli/bin/agent-profile.mjs version --json
 ./packages/cli/bin/agent-profile.mjs doctor --data-dir ./local-data
+./packages/cli/bin/agent-profile.mjs sources --json
+./packages/cli/bin/agent-profile.mjs sync --source codex --source zed
+./packages/cli/bin/agent-profile.mjs sessions --limit 20 --json
+./packages/cli/bin/agent-profile.mjs stats --json
+./packages/cli/bin/agent-profile.mjs profiles --json
+./packages/cli/bin/agent-profile.mjs task-profile <task-id> --json
 ```
 
 `doctor` opens and closes the same application Runtime as the Server, verifies
@@ -77,12 +83,33 @@ and writes human-readable output by default or `agent-profile-cli/v1` with
 create the selected database and applies ordinary additive migrations and
 default pricing/model-context seeding.
 
-For `doctor`, the database path is selected from `--database`, then
+For CLI Runtime commands, the database path is selected from `--database`, then
 `--data-dir/trace.db`, then `TRACE_DB_PATH`, then the existing
 `apps/server/trace.db` default. Exit status is `0` for success, `2` for command
-usage errors, and `1` for Runtime failures. Synchronization, Session queries,
-reports, `serve`, and published release artifacts are not part of this initial
-CLI foundation.
+usage errors, and `1` for Runtime failures. Reports, `serve`, and published
+release artifacts are not part of this initial CLI foundation.
+
+`sources` refreshes local source availability and reports the stored primary
+Session count without returning local paths or transcript identifiers. `sync`
+uses the same Runtime import service as the API, waits for the selected sources
+to finish, and reports the terminal per-source result. Omit `--source` to
+select every supported source; repeat it to select multiple sources. It does
+not start HTTP, but it does import derived local Session/Span data into the
+selected database.
+
+`sessions` returns a bounded page of current primary Session summaries: 20 by
+default and at most 100 records, ordered by start time and ID. Pass the prior
+JSON report's opaque `nextCursor` through `--cursor` to continue. Its report
+omits Session names, local paths, transcript identifiers, Span metadata, and
+content. Detailed Session analysis, evidence timelines, and opt-in redacted
+previews remain in the Web/API.
+
+`stats`, `profiles`, and `task-profile <id>` expose the already implemented
+aggregate statistics, Agent Process Profile, and explicit Task Profile reports.
+Their JSON reports retain the existing metric coverage and limitations. Process
+evidence does not establish delivery quality; the Agent Profile's relative
+observations are not universal quality rankings, and a Task Profile only covers
+its explicitly linked Sessions and locally recorded Outcome evidence.
 
 ## First import
 
@@ -278,11 +305,12 @@ pnpm dev
 
 ## Current product boundaries
 
-- The workspace includes the initial `agent-profile` CLI package and source
-  binary for `help`, `version`, and `doctor`; it is not yet a published release
-  or desktop application. CLI synchronization, queries, reports, and `serve`
-  remain future work, while `pnpm start` remains the supported non-watch Web
-  launcher.
+- The workspace `agent-profile` CLI package and source binary supports `help`,
+  `version`, `doctor`, `sources`, `sync`, and bounded `sessions`; it is not yet
+  a published release or desktop application. It also exposes existing `stats`,
+  `profiles`, and `task-profile <id>` reports. Detailed Session/evidence views
+  and `serve` remain in active development, while `pnpm start` remains the
+  supported non-watch Web launcher.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
   local foundations. Automated cohort statistics, regression detection,
   causal experiment conclusions, and Runtime feedback/SDK integration are not

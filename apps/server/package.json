@@ -3,6 +3,9 @@
   "type": "module",
   "exports": {
     "./config": "./src/config.ts",
+    "./imports": "./src/ingestion/import-service.ts",
+    "./reports": "./src/reports-service.ts",
+    "./sessions": "./src/session-discovery-service.ts",
     "./runtime": "./src/runtime.ts"
   },
   "scripts": {

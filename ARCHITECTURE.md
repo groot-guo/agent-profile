@@ -158,13 +158,28 @@ authentication or directory authorization, a non-loopback `HOST` is an
 operator opt-in for trusted networks and emits a startup warning.
 
 The workspace CLI is available at `packages/cli/bin/agent-profile.mjs` after
-dependency installation. It currently exposes only `help`, `version`, and
-`doctor`; it is not a published release artifact or a replacement Web launcher.
+dependency installation. It exposes `help`, `version`, `doctor`, `sources`,
+`sync`, and bounded `sessions`; it is not a published release artifact or a
+replacement Web launcher.
 `doctor` resolves its database from `--database`, `--data-dir/trace.db`,
 `TRACE_DB_PATH`, or the existing Runtime default, in that order. It never starts
 imports or HTTP, and returns exit status `2` for usage errors and `1` for Runtime
-failures. Synchronization/query/report commands belong to T102, while `serve`,
-stable per-user data paths, and distributable artifacts belong to T103.
+failures. `sources` refreshes the same bounded source status returned by the
+compatibility API. `sync` uses the shared import service, waits for selected
+sources to finish, and reports terminal results; neither starts HTTP. Session
+discovery reads a safe primary-Session summary page (default 20, maximum 100),
+ordered by `start_time` and ID with an opaque cursor. It omits Session names,
+local paths, transcript identifiers, Span metadata, and content. The
+compatibility `GET /api/sessions` route retains its existing full-array response
+through the same query service; detailed Session/evidence CLI commands and
+reports remain T102 work. `serve`, stable per-user data paths, and distributable
+artifacts belong to T103.
+
+`stats`, `profiles`, and `task-profile <id>` are read-only Runtime adapters over
+the current aggregate statistics, Agent Process Profile, and TaskRepository
+Profile builders. They return the existing report data with its coverage and
+limitations; they do not add metric formulas, Outcome conclusions, or automatic
+configuration-quality decisions.
 
 The Home page owns the initial Sessions, Stats, and import-status requests and
 passes data into the Dashboard. Dashboard model totals and recent-tool
@@ -569,6 +584,16 @@ page exposes the same contract and privacy boundaries.
 - `packages/cli/bin/agent-profile.mjs doctor` checks the selected local database
   and source availability through the application Runtime without starting the
   HTTP adapter or import work. `--json` emits `agent-profile-cli/v1`.
+- `sources` and `sync` share the Server import service with the compatibility
+  route. Status omits source paths/transcript IDs; sync retains existing
+  availability checks, deduplication, revision replacement, and failure isolation.
+- CLI `sessions` and the compatibility Session-list route share the Server
+  discovery service. CLI uses its bounded, path/content-free cursor page; the
+  compatibility route retains its existing unbounded response until T83 changes
+  the public discovery contract.
+- CLI report commands share the current Statistics/Profile/Task Profile builders
+  with their HTTP surfaces. The command layer only wraps the existing results in
+  `agent-profile-cli/v1` and preserves report-specific coverage and limitations.
 - Root `pnpm dev` uses parallel workspace execution to start the API and Web
   processes together. The API development command runs in watch mode; the Web
   process uses Next.js development reloads.

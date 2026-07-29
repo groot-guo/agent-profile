@@ -1,10 +1,22 @@
 export {
   CLI_SCHEMA_VERSION,
+  type CliAgentProfilesData,
   type CliCommand,
   type CliDoctorReport,
   type CliDoctorSource,
   type CliHelpReport,
+  type CliImportStatus,
+  type CliProfilesReport,
   type CliReport,
+  type CliSessionDiscoveryPage,
+  type CliSessionSummary,
+  type CliSessionsReport,
+  type CliSourcesReport,
+  type CliStatsData,
+  type CliStatsReport,
+  type CliSyncReport,
+  type CliTaskProfileData,
+  type CliTaskProfileReport,
   type CliVersionReport,
 } from './cli';
 export type {

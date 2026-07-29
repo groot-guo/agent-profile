@@ -1,11 +1,7 @@
-import type {
-  DataManagementSummary,
-  ImportJobStatusResponse,
-  ResetResponse,
-} from '@agent-profile/contracts';
+import type { DataManagementSummary, ResetResponse } from '@agent-profile/contracts';
 import type { FastifyInstance } from 'fastify';
-import type { ImportJobStatus, ImportSourceId } from '../ingestion/import-job-manager';
-import { primarySessionPredicate } from '../primary-sessions';
+import type { ImportSourceId } from '../ingestion/import-job-manager';
+import { getImportStatus, ImportServiceError, startImport } from '../ingestion/import-service';
 import type { AppRuntime } from '../runtime';
 
 interface ScanBody {
@@ -27,32 +23,28 @@ export function registerScanRoutes(app: FastifyInstance, runtime: AppRuntime): v
   const { database, imports } = runtime;
   const { jobs } = imports;
 
-  app.get('/api/imports/status', async () => importStatusWithStoredCounts(runtime));
+  app.get('/api/imports/status', async () => getImportStatus(runtime));
 
   app.post<{ Body: ImportBody }>('/api/imports', async (request, reply) => {
-    const sourceIds = request.body?.sources ?? jobs.sourceIds();
-    if (!validSourceIds(sourceIds, jobs.sourceIds())) {
-      return reply.status(400).send({ error: 'invalid import source' });
+    try {
+      return reply.status(202).send(await startImport(runtime, request.body?.sources));
+    } catch (error) {
+      if (!(error instanceof ImportServiceError)) throw error;
+      return reply
+        .status(error.code === 'invalid_source' ? 400 : 409)
+        .send({ error: error.message });
     }
-    const current = jobs.snapshot();
-    if (current.active && current.operation !== 'sync') {
-      return reply.status(409).send({ error: 'import job already active' });
-    }
-    const status = await jobs.start(sourceIds);
-    return reply.status(202).send(withStoredCounts(database, status));
   });
 
   app.post<{ Body: ImportBody }>('/api/imports/rebuild', async (request, reply) => {
-    const sourceIds = request.body?.sources ?? jobs.sourceIds();
-    if (!validSourceIds(sourceIds, jobs.sourceIds())) {
-      return reply.status(400).send({ error: 'invalid import source' });
+    try {
+      return reply.status(202).send(await startImport(runtime, request.body?.sources, 'rebuild'));
+    } catch (error) {
+      if (!(error instanceof ImportServiceError)) throw error;
+      return reply
+        .status(error.code === 'invalid_source' ? 400 : 409)
+        .send({ error: error.message });
     }
-    const current = jobs.snapshot();
-    if (current.active && current.operation !== 'rebuild') {
-      return reply.status(409).send({ error: 'import job already active' });
-    }
-    const status = await jobs.start(sourceIds, 'rebuild');
-    return reply.status(202).send(withStoredCounts(database, status));
   });
 
   app.get('/api/data-management/summary', async () => dataManagementSummary(database));
@@ -86,47 +78,6 @@ export function registerScanRoutes(app: FastifyInstance, runtime: AppRuntime): v
     if (!dir) return reply.status(400).send({ error: 'dir required' });
     return imports.runCompatibilityScan(dir, agent);
   });
-}
-
-async function importStatusWithStoredCounts(runtime: AppRuntime): Promise<ImportJobStatusResponse> {
-  const status = await runtime.imports.jobs.refreshAvailability();
-  return withStoredCounts(runtime.database, status);
-}
-
-function withStoredCounts(
-  database: AppRuntime['database'],
-  status: ImportJobStatus,
-): ImportJobStatusResponse {
-  const rows = database
-    .prepare(
-      `SELECT COALESCE(source_kind, agent) as sourceKind, COUNT(*) as sessions
-       FROM sessions
-       WHERE COALESCE(source_kind, agent) IS NOT NULL
-         AND ${primarySessionPredicate()}
-       GROUP BY COALESCE(source_kind, agent)`,
-    )
-    .all() as { sourceKind: string; sessions: number }[];
-  const counts = new Map(rows.map((row) => [row.sourceKind, row.sessions]));
-  return {
-    ...status,
-    sources: status.sources.map((source) => ({
-      ...source,
-      storedSessions: counts.get(source.id) ?? 0,
-    })),
-  };
-}
-
-function validSourceIds(
-  sourceIds: ImportSourceId[] | unknown[],
-  knownSourceIds: ImportSourceId[],
-): sourceIds is ImportSourceId[] {
-  return (
-    Array.isArray(sourceIds) &&
-    sourceIds.every(
-      (sourceId): sourceId is ImportSourceId =>
-        typeof sourceId === 'string' && knownSourceIds.includes(sourceId as ImportSourceId),
-    )
-  );
 }
 
 function dataManagementSummary(database: AppRuntime['database']): DataManagementSummary {

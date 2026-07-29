@@ -3,7 +3,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import type {
+  CliAgentProfilesData,
+  CliStatsData,
+  CliTaskProfileData,
+  ImportJobStatusResponse,
+} from '@agent-profile/contracts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CliDependencies, CliRuntime } from './runner';
 import { parseCliArguments, resolveDatabasePath, runCli } from './runner';
 
@@ -36,6 +42,88 @@ function createDependencies(): {
       closed++;
     },
   };
+  const importStatus = {
+    jobId: null,
+    active: false,
+    operation: null,
+    sources: [
+      {
+        id: 'codex' as const,
+        label: 'Codex',
+        available: true,
+        state: 'idle' as const,
+        result: null,
+        startedAt: null,
+        completedAt: null,
+        error: null,
+        storedSessions: 3,
+      },
+    ],
+  };
+  const sessionDiscovery = {
+    limit: 1,
+    hasMore: false,
+    nextCursor: null,
+    sessions: [
+      {
+        id: 'session-1',
+        agent: 'codex',
+        startTime: 1,
+        endTime: 2,
+        gitBranch: null,
+        inputTokens: 1,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        outputTokens: 1,
+        totalCost: 0,
+        costUnknownCount: 0,
+        costCurrency: 'CNY',
+        peakContextTokens: 1,
+        avgContextTokens: 1,
+        cacheHitRate: 0,
+        messageCount: 1,
+        importedAt: 2,
+      },
+    ],
+  };
+  const statistics: CliStatsData = {
+    overview: {
+      totalSessions: 1,
+      totalTokens: 15,
+      totalCost: 0.25,
+      totalInputTokens: 10,
+      totalOutputTokens: 5,
+      avgCacheHitRate: 0.5,
+      avgPeakContext: 10,
+      sessionsWithCostUnknown: 0,
+    },
+    byAgent: [],
+    byProject: [],
+    byModel: [],
+    recentTools: [],
+    distribution: {
+      costBins: [],
+      tokenBins: [],
+      modelDistribution: [],
+      agentDistribution: [],
+    },
+  };
+  const agentProfiles: CliAgentProfilesData = {
+    schemaVersion: 'agent-profile/v1',
+    generatedAt: 1,
+    scope: { agents: ['codex'], sessions: 1 },
+    comparison: { status: 'insufficient_data' },
+    profiles: [],
+    limitations: [],
+  };
+  const taskProfile: CliTaskProfileData = {
+    schemaVersion: 'task-profile/v1',
+    generatedAt: 1,
+    task: { id: 'task-1', title: 'Fixture Task' },
+    profile: { linkedSessions: 0, availableSessions: 0 },
+    coverage: { outcome: { status: 'not_collected' } },
+    limitations: [],
+  };
 
   return {
     dependencies: {
@@ -49,6 +137,12 @@ function createDependencies(): {
         runtimeOptions.push(options);
         return runtime;
       },
+      getImportStatus: vi.fn(async () => importStatus),
+      syncImports: vi.fn(async () => importStatus),
+      discoverSessions: vi.fn(() => sessionDiscovery),
+      getStatsReport: vi.fn(() => statistics),
+      getAgentProfileReport: vi.fn(() => agentProfiles),
+      getTaskProfileReport: vi.fn(() => taskProfile),
       writeStdout: (text) => output.stdout.push(text),
       writeStderr: (text) => output.stderr.push(text),
     },
@@ -132,6 +226,129 @@ describe('CLI runner', () => {
     });
   });
 
+  it('writes refreshed source status without starting an import', async () => {
+    const { dependencies, output, runtimeOptions, closeCalls } = createDependencies();
+
+    const exitCode = await runCli(['sources', '--json'], dependencies);
+
+    expect(exitCode).toBe(0);
+    expect(runtimeOptions).toEqual([
+      {
+        databasePath: '/default/trace.db',
+        autoScanDir: null,
+        defaultScanDir: '~/.claude/projects',
+      },
+    ]);
+    expect(closeCalls()).toBe(1);
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      command: 'sources',
+      imports: { active: false },
+      sources: [{ id: 'codex', storedSessions: 3 }],
+    });
+  });
+
+  it('writes a bounded Session discovery report and closes the Runtime', async () => {
+    const { dependencies, output, closeCalls } = createDependencies();
+
+    const exitCode = await runCli(
+      ['sessions', '--limit', '1', '--cursor', 'next-page', '--json'],
+      dependencies,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(dependencies.discoverSessions).toHaveBeenCalledWith(expect.anything(), {
+      limit: 1,
+      cursor: 'next-page',
+    });
+    expect(closeCalls()).toBe(1);
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      schemaVersion: 'agent-profile-cli/v1',
+      command: 'sessions',
+      limit: 1,
+    });
+  });
+
+  it('writes existing statistics, Agent Process Profile, and Task Profile reports', async () => {
+    const stats = createDependencies();
+    const profiles = createDependencies();
+    const taskProfile = createDependencies();
+
+    expect(await runCli(['stats', '--json'], stats.dependencies)).toBe(0);
+    expect(await runCli(['profiles', '--json'], profiles.dependencies)).toBe(0);
+    expect(await runCli(['task-profile', 'task-1', '--json'], taskProfile.dependencies)).toBe(0);
+
+    expect(stats.dependencies.getStatsReport).toHaveBeenCalledWith(expect.anything());
+    expect(profiles.dependencies.getAgentProfileReport).toHaveBeenCalledWith(expect.anything());
+    expect(taskProfile.dependencies.getTaskProfileReport).toHaveBeenCalledWith(
+      expect.anything(),
+      'task-1',
+    );
+    expect(JSON.parse(stats.output.stdout.join(''))).toMatchObject({
+      command: 'stats',
+      statistics: { overview: { totalSessions: 1 } },
+    });
+    expect(JSON.parse(profiles.output.stdout.join(''))).toMatchObject({
+      command: 'profiles',
+      agentProfiles: { schemaVersion: 'agent-profile/v1' },
+    });
+    expect(JSON.parse(taskProfile.output.stdout.join(''))).toMatchObject({
+      command: 'task-profile',
+      taskId: 'task-1',
+      taskProfile: { schemaVersion: 'task-profile/v1' },
+    });
+  });
+
+  it('synchronizes selected sources through the shared Runtime service', async () => {
+    const { dependencies, output, closeCalls } = createDependencies();
+
+    const exitCode = await runCli(
+      ['sync', '--source', 'codex', '--source', 'zed', '--json'],
+      dependencies,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(dependencies.syncImports).toHaveBeenCalledWith(expect.anything(), ['codex', 'zed']);
+    expect(closeCalls()).toBe(1);
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      command: 'sync',
+      requestedSources: ['codex', 'zed'],
+      imports: { active: false },
+    });
+  });
+
+  it('reports a selected source failure and exits unsuccessfully', async () => {
+    const { dependencies, output, closeCalls } = createDependencies();
+    const failedStatus: ImportJobStatusResponse = {
+      jobId: 'sync-1',
+      active: false,
+      operation: null,
+      sources: [
+        {
+          id: 'codex',
+          label: 'Codex',
+          available: true,
+          state: 'failed',
+          result: null,
+          startedAt: 1,
+          completedAt: 2,
+          error: 'source_scan_failed',
+          storedSessions: 3,
+        },
+      ],
+    };
+    vi.mocked(dependencies.syncImports).mockResolvedValue(failedStatus);
+
+    const exitCode = await runCli(['sync', '--source', 'codex', '--json'], dependencies);
+
+    expect(exitCode).toBe(1);
+    expect(closeCalls()).toBe(1);
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      command: 'sync',
+      requestedSources: ['codex'],
+      sources: [{ id: 'codex', state: 'failed', error: 'source_scan_failed' }],
+    });
+  });
+
   it('writes a human-readable doctor report', async () => {
     const { dependencies, output } = createDependencies();
 
@@ -191,11 +408,11 @@ describe('CLI runner', () => {
   it('reports unknown commands as usage errors', async () => {
     const { dependencies, output, runtimeOptions } = createDependencies();
 
-    const exitCode = await runCli(['sync'], dependencies);
+    const exitCode = await runCli(['reports'], dependencies);
 
     expect(exitCode).toBe(2);
     expect(runtimeOptions).toEqual([]);
-    expect(output.stderr.join('')).toContain('Unknown command: sync');
+    expect(output.stderr.join('')).toContain('Unknown command: reports');
   });
 
   it('parses only one command and rejects unexpected positional arguments', () => {
@@ -244,6 +461,81 @@ describe('CLI runner', () => {
       schemaVersion: 'agent-profile-cli/v1',
       command: 'doctor',
       database: { path: databasePath, existedBeforeRuntime: false },
+    });
+  });
+
+  it('runs the workspace sources command without importing local data', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-cli-sources-'));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, 'trace.db');
+    const binaryPath = fileURLToPath(new URL('../bin/agent-profile.mjs', import.meta.url));
+
+    const result = spawnSync(
+      process.execPath,
+      [binaryPath, 'sources', '--json', '--database', databasePath],
+      { encoding: 'utf8', timeout: 10_000 },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      schemaVersion: 'agent-profile-cli/v1',
+      command: 'sources',
+      imports: { active: false },
+    });
+    expect(JSON.parse(result.stdout).sources).toHaveLength(5);
+    expect(result.stdout).not.toContain('/Users/');
+  });
+
+  it('runs the workspace sessions command with the bounded default page', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-cli-sessions-'));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, 'trace.db');
+    const binaryPath = fileURLToPath(new URL('../bin/agent-profile.mjs', import.meta.url));
+
+    const result = spawnSync(
+      process.execPath,
+      [binaryPath, 'sessions', '--json', '--database', databasePath],
+      { encoding: 'utf8', timeout: 10_000 },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      schemaVersion: 'agent-profile-cli/v1',
+      command: 'sessions',
+      limit: 20,
+      hasMore: false,
+      sessions: [],
+    });
+  });
+
+  it('runs the workspace statistics and profiles commands on an empty database', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-cli-reports-'));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, 'trace.db');
+    const binaryPath = fileURLToPath(new URL('../bin/agent-profile.mjs', import.meta.url));
+
+    const stats = spawnSync(
+      process.execPath,
+      [binaryPath, 'stats', '--json', '--database', databasePath],
+      { encoding: 'utf8', timeout: 10_000 },
+    );
+    const profiles = spawnSync(
+      process.execPath,
+      [binaryPath, 'profiles', '--json', '--database', databasePath],
+      { encoding: 'utf8', timeout: 10_000 },
+    );
+
+    expect(stats.status).toBe(0);
+    expect(profiles.status).toBe(0);
+    expect(JSON.parse(stats.stdout)).toMatchObject({
+      command: 'stats',
+      statistics: { overview: { totalSessions: 0 } },
+    });
+    expect(JSON.parse(profiles.stdout)).toMatchObject({
+      command: 'profiles',
+      agentProfiles: { schemaVersion: 'agent-profile/v1', scope: { sessions: 0 } },
     });
   });
 });

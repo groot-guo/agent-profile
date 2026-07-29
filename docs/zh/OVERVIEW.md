@@ -54,6 +54,14 @@ Fastify 只适配显式传入的 Runtime；路由不再创建生产数据库或�
 `@agent-profile/cli` package 的 `doctor` 会直接创建并关闭同一个 Runtime，只刷新来源
 可用性，不启动导入或 HTTP。源码 workspace 已提供 `agent-profile` binary，但尚未发布
 正式发行包；日常 Web 入口仍是 `pnpm dev`/`pnpm start`。
+`sources` 通过共享 import service 刷新可用性与已存主链 Session 计数；`sync` 复用同一
+Runtime 导入服务，等待所选来源完成并输出终态结果。两者不启动 HTTP，状态不暴露来源路径或
+transcript 标识。
+`sessions` 通过同一查询服务读取当前主链 Session 的安全摘要页，默认 20 条、最多 100 条，
+按开始时间和 ID 排序，并使用不透明 cursor 继续翻页；它不返回本地路径、transcript 标识、
+Span metadata 或内容。详细 Session 分析和证据时间线仍以 Web/API 为主。
+`stats`、`profiles` 与 `task-profile <id>` 只读取已有的汇总统计、Agent Process Profile
+和 Task Profile，并保留覆盖度与 limitations；不新增指标公式、Outcome 结论或配置质量判断。
 
 各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
 每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新
@@ -91,6 +99,14 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 通过源码 workspace 的 `agent-profile help/version/doctor` 检查 CLI 版本、所选 SQLite
   数据库和五种本地来源可用性，支持便于阅读的文本与 `agent-profile-cli/v1` JSON；
   `doctor` 不导入数据或启动 HTTP，但会执行正常数据库创建、migration 与默认数据初始化。
+- 通过 `agent-profile sources` 检查来源可用性和已存主链 Session 计数；通过
+  `agent-profile sync [--source <id>]` 复用 Runtime 导入一个或多个来源，等待终态并输出
+  每来源结果。默认不传 `--source` 会选择全部支持来源。
+- 通过 `agent-profile sessions [--limit <1-100>] [--cursor <nextCursor>]` 浏览当前主链
+  Session 的有界安全摘要；详细分析、证据和按需脱敏预览仍使用 Web/API。
+- 通过 `agent-profile stats`、`agent-profile profiles` 和 `agent-profile task-profile <id>`
+  读取现有统计、Agent Process Profile 与显式 Task Profile；它们是过程证据，不能单独证明
+  交付质量或配置优劣。
 - 分别保留 input、cache creation、cache read、output 四类 token。
 - 首次使用时以独立数据准备页展示可用来源、导入和失败状态；已有数据在后台同步期间仍可
   浏览，并通过侧栏紧凑、可展开的来源级状态显示当前操作和完成数，同步完成后只刷新一次。
@@ -177,8 +193,9 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 能提供无持久化的提示词结构审查和带护栏的下一步实验假设；
 - 能持久化 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment，并生成
   `task-profile/v1`；缺失 Outcome 与失败严格区分。
-- 能从源码 workspace 运行 `agent-profile help/version/doctor`；同步、查询、报告、
-  `serve` 和正式发行制品尚未实现。
+- 能从源码 workspace 运行 `agent-profile help/version/doctor/sources/sync/sessions`；详细
+  Session/证据查询与 `serve` 仍在开发中；可通过 `stats`、`profiles` 与
+  `task-profile <id>` 读取既有报告，正式发行制品仍在开发中。
 - 自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback 尚未实现。
 
 未来方案：
