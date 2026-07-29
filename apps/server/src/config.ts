@@ -8,7 +8,7 @@ export interface ServerConfig {
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_HOST = '127.0.0.1';
-const DEFAULT_SCAN_DIR = '~/.claude/projects';
+export const DEFAULT_SCAN_DIR = '~/.claude/projects';
 const DEFAULT_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001'];
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {

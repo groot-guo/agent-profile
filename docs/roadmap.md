@@ -4657,7 +4657,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T101 CLI foundation and local Runtime entry point
 
-- status: planned
+- status: completed
+- started_at: 2026-07-29
+- completed_at: 2026-07-29
 - estimated size/risk: large / medium; it introduces the primary product entry
   point but should reuse T98 composition without changing evidence semantics
 - purpose:
@@ -4683,6 +4685,62 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - documentation:
   - update README/architecture/Chinese overview only for commands that ship and
     record installation and local-data behavior
+- implementation decisions:
+  - this Task ships only `help`, `version`, and `doctor`; synchronization,
+    Session queries, reports, `serve`, and release artifacts remain owned by
+    T102/T103
+  - the database path is selected in this order: `--database`,
+    `--data-dir/trace.db`, `TRACE_DB_PATH`, then the existing Runtime default;
+    a no-option invocation does not move mutable data to a new per-user
+    location, which remains T103 scope
+  - `doctor` constructs and closes the same Runtime as Fastify, refreshes only
+    source availability, and never starts HTTP or imports. Ordinary additive
+    migration and default-reference-data seeding therefore retain their current
+    Runtime behavior and are visible in command output/documentation
+- implementation:
+  - added the `@agent-profile/cli` workspace package and executable
+    `agent-profile` bin entry with human-readable and `agent-profile-cli/v1`
+    JSON output for `help`, `version`, and `doctor`
+  - added strict argument parsing, explicit `--database`/`--data-dir` conflict
+    handling, documented exit statuses (`0` success, `2` usage, `1` Runtime),
+    package-metadata version reporting, and deterministic path precedence
+  - exposed the existing Server Runtime/config composition paths to the CLI;
+    `doctor` creates the production Runtime directly, refreshes all five source
+    availability states, reports whether the selected database already existed,
+    and closes the Runtime in a `finally` block
+  - added framework-neutral CLI report contracts that reuse the existing import
+    source identity/state types rather than duplicating source semantics
+  - added unit/integration coverage for parsing, path resolution, text/JSON
+    output, usage/Runtime failures, Runtime closure, temporary SQLite creation,
+    package version alignment, and the actual workspace bin process
+- changed files:
+  - CLI package: new `packages/cli/{package.json,tsconfig.json,bin/,src/}`
+  - contracts/Runtime surface: new `packages/contracts/src/cli.ts`, updated
+    contracts exports, Server package exports/default scan configuration, and
+    `pnpm-lock.yaml`
+  - current-state documentation: `README.md`, `README.zh-CN.md`,
+    `ARCHITECTURE.md`, `docs/zh/OVERVIEW.md`,
+    `docs/modular-architecture-design.md`, and this roadmap
+- verification:
+  - CLI Vitest passed 1 file / 11 tests, including a real child-process bin
+    invocation and temporary SQLite Runtime smoke; CLI and Contracts TypeScript
+    builds passed
+  - root `pnpm test` passed 47 files / 284 tests across Core, Server, CLI, and
+    Web
+  - root `pnpm build` passed Core, Contracts, CLI, and Server TypeScript plus
+    the optimized nine-route Web production build
+  - root `pnpm lint` passed all 129 files with the unchanged 18 warnings and two
+    informational diagnostics; focused T101 files passed without diagnostics
+  - `pnpm check:boundaries` and `git diff --check` passed
+  - direct workspace `help`, JSON `version`, JSON `doctor`, unknown-command exit
+    status, and selected temporary-database initialization smokes passed
+- limitations:
+  - the bin is a source-workspace package using `tsx`; published packages,
+    native production artifacts, `serve`, and a stable per-user default data
+    directory remain T103 scope
+  - synchronization, Session queries, and Profile/report commands remain T102
+    scope; `doctor` intentionally checks availability only and opening it may
+    create/migrate/seed the selected database
 
 ### T102 CLI synchronization, Session queries, and reports
 

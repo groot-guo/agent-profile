@@ -44,15 +44,16 @@ MiMo SQLite ────────┤                              ↓
 OpenCode SQLite ────┘                      分析 + 会话仓储
                                                    ↓
 生产入口 → App Runtime ─────────────────────────→ SQLite
-                  ↓
-             Fastify 适配器 → Next.js UI
+                  ├→ CLI 适配器
+                  └→ Fastify 适配器 → Next.js UI
 ```
 
 当前 `AppRuntime` 是应用组合边界：生产启动只创建一个选定的 SQLite 连接，并围绕它创建
 定价/模型窗口解析器、每 Runtime 独立的导入服务与任务管理器、时钟和幂等关闭操作。
-Fastify 只适配显式传入的 Runtime；路由不再创建生产数据库或导入单例。后续 CLI 计划直接
-调用同一 Runtime，但目前还没有可安装的 `agent-profile` 命令，日常入口仍是源码仓库中的
-`pnpm dev`/`pnpm start`。
+Fastify 只适配显式传入的 Runtime；路由不再创建生产数据库或导入单例。当前
+`@agent-profile/cli` package 的 `doctor` 会直接创建并关闭同一个 Runtime，只刷新来源
+可用性，不启动导入或 HTTP。源码 workspace 已提供 `agent-profile` binary，但尚未发布
+正式发行包；日常 Web 入口仍是 `pnpm dev`/`pnpm start`。
 
 各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
 每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新
@@ -87,6 +88,9 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 
 ## 当前能力
 
+- 通过源码 workspace 的 `agent-profile help/version/doctor` 检查 CLI 版本、所选 SQLite
+  数据库和五种本地来源可用性，支持便于阅读的文本与 `agent-profile-cli/v1` JSON；
+  `doctor` 不导入数据或启动 HTTP，但会执行正常数据库创建、migration 与默认数据初始化。
 - 分别保留 input、cache creation、cache read、output 四类 token。
 - 首次使用时以独立数据准备页展示可用来源、导入和失败状态；已有数据在后台同步期间仍可
   浏览，并通过侧栏紧凑、可展开的来源级状态显示当前操作和完成数，同步完成后只刷新一次。
@@ -173,6 +177,8 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 能提供无持久化的提示词结构审查和带护栏的下一步实验假设；
 - 能持久化 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment，并生成
   `task-profile/v1`；缺失 Outcome 与失败严格区分。
+- 能从源码 workspace 运行 `agent-profile help/version/doctor`；同步、查询、报告、
+  `serve` 和正式发行制品尚未实现。
 - 自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback 尚未实现。
 
 未来方案：
@@ -196,6 +202,9 @@ Task 标记为 `completed`。
 
 ## 端口与配置
 
+- `packages/cli/bin/agent-profile.mjs doctor` 按 `--database`、
+  `--data-dir/trace.db`、`TRACE_DB_PATH`、现有 Runtime 默认值的顺序选择数据库；
+  `--json` 输出版本化报告。命令用法错误 exit code 为 `2`，Runtime 失败为 `1`。
 - 根目录 `pnpm dev` 会并行启动 server 与 web，server 源码变化后会自动重启，不再需要
   分别打开两个终端。
 - 根目录 `pnpm start` 会先构建 workspace，再以非 watch 模式并行启动生产 Web 与 API，

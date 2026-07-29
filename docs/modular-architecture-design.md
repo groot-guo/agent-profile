@@ -32,8 +32,10 @@ The pressure is inside the Runtime composition, HTTP adapter, and Web applicatio
 
 - several routes own SQL, application orchestration, aggregation, response
   construction, and external process calls together;
-- application/query services are still implicit in several route handlers, so
-  future CLI reuse requires focused extraction rather than transport duplication;
+- application/query services are still implicit in several route handlers; the
+  current CLI `doctor` reuses the Runtime directly, while synchronization,
+  queries, and reports require focused extraction rather than transport
+  duplication;
 - Web pages define local response shapes and combine remote-data loading,
   navigation state, view-model calculation, and large presentation trees;
 - one repository currently owns Task, Configuration, Outcome, Cohort,
@@ -97,7 +99,7 @@ Forbidden shortcuts:
 packages/
   core/
   contracts/
-  cli/                 # added by the CLI foundation Task
+  cli/                 # current Runtime adapter; domain commands grow incrementally
     src/
       common.ts
       model-catalog.ts

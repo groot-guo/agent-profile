@@ -49,6 +49,7 @@ OpenCode SQLite ────┘                                      ▼
                                                                ▼
 Production entry → App Runtime ─────────────────────────────→ SQLite
                        │
+                       ├─→ CLI adapter
                        └─→ Fastify adapter → Next.js UI
 ```
 
@@ -60,9 +61,11 @@ only adapts the supplied Runtime to Fastify; route registrars receive explicit
 Runtime capabilities and do not create a production database or import manager.
 The process entry point starts background imports and owns HTTP/signal shutdown,
 closing Fastify and the same Runtime. Tests can therefore create isolated
-in-memory Runtimes without environment-before-import ordering. A future CLI is
-planned to call the Runtime directly, but no packaged `agent-profile` command is
-implemented yet.
+in-memory Runtimes without environment-before-import ordering. The
+`@agent-profile/cli` package calls the same production Runtime directly for
+`doctor`, refreshes source availability without starting imports or HTTP, and
+always closes the Runtime before exit. Opening `doctor` still performs ordinary
+database creation, additive migration, and default reference-data seeding.
 
 Scanning is revision-based. Each source item provides a source kind, source
 update time, and stable fingerprint. The coordinator skips matching revisions,
@@ -126,7 +129,8 @@ as requiring manual action instead of presenting them as retryable parse errors.
 | Component | Current responsibility |
 | --- | --- |
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
-| `packages/contracts` (`@agent-profile/contracts`) | Framework-neutral public contracts for implemented cross-package vertical slices; currently the import/data-management responses consumed by Server and Web |
+| `packages/contracts` (`@agent-profile/contracts`) | Framework-neutral public contracts for implemented cross-package vertical slices; currently import/data-management responses and `agent-profile-cli/v1` reports |
+| `packages/cli` (`@agent-profile/cli`) | Source-workspace `agent-profile` binary, argument/data-path resolution, human/JSON help, version, and Runtime doctor output |
 | `packages/core/src/scanners/transcript.ts` | Source-neutral async JSONL discovery and NDJSON reading shared by Claude Code and Codex, with compatibility sync helpers |
 | `apps/server/src/runtime.ts` | Explicit application lifecycle for one database connection, pricing/context resolvers, import state, clock, and shutdown |
 | `apps/server/src/app.ts` | Fastify composition adapter over an explicitly supplied Runtime and HTTP options |
@@ -152,6 +156,15 @@ the local `localhost:3001` and `127.0.0.1:3001` Web origins. `HOST` and
 comma-separated `WEB_ORIGIN` are explicit overrides. Because the API has no
 authentication or directory authorization, a non-loopback `HOST` is an
 operator opt-in for trusted networks and emits a startup warning.
+
+The workspace CLI is available at `packages/cli/bin/agent-profile.mjs` after
+dependency installation. It currently exposes only `help`, `version`, and
+`doctor`; it is not a published release artifact or a replacement Web launcher.
+`doctor` resolves its database from `--database`, `--data-dir/trace.db`,
+`TRACE_DB_PATH`, or the existing Runtime default, in that order. It never starts
+imports or HTTP, and returns exit status `2` for usage errors and `1` for Runtime
+failures. Synchronization/query/report commands belong to T102, while `serve`,
+stable per-user data paths, and distributable artifacts belong to T103.
 
 The Home page owns the initial Sessions, Stats, and import-status requests and
 passes data into the Dashboard. Dashboard model totals and recent-tool
@@ -553,6 +566,9 @@ page exposes the same contract and privacy boundaries.
 
 ## Operation and configuration
 
+- `packages/cli/bin/agent-profile.mjs doctor` checks the selected local database
+  and source availability through the application Runtime without starting the
+  HTTP adapter or import work. `--json` emits `agent-profile-cli/v1`.
 - Root `pnpm dev` uses parallel workspace execution to start the API and Web
   processes together. The API development command runs in watch mode; the Web
   process uses Next.js development reloads.
@@ -568,8 +584,9 @@ page exposes the same contract and privacy boundaries.
 - Local source histories and the generated SQLite database remain on the
   machine; any future raw-record export or remote runtime integration must keep
   explicit privacy and redaction controls.
-- Root `pnpm test` runs Core and Server tests. Root `pnpm build` includes Core
-  TypeScript, Server TypeScript, and the Web production build.
+- Root `pnpm test` runs Core, Server, CLI, and Web tests. Root `pnpm build`
+  includes Core, Contracts, CLI, and Server TypeScript plus the Web production
+  build.
 
 ## Documentation boundary
 

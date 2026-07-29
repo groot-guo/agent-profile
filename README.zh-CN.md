@@ -50,6 +50,24 @@ pnpm start
 Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web/.next`，因此运行
 `pnpm build` 不会破坏正在运行的开发服务。
 
+源码 workspace 现在也提供首个 `agent-profile` CLI 入口：
+
+```bash
+./packages/cli/bin/agent-profile.mjs help
+./packages/cli/bin/agent-profile.mjs version --json
+./packages/cli/bin/agent-profile.mjs doctor --data-dir ./local-data
+```
+
+`doctor` 会创建并关闭与 Server 相同的应用 Runtime，检查选中的 SQLite 数据库和五种
+本地来源的可用性；默认输出便于阅读的文本，使用 `--json` 时输出
+`agent-profile-cli/v1`。它不会启动 HTTP，也不会导入来源数据。打开 Runtime 可能会创建
+所选数据库，并执行常规增量 migration 和默认定价/模型窗口数据初始化。
+
+`doctor` 的数据库路径优先级依次为 `--database`、`--data-dir/trace.db`、
+`TRACE_DB_PATH` 和现有的 `apps/server/trace.db` 默认值。成功 exit code 为 `0`，命令用法
+错误为 `2`，Runtime 失败为 `1`。同步、Session 查询、报告、`serve` 和正式发行制品不在
+这个初始 CLI 基础范围内。
+
 ## 第一次导入数据
 
 Server 启动后会创建一个可观察的后台导入任务。没有已存 Session 时，页面会切换为专门的
@@ -142,7 +160,7 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 | `WEB_ORIGIN` | API CORS 允许的浏览器来源，多个值用逗号分隔；默认仅允许本机 `3001` Web 来源 |
 | `NEXT_PUBLIC_API` | Web 请求的 API 地址，默认 `http://localhost:3000/api` |
 | `AUTO_SCAN_DIR` | 未设置：扫描默认 Claude Code 与 Codex 目录；空字符串：关闭 transcript 自动扫描；路径：只扫描该一个 transcript 目录。 |
-| `TRACE_DB_PATH` | 覆盖本地 SQLite 路径；默认 `apps/server/trace.db` |
+| `TRACE_DB_PATH` | 覆盖 Server SQLite 路径；CLI 未指定路径选项时也供 `doctor` 使用；默认 `apps/server/trace.db` |
 | `LLM_API_KEY` | 开启可选语义诊断；确定性分析不需要 Key |
 | `LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL` | 可选语义诊断服务配置 |
 
@@ -203,8 +221,9 @@ pnpm dev
 
 ## 当前产品边界
 
-- 目前还没有可安装的 `agent-profile` CLI 或桌面安装包。仓库已经具备可由后续 CLI
-  直接复用的应用 Runtime，但当前受支持的非 watch 本地启动入口仍是 `pnpm start`。
+- workspace 已包含首个 `agent-profile` CLI package 和源码 binary，支持 `help`、
+  `version` 与 `doctor`，但尚未发布正式发行包或桌面应用。CLI 同步、查询、报告与
+  `serve` 仍是后续能力；`pnpm start` 仍是受支持的非 watch Web 启动入口。
 - Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型。
   自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化

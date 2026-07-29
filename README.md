@@ -62,6 +62,28 @@ Web server together. Both services bind to `127.0.0.1` by default.
 The Web development server writes `apps/web/.next-dev`; production builds write
 `apps/web/.next`. You can safely run `pnpm build` while development is running.
 
+The source workspace also provides the first `agent-profile` CLI entry point:
+
+```bash
+./packages/cli/bin/agent-profile.mjs help
+./packages/cli/bin/agent-profile.mjs version --json
+./packages/cli/bin/agent-profile.mjs doctor --data-dir ./local-data
+```
+
+`doctor` opens and closes the same application Runtime as the Server, verifies
+the selected SQLite database and the availability of all five local sources,
+and writes human-readable output by default or `agent-profile-cli/v1` with
+`--json`. It does not start HTTP or import source data. Opening the Runtime can
+create the selected database and applies ordinary additive migrations and
+default pricing/model-context seeding.
+
+For `doctor`, the database path is selected from `--database`, then
+`--data-dir/trace.db`, then `TRACE_DB_PATH`, then the existing
+`apps/server/trace.db` default. Exit status is `0` for success, `2` for command
+usage errors, and `1` for Runtime failures. Synchronization, Session queries,
+reports, `serve`, and published release artifacts are not part of this initial
+CLI foundation.
+
 ## First import
 
 On startup, the Server begins one observable background import job. With no
@@ -184,7 +206,7 @@ source database's aggregate cost is not treated as portable billing evidence.
 | `WEB_ORIGIN` | Comma-separated browser origins allowed by API CORS; defaults to the local Web origins on port `3001` |
 | `NEXT_PUBLIC_API` | Web API origin; default `http://localhost:3000/api` |
 | `AUTO_SCAN_DIR` | Unset: scan default Claude Code and Codex directories. Empty: disable transcript auto-scan. A path: scan that one transcript directory. |
-| `TRACE_DB_PATH` | Override the local SQLite database path; default `apps/server/trace.db` |
+| `TRACE_DB_PATH` | Override the Server SQLite path and the CLI `doctor` path when no CLI path option is supplied; default `apps/server/trace.db` |
 | `LLM_API_KEY` | Enables optional semantic diagnosis; no key is required for deterministic analysis |
 | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Optional semantic-diagnosis provider settings |
 
@@ -256,9 +278,11 @@ pnpm dev
 
 ## Current product boundaries
 
-- There is no packaged `agent-profile` CLI or desktop application yet. The
-  repository now has a reusable application Runtime for a future CLI, but
-  `pnpm start` remains the supported non-watch local launcher.
+- The workspace includes the initial `agent-profile` CLI package and source
+  binary for `help`, `version`, and `doctor`; it is not yet a published release
+  or desktop application. CLI synchronization, queries, reports, and `serve`
+  remain future work, while `pnpm start` remains the supported non-watch Web
+  launcher.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
   local foundations. Automated cohort statistics, regression detection,
   causal experiment conclusions, and Runtime feedback/SDK integration are not

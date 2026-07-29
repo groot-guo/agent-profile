@@ -1,6 +1,10 @@
 {
   "name": "trace-server",
   "type": "module",
+  "exports": {
+    "./config": "./src/config.ts",
+    "./runtime": "./src/runtime.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
