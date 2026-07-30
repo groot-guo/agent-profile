@@ -35,6 +35,12 @@ export interface SessionNavigationState {
   selectedId: string | null;
 }
 
+interface SessionSelectionHistory {
+  state: unknown;
+  pushState: (data: unknown, unused: string, url?: string | URL | null) => void;
+  replaceState: (data: unknown, unused: string, url?: string | URL | null) => void;
+}
+
 export const DEFAULT_SESSION_NAVIGATION: SessionNavigationState = {
   agent: 'all',
   project: '',
@@ -44,6 +50,15 @@ export const DEFAULT_SESSION_NAVIGATION: SessionNavigationState = {
   quickView: 'all',
   selectedId: null,
 };
+
+export function writeSessionSelectionHistory(history: SessionSelectionHistory, url: string): void {
+  const state = { agentProfileSession: true };
+  if (isSessionSelectionHistoryState(history.state)) {
+    history.replaceState(state, '', url);
+    return;
+  }
+  history.pushState(state, '', url);
+}
 
 type SessionLocation = Pick<SessionSummary, 'agent'> &
   Partial<Pick<SessionSummary, 'cwd' | 'filePath'>> & { project?: string };
@@ -255,6 +270,15 @@ export function serializeSessionNavigation(state: SessionNavigationState): strin
   if (state.quickView !== 'all') params.set('view', state.quickView);
   if (state.selectedId) params.set('session', state.selectedId);
   return params.toString();
+}
+
+function isSessionSelectionHistoryState(state: unknown): boolean {
+  return (
+    typeof state === 'object' &&
+    state !== null &&
+    'agentProfileSession' in state &&
+    state.agentProfileSession === true
+  );
 }
 
 export function visibleSessionSlice(sessions: SessionSummary[], limit: number): SessionSummary[] {

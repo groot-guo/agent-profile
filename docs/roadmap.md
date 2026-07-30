@@ -5267,6 +5267,51 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - `--open` is explicit and best effort; a browser-launch failure is reported
     as a warning while the local service remains available
 
+### T104 collapse Session-detail navigation history
+
+- status: completed
+- started_at: 2026-07-30
+- completed_at: 2026-07-30
+- estimated size/risk: small / low; browser history and URL-backed filters must
+  remain consistent
+- purpose:
+  - make “返回总览” and browser Back leave Session detail in one action even
+    after the user inspected several Sessions
+- scope:
+  - keep one history entry when opening detail from the overview
+  - replace that entry when switching directly between Sessions instead of
+    pushing another entry
+  - preserve the current overview filters, sort, query, and scroll-restoration
+    behavior
+- acceptance:
+  - opening Session A, then B, then C, followed by “返回总览” requires one click
+  - browser Back from the current Session also returns directly to the filtered
+    overview
+  - navigating to a Session from an externally restored URL remains safe
+- verification:
+  - focused navigation unit tests, Web tests/build, lint, and
+    `git diff --check`
+- expected files:
+  - `apps/web/app/session-navigation.ts`,
+    `apps/web/app/session-navigation.test.ts`, `apps/web/app/page.tsx`, and this
+    roadmap
+- implementation:
+  - centralized Session-selection history writes in a small tested helper
+  - opening the first Session from overview still pushes one detail entry;
+    selecting another Session while detail is active replaces that entry
+  - kept the existing serialized overview query/filter state and Back/popstate
+    restoration path unchanged
+- verification:
+  - RED navigation test failed before implementation because the history helper
+    was absent; the focused and complete Web suite then passed 5 files / 20 tests
+  - `pnpm --filter agent-profile-web build` passed and retained the dynamic
+    `/session/[id]` route
+  - focused Biome check and `git diff --check` passed
+- changed files:
+  - `apps/web/app/session-navigation.ts`,
+    `apps/web/app/session-navigation.test.ts`, `apps/web/app/page.tsx`, and this
+    roadmap
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded

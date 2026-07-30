@@ -1,6 +1,6 @@
 import type { SessionSummary } from '@agent-profile/core';
 import { CODEX_SESSION_RECORDS_PROJECT } from '@agent-profile/core/project';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_SESSION_NAVIGATION,
   filterProjectPickerOptions,
@@ -15,6 +15,7 @@ import {
   sessionDisplayTitle,
   sessionProject,
   visibleSessionSlice,
+  writeSessionSelectionHistory,
 } from './session-navigation';
 
 describe('flat Session navigation', () => {
@@ -54,6 +55,33 @@ describe('flat Session navigation', () => {
       quickView: 'all',
       timeRange: 'all',
     });
+  });
+
+  it('pushes the first Session detail and replaces later Session selections', () => {
+    const pushState = vi.fn();
+    const replaceState = vi.fn();
+
+    writeSessionSelectionHistory(
+      { state: null, pushState, replaceState },
+      '/?project=alpha&session=a',
+    );
+    writeSessionSelectionHistory(
+      { state: { agentProfileSession: true }, pushState, replaceState },
+      '/?project=alpha&session=b',
+    );
+
+    expect(pushState).toHaveBeenCalledOnce();
+    expect(pushState).toHaveBeenCalledWith(
+      { agentProfileSession: true },
+      '',
+      '/?project=alpha&session=a',
+    );
+    expect(replaceState).toHaveBeenCalledOnce();
+    expect(replaceState).toHaveBeenCalledWith(
+      { agentProfileSession: true },
+      '',
+      '/?project=alpha&session=b',
+    );
   });
 
   it('uses exact project and rolling recent-range filters', () => {

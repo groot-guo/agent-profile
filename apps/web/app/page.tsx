@@ -25,6 +25,7 @@ import {
   serializeSessionNavigation,
   sessionDisplayTitle,
   sessionProject,
+  writeSessionSelectionHistory,
 } from './session-navigation';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtAgo, R, SP } from './theme';
 import { Chip, Empty, Notice, SoftButton, TokenStrip } from './ui';
@@ -414,9 +415,8 @@ export default function HomePage() {
       window.sessionStorage.setItem(SESSION_SCROLL_KEY, String(sessionListRef.current.scrollTop));
     }
     const query = serializeSessionNavigation({ ...navigationState, selectedId: id });
-    window.history.pushState(
-      { agentProfileSession: true },
-      '',
+    writeSessionSelectionHistory(
+      window.history,
       query ? `${window.location.pathname}?${query}` : window.location.pathname,
     );
     setSelectedId(id);
