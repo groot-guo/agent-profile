@@ -1,3 +1,4 @@
+import type { SessionDiscoveryPage } from '@agent-profile/contracts';
 import type { SessionSummary } from '@agent-profile/core';
 import { classifySessionProject, isSessionRecordsProject } from '@agent-profile/core/project';
 import { projectLabel } from './project-label';
@@ -7,6 +8,13 @@ export type SessionSort = 'time' | 'cost' | 'tokens' | 'cache' | 'duration';
 export type SessionQuickView = 'all' | 'anomaly' | 'unpriced';
 export type SessionTimeRange = 'all' | '1d' | '7d' | '30d' | '90d';
 export type ProjectPickerGroup = 'records' | 'recent' | 'other';
+
+const SORT_GROUP_LABELS: Record<Exclude<SessionSort, 'time'>, string> = {
+  cost: '成本最高',
+  tokens: 'Token 最多',
+  cache: 'Cache 最低',
+  duration: '耗时最长',
+};
 
 export interface ProjectPickerOption {
   project: string;
@@ -37,14 +45,17 @@ export const DEFAULT_SESSION_NAVIGATION: SessionNavigationState = {
   selectedId: null,
 };
 
-type SessionLocation = Pick<SessionSummary, 'agent' | 'cwd' | 'filePath'>;
+type SessionLocation = Pick<SessionSummary, 'agent'> &
+  Partial<Pick<SessionSummary, 'cwd' | 'filePath'>> & { project?: string };
 
 export function sessionProject(session: SessionLocation): string {
+  if (typeof session.project === 'string' && session.project) return session.project;
   return classifySessionProject(session);
 }
 
 export function sessionDisplayTitle(
-  session: Pick<SessionSummary, 'name' | 'agent' | 'startTime' | 'cwd' | 'filePath'>,
+  session: Pick<SessionSummary, 'agent' | 'startTime'> &
+    Partial<Pick<SessionSummary, 'name' | 'cwd' | 'filePath'>> & { project?: string },
 ): string {
   const sourceTitle = session.name?.trim();
   if (sourceTitle) return sourceTitle;
@@ -147,6 +158,41 @@ export function projectPickerOptions(
   ];
 }
 
+export function projectPickerOptionsFromFacets(
+  facets: SessionDiscoveryPage['facets']['projects'],
+  recentLimit = 6,
+): ProjectPickerOption[] {
+  const records: ProjectPickerOption[] = [];
+  const filesystem: ProjectPickerOption[] = [];
+  for (const facet of facets) {
+    const option = {
+      project: facet.project,
+      name: projectLabel(facet.project),
+      parentPath: projectParentPath(facet.project),
+      count: facet.count,
+      lastUsedAt: facet.lastUsedAt,
+      group: 'other' as ProjectPickerGroup,
+    };
+    if (isSessionRecordsProject(facet.project)) {
+      records.push({ ...option, parentPath: '', group: 'records' });
+    } else {
+      filesystem.push(option);
+    }
+  }
+  records.sort((a, b) => b.lastUsedAt - a.lastUsedAt || b.count - a.count);
+  filesystem.sort(
+    (a, b) =>
+      b.lastUsedAt - a.lastUsedAt || b.count - a.count || a.project.localeCompare(b.project),
+  );
+  return [
+    ...records,
+    ...filesystem.map<ProjectPickerOption>((option, index) => ({
+      ...option,
+      group: index < Math.max(0, recentLimit) ? 'recent' : 'other',
+    })),
+  ];
+}
+
 export function filterProjectPickerOptions(
   options: ProjectPickerOption[],
   query: string,
@@ -160,11 +206,11 @@ export function filterProjectPickerOptions(
   );
 }
 
-export function groupSessionsByTime(
-  sessions: SessionSummary[],
+export function groupSessionsByTime<T extends Pick<SessionSummary, 'startTime'>>(
+  sessions: T[],
   now = Date.now(),
-): Array<{ key: string; label: string; sessions: SessionSummary[] }> {
-  const groups = new Map<string, { label: string; sessions: SessionSummary[] }>();
+): Array<{ key: string; label: string; sessions: T[] }> {
+  const groups = new Map<string, { label: string; sessions: T[] }>();
   for (const session of sessions) {
     const boundary = timeBoundary(session.startTime, now);
     const group = groups.get(boundary.key);
@@ -172,6 +218,15 @@ export function groupSessionsByTime(
     else groups.set(boundary.key, { label: boundary.label, sessions: [session] });
   }
   return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
+}
+
+export function groupSessionsForDisplay<T extends Pick<SessionSummary, 'startTime'>>(
+  sessions: T[],
+  sort: SessionSort,
+  now = Date.now(),
+): Array<{ key: string; label: string; sessions: T[] }> {
+  if (sort === 'time') return groupSessionsByTime(sessions, now);
+  return [{ key: `sort-${sort}`, label: SORT_GROUP_LABELS[sort], sessions }];
 }
 
 export function parseSessionNavigation(search: string): SessionNavigationState {

@@ -100,6 +100,7 @@ describe('database migrations', () => {
       { version: 3, name: 'source_revision' },
       { version: 4, name: 'agent_column' },
       { version: 5, name: 'task_outcome_experiments' },
+      { version: 6, name: 'bounded_session_discovery' },
     ]);
 
     const legacySession = database
@@ -134,7 +135,29 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(5);
+    expect(count.count).toBe(6);
+    database.close();
+  });
+
+  it('backfills analytical project keys and creates discovery ordering indexes', () => {
+    const database = createLegacyDatabase();
+    applyMigrations(database);
+
+    const session = database
+      .prepare("SELECT project_key as projectKey FROM sessions WHERE id = 'legacy-session'")
+      .get();
+    expect(session).toEqual({ projectKey: 'agent-profile:session-records:unknown' });
+
+    const indexes = database
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_sessions_discovery_%'",
+      )
+      .all() as Array<{ name: string }>;
+    expect(indexes.map((index) => index.name).sort()).toEqual([
+      'idx_sessions_discovery_agent_time',
+      'idx_sessions_discovery_project_time',
+      'idx_sessions_discovery_time',
+    ]);
     database.close();
   });
 

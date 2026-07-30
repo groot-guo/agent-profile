@@ -76,6 +76,54 @@ The plans confirm the current missing `sessions(start_time)` and
 plans but does not require the temporary B-trees to remain; a measured future
 index improvement may legitimately change them.
 
+## Measured T83 bounded-discovery result
+
+The final T83 run on 2026-07-30 used the same Node v24.18.0 / Darwin arm64
+workload and passed every budget. It added measurements for the Web discovery
+and Home statistics contracts while retaining the legacy endpoints as
+compatibility baselines.
+
+| Workload | Median time | Response size |
+| --- | ---: | ---: |
+| 500 unchanged source revisions | 1.1 ms | no payload loading; 0 `load()` calls |
+| compatibility `GET /api/sessions` | 2.5 ms | 324,418 bytes |
+| `GET /api/session-discovery?limit=120` | 2.2 ms | 51,929 bytes |
+| compatibility `GET /api/stats` | 10.7 ms | 8,488 bytes |
+| `GET /api/home-statistics` | 2.0 ms | 5,711 bytes |
+| `GET /api/session/:id/analysis` | 215.4 ms | 1,882,040 bytes |
+| `GET /api/session/:id/evidence?content=none` | 11.8 ms | 1,627,750 bytes |
+
+The synthetic database was 21,295,104 bytes and whole-process maximum RSS was
+411,680,768 bytes. As in the T82 baseline, the RSS value is a process
+high-water mark rather than endpoint-retained memory. The T83-start comparison
+run was 324,418 bytes / 2.8 ms for `/api/sessions`, 9,719 bytes / 11.9 ms for
+`/api/stats`, and 426,819,584 bytes maximum RSS. The new discovery window is
+about 84% smaller than the compatibility full-array response on this fixture;
+that reduction comes from paging a deliberately smaller privacy-safe analytical
+contract, not from changing metric definitions.
+
+The final query plans are:
+
+```text
+Compatibility Session list:
+  SCAN sessions USING COVERING INDEX idx_sessions_discovery_time
+
+Bounded Session discovery:
+  SCAN s USING INDEX idx_sessions_discovery_time
+  CORRELATED SCALAR SUBQUERY 1
+  SEARCH primary_span USING INDEX idx_spans_session (session_id=?)
+
+Session Spans:
+  SEARCH spans USING INDEX idx_spans_session (session_id=?)
+  USE TEMP B-TREE FOR ORDER BY
+```
+
+Migration v6 adds `sessions(start_time DESC, id DESC)`,
+`sessions(agent, start_time DESC, id DESC)`, and
+`sessions(project_key, start_time DESC, id DESC)`. The representative default
+discovery query uses the first index. T84 still owns the remaining Session-Span
+ordering and complete detail/evidence loading boundary.
+
 ## Desktop regression budgets
 
 | Guard | Budget |
@@ -83,7 +131,9 @@ index improvement may legitimately change them.
 | Unchanged 500-item synchronization | 500 ms |
 | Whole-process maximum RSS | 768 MiB |
 | Session list median / response | 300 ms / 1,500,000 bytes |
+| Session discovery median / response | 300 ms / 200,000 bytes |
 | Stats median / response | 2,000 ms / 750,000 bytes |
+| Home statistics median / response | 500 ms / 100,000 bytes |
 | Analysis median / response | 4,000 ms / 5,000,000 bytes |
 | Evidence median / response | 2,000 ms / 4,000,000 bytes |
 
@@ -107,5 +157,6 @@ response must state whether evidence became windowed or paged.
   temporary allocation, SQLite/native memory, and V8 retained heap.
 - The timing guard is intentionally desktop-oriented and should be compared by
   workload and report schema, not used to rank machines or Agents.
-- T83 owns bounded Session discovery/statistics; T84 owns bounded detail and
-  evidence retrieval; T85 owns source-safe append-only JSONL import.
+- T83's bounded Session discovery/statistics workloads are now part of the
+  benchmark. T84 owns bounded detail and evidence retrieval; T85 owns
+  source-safe append-only JSONL import.

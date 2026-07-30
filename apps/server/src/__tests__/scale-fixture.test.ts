@@ -33,6 +33,7 @@ describe('representative scale fixture', () => {
 
     const queryPlans = collectQueryPlans(database, fixture.largestSessionId);
     expect(queryPlans.sessionList.length).toBeGreaterThan(0);
+    expect(queryPlans.sessionDiscovery.join(' ')).toContain('idx_sessions_discovery_time');
     expect(queryPlans.sessionSpans.join(' ')).toContain('idx_spans_session');
 
     const repository = new SessionRepository(database, (model, at) =>

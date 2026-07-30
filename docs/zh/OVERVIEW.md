@@ -112,14 +112,18 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   浏览，并通过侧栏紧凑、可展开的来源级状态显示当前操作和完成数，同步完成后只刷新一次。
 - 在按时间边界组织的扁平最近列表中浏览 Session；可搜索的分组项目选择器区分会话记录、
   最近使用和其他项目，并展示短名称、父路径与数量。它可和不限时间/最近 1/7/30/90 天、
-  渐进展开的 Agent/结果视图、标题/项目/路径搜索及排序组合。
-  筛选与选中状态保存在 URL，浏览器返回可恢复列表；大结果集按 120 条一批增量渲染。
+  渐进展开的 Agent/结果视图、项目/Agent/Session ID 搜索，以及时间/成本/Token/缓存/耗时
+  排序组合。`session-discovery/v1` 在 Server 端执行筛选与排序，返回匹配数、总数、facets
+  和与查询绑定的 keyset cursor；筛选与选中状态保存在 URL，浏览器返回可恢复列表，首页
+  按 120 条一批增量加载。
 - 项目分类优先使用来源捕获的 `cwd`；没有该证据的 Codex Session 在列表和统计中统一显示
   为“Codex 会话记录”。Codex Desktop 为无项目会话生成的非空
   `~/Documents/Codex/YYYY-MM-DD/<session>` 工作目录也使用该分类；它和
   `~/.codex/sessions/YYYY/MM/DD/` 都是运行/日期分区，不会被当成项目，原始路径仍保留。
-- 来源标题优先；无标题 Session 只在界面中用 Agent、项目和本地开始时间组成可辨识
-  标题，不从 prompt、answer 或 reasoning 内容派生，也不把该回退写入数据库。
+- 有界首页合同不返回来源标题、本地路径、transcript 标识、标签/备注或对话/工具内容；列表
+  只用 Agent、项目和本地开始时间组成展示标题。完整详情和兼容 `/api/sessions` 保持原合同。
+- 首页总览、最近工具及成本/Token Top 列表使用 `home-statistics/v1`；完整 `/api/stats` 的
+  Session 统计改为 SQLite set-based 聚合。
 - Session 详情固定展示身份、Token 指纹和主要 KPI，再拆分为“概览”“上下文与成本”
   “工具与链路”“运行证据”四个视图，避免把所有分析卡片一次性纵向堆叠。
 - 查看 LLM 回合、工具调用与参数、上下文增长、耗时、子 Agent、Git commit 和成本归因。
@@ -144,7 +148,7 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 
 当前 SQLite 由 `apps/server/src/database.ts` 管理十一张内部表：
 
-- `sessions`：来源类型、更新时间与版本指纹、Agent/模型/项目、四类 token 聚合、
+- `sessions`：来源类型、更新时间与版本指纹、Agent/模型、持久化分析项目 key、四类 token 聚合、
   上下文、缓存、成本、耗时、标签和备注。
 - `spans`：`llm_turn` 与 `tool_call` 的 token、上下文、成本、耗时、父子链、
   sidechain 和工具输入输出证据。

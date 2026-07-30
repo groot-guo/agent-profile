@@ -1,4 +1,4 @@
-import type { Pricing } from '@agent-profile/core';
+import { classifySessionProject, type Pricing } from '@agent-profile/core';
 import Database from 'better-sqlite3';
 
 export type DatabaseConnection = InstanceType<typeof Database>;
@@ -173,6 +173,44 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: 'bounded_session_discovery',
+    up(database) {
+      addColumn(database, 'sessions', 'project_key', 'TEXT');
+      const sessions = database
+        .prepare(
+          `SELECT id, agent, cwd, file_path as filePath
+           FROM sessions
+           WHERE project_key IS NULL OR TRIM(project_key) = ''`,
+        )
+        .all() as Array<{
+        id: string;
+        agent: string | null;
+        cwd: string | null;
+        filePath: string;
+      }>;
+      const updateProject = database.prepare('UPDATE sessions SET project_key = ? WHERE id = ?');
+      for (const session of sessions) {
+        updateProject.run(
+          classifySessionProject({
+            agent: session.agent ?? undefined,
+            cwd: session.cwd ?? undefined,
+            filePath: session.filePath,
+          }),
+          session.id,
+        );
+      }
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_sessions_discovery_time
+          ON sessions(start_time DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_sessions_discovery_agent_time
+          ON sessions(agent, start_time DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_sessions_discovery_project_time
+          ON sessions(project_key, start_time DESC, id DESC);
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -191,6 +229,7 @@ function createBaseSchema(database: DatabaseConnection): void {
       start_time              INTEGER NOT NULL,
       end_time                INTEGER,
       cwd                     TEXT,
+      project_key             TEXT,
       git_branch              TEXT,
       claude_version          TEXT,
       input_tokens            INTEGER DEFAULT 0,

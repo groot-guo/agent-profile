@@ -1,4 +1,9 @@
 import { execFileSync } from 'node:child_process';
+import type {
+  SessionDiscoveryQuickView,
+  SessionDiscoverySort,
+  SessionDiscoveryTimeRange,
+} from '@agent-profile/contracts';
 import {
   analyzeCostAttribution,
   analyzeEfficiency,
@@ -16,7 +21,11 @@ import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
 import type { AppRuntime, ContextWindowResolver, PricingResolver } from '../runtime';
-import { listPrimarySessionSummaries } from '../session-discovery-service';
+import {
+  discoverSessionPage,
+  listPrimarySessionSummaries,
+  SessionDiscoveryError,
+} from '../session-discovery-service';
 import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
@@ -129,6 +138,39 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
   const getModelContext = contextWindowResolver;
   app.get('/api/sessions', async () => {
     return listPrimarySessionSummaries(db);
+  });
+
+  app.get<{
+    Querystring: {
+      limit?: string;
+      cursor?: string;
+      agent?: string;
+      project?: string;
+      q?: string;
+      range?: string;
+      sort?: string;
+      view?: string;
+      selected?: string;
+    };
+  }>('/api/session-discovery', async (req, reply) => {
+    try {
+      return discoverSessionPage(db, {
+        limit: parseOptionalInteger(req.query.limit),
+        cursor: req.query.cursor,
+        agent: req.query.agent,
+        project: req.query.project,
+        query: req.query.q,
+        timeRange: req.query.range as SessionDiscoveryTimeRange | undefined,
+        sort: req.query.sort as SessionDiscoverySort | undefined,
+        quickView: req.query.view as SessionDiscoveryQuickView | undefined,
+        selectedId: req.query.selected,
+      });
+    } catch (error) {
+      if (error instanceof SessionDiscoveryError) {
+        return reply.status(400).send({ error: error.message });
+      }
+      throw error;
+    }
   });
 
   // 标注 session
@@ -552,4 +594,10 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
       .filter(Boolean);
     return { sessions };
   });
+}
+
+function parseOptionalInteger(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^\d+$/.test(value)) throw new SessionDiscoveryError('invalid_limit');
+  return Number(value);
 }

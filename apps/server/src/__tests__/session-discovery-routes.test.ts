@@ -56,4 +56,26 @@ describe('Session discovery routes', () => {
       expect.objectContaining({ id: 'primary-session', filePath: 'fixture://primary' }),
     ]);
   });
+
+  it('serves the bounded discovery contract and validates query input', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/session-discovery?limit=1&sort=time',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      schemaVersion: 'session-discovery/v1',
+      counts: { matched: 1, total: 1 },
+      page: { limit: 1, hasMore: false, nextCursor: null },
+      sessions: [{ id: 'primary-session' }],
+    });
+
+    const invalid = await app.inject({
+      method: 'GET',
+      url: '/api/session-discovery?sort=unknown',
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toEqual({ error: 'invalid session sort' });
+  });
 });

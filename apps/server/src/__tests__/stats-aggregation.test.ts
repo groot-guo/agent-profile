@@ -1,7 +1,13 @@
 import { CODEX_SESSION_RECORDS_PROJECT } from '@agent-profile/core';
 import { describe, expect, it } from 'vitest';
 import { createDatabase } from '../database';
-import { buildModelViews, buildProjectStats, loadDashboardSpanAggregates } from '../routes/stats';
+import {
+  buildHomeStatistics,
+  buildModelViews,
+  buildProjectStats,
+  buildStatsReport,
+  loadDashboardSpanAggregates,
+} from '../routes/stats';
 
 describe('dashboard span aggregation', () => {
   it('uses two set-based queries regardless of Session count', () => {
@@ -156,6 +162,189 @@ describe('dashboard span aggregation', () => {
     });
     expect(stats.anomalySessions).toEqual(['codex-anomaly']);
     expect(Object.keys(stats.baselineProjects)).not.toContain('28');
+  });
+
+  it('builds a bounded privacy-safe Home statistics response with set-based totals', () => {
+    const database = createDatabase(':memory:');
+    try {
+      database
+        .prepare(
+          `INSERT INTO sessions (
+            id, name, file_path, agent, project_key, start_time, end_time,
+            input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens,
+            total_cost, cost_unknown_count, cache_hit_rate, peak_context_tokens
+          ) VALUES
+            ('cost-top', 'stored content', 'fixture://cost', 'claude-code', '/workspace/a',
+             3000, 3100, 10, 2, 3, 4, 9, 0, 0.3, 100),
+            ('token-top', NULL, 'fixture://tokens', 'codex', '/workspace/b',
+             2000, 2200, 100, 20, 30, 40, 2, 1, 0.4, 200),
+            ('normal', NULL, 'fixture://normal', 'zed', '/workspace/c',
+             1000, 1300, 5, 1, 1, 2, 1, 0, 0.5, 300)`,
+        )
+        .run();
+      database
+        .prepare(
+          `INSERT INTO spans (id, session_id, type, name, start_time, is_error, is_sidechain)
+           VALUES
+             ('cost-tool', 'cost-top', 'tool_call', 'Read', 3001, 0, 0),
+             ('token-tool', 'token-top', 'tool_call', 'Read', 2001, 1, 0),
+             ('normal-tool', 'normal', 'tool_call', 'Edit', 1001, 0, 0)`,
+        )
+        .run();
+
+      const report = buildHomeStatistics(database);
+
+      expect(report).toMatchObject({
+        schemaVersion: 'home-statistics/v1',
+        overview: {
+          totalSessions: 3,
+          totalTokens: 218,
+          totalCost: 12,
+          sessionsWithCostUnknown: 1,
+        },
+        recentTools: [
+          { name: 'Read', count: 2, errors: 1 },
+          { name: 'Edit', count: 1, errors: 0 },
+        ],
+      });
+      expect(report.topByCost[0]).toMatchObject({ id: 'cost-top' });
+      expect(report.topByTokens[0]).toMatchObject({ id: 'token-top' });
+      expect(JSON.stringify(report)).not.toContain('stored content');
+      expect(JSON.stringify(report)).not.toContain('fixture://');
+    } finally {
+      database.close();
+    }
+  });
+
+  it('counts missing Home average metrics as zero', () => {
+    const database = createDatabase(':memory:');
+    try {
+      database
+        .prepare(
+          `INSERT INTO sessions (
+            id, file_path, agent, start_time, cache_hit_rate, peak_context_tokens
+          ) VALUES
+            ('observed', 'fixture://observed', 'claude-code', 2000, 1, 100),
+            ('missing', 'fixture://missing', 'claude-code', 1000, NULL, NULL)`,
+        )
+        .run();
+
+      const report = buildHomeStatistics(database);
+
+      expect(report.overview.avgCacheHitRate).toBe(0.5);
+      expect(report.overview.avgPeakContext).toBe(50);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('preserves full statistics semantics through set-based Session aggregation', () => {
+    const database = createDatabase(':memory:');
+    try {
+      const insert = database.prepare(
+        `INSERT INTO sessions (
+          id, file_path, agent, project_key, start_time, end_time,
+          input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens,
+          total_cost, cost_unknown_count, cache_hit_rate, peak_context_tokens
+        ) VALUES (?, ?, 'claude-code', '/workspace/a', ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
+      );
+      insert.run(
+        'low',
+        'fixture://low',
+        Date.UTC(2026, 6, 1),
+        Date.UTC(2026, 6, 1) + 10,
+        500,
+        1,
+        0,
+        0.1,
+        100,
+      );
+      insert.run(
+        'mid',
+        'fixture://mid',
+        Date.UTC(2026, 6, 1),
+        Date.UTC(2026, 6, 1) + 20,
+        5_000,
+        2,
+        1,
+        0.2,
+        200,
+      );
+      insert.run(
+        'high',
+        'fixture://high',
+        Date.UTC(2026, 6, 2),
+        Date.UTC(2026, 6, 2) + 30,
+        50_000,
+        10,
+        0,
+        0.3,
+        300,
+      );
+      for (const id of ['low', 'mid', 'high']) {
+        database
+          .prepare(
+            `INSERT INTO spans (id, session_id, type, name, start_time, model, is_sidechain)
+             VALUES (?, ?, 'llm_turn', 'fixture', 1, 'fixture-model', 0)`,
+          )
+          .run(`${id}-span`, id);
+      }
+
+      const report = buildStatsReport(database);
+
+      expect(report.overview).toMatchObject({
+        totalSessions: 3,
+        totalTokens: 55_500,
+        totalCost: 13,
+        sessionsWithCostUnknown: 1,
+      });
+      expect(report.byAgent).toEqual([
+        expect.objectContaining({ agent: 'claude-code', sessions: 3, totalTokens: 55_500 }),
+      ]);
+      expect(report.byProject).toEqual([
+        { cwd: '/workspace/a', sessions: 3, totalTokens: 55_500, totalCost: 13 },
+      ]);
+      expect(report.baseline?.projects['/workspace/a']).toMatchObject({
+        sessions: 3,
+        medCost: 2,
+        p95Cost: 10,
+      });
+      expect(report.baseline?.anomalySessions).toEqual(['high']);
+      expect(report.distribution.tokenBins.map((bin) => bin.count)).toEqual([1, 1, 1, 0, 0, 0]);
+      expect(report.trends).toEqual([
+        expect.objectContaining({ day: '2026-07-01', sessions: 2, tokens: 5_500 }),
+        expect.objectContaining({ day: '2026-07-02', sessions: 1, tokens: 50_000 }),
+      ]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('keeps anomaly Sessions in reverse chronological order', () => {
+    const database = createDatabase(':memory:');
+    try {
+      const insert = database.prepare(
+        `INSERT INTO sessions (
+          id, file_path, agent, project_key, start_time, total_cost
+        ) VALUES (?, ?, 'claude-code', '/workspace/a', ?, ?)`,
+      );
+      for (const [id, startTime, totalCost] of [
+        ['baseline-a', 1_000, 1],
+        ['baseline-b', 2_000, 1],
+        ['baseline-c', 3_000, 1],
+        ['baseline-d', 4_000, 1],
+        ['a-older-anomaly', 5_000, 10],
+        ['z-newer-anomaly', 6_000, 11],
+      ] as const) {
+        insert.run(id, `fixture://${id}`, startTime, totalCost);
+      }
+
+      const report = buildStatsReport(database);
+
+      expect(report.baseline?.anomalySessions).toEqual(['z-newer-anomaly', 'a-older-anomaly']);
+    } finally {
+      database.close();
+    }
   });
 });
 

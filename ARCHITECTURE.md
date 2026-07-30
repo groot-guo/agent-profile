@@ -181,20 +181,26 @@ Profile builders. They return the existing report data with its coverage and
 limitations; they do not add metric formulas, Outcome conclusions, or automatic
 configuration-quality decisions.
 
-The Home page owns the initial Sessions, Stats, and import-status requests and
-passes data into the Dashboard. Dashboard model totals and recent-tool
-frequency use two set-based Span queries; the browser does not fetch tools once
-per recent Session. Existing data remains interactive during a job. The browser
-polls only while `active=true`, stops in terminal states or on unmount, and
-refreshes Sessions/Stats once after completion.
+The Home page owns the initial `session-discovery/v1`, `home-statistics/v1`, and
+import-status requests and passes data into the Dashboard. The statistics
+response contains overview totals, recent-tool frequency, and at most ten
+privacy-safe cost/token highlights per list; the browser does not fetch the full
+`/api/stats` report or tools once per recent Session. Existing data remains
+interactive during a job. The browser polls only while `active=true`, stops in
+terminal states or on unmount, and refreshes discovery/statistics once after
+completion.
 
 Session discovery uses one flat recent list grouped by today/yesterday/recent
 time boundaries. Project is row metadata and an exact counted selector rather
-than a required accordion hierarchy; the free-text field still supports partial
-title/project/path discovery. An all/1/7/30/90-day rolling range composes with
-project, Agent, text, quick-view, and sort filters. These filters and the
-selected Session use bounded URL parameters; opening a Session pushes one
-history entry and browser back restores the filters and saved list scroll.
+than a required accordion hierarchy. The versioned `/api/session-discovery`
+contract applies exact project/Agent, all/1/7/30/90-day range, project/Agent/ID
+text, anomaly/unpriced quick-view, and time/cost/token/cache/duration sort
+semantics in SQLite. It returns matched/total counts, complete primary-Session
+Agent/project facets, an optional selected-Session preview, and an opaque keyset
+cursor bound to the normalized query. The default page is 120 rows and the
+maximum is 200. These filters and the selected Session use bounded URL
+parameters; opening a Session pushes one history entry and browser back restores
+the filters and saved list scroll.
 One shared Core classifier supplies the project key used by both Web navigation
 and Server statistics. A non-empty captured `cwd` is authoritative; the
 constrained Claude `~/.claude/projects/<encoded>/` layout remains an explicit
@@ -206,23 +212,30 @@ workspace `~/Documents/Codex/YYYY-MM-DD/<session>` is classified as Session
 records even though it supplies a non-empty `cwd`; that runtime-isolation folder
 is not project evidence. This classification does not alter stored `cwd` or
 `filePath` and needs no migration or re-import.
-Source-provided Session names remain authoritative. When one is absent, the Web
-layer derives a display-only Agent/project/local-start-time label from
-non-content metadata; it does not store a replacement title or inspect prompt,
-answer, or reasoning content. Only 120 matching rows render initially, with
-explicit incremental batches for larger result sets.
+The discovery contract omits source Session names, `cwd`, file/transcript paths,
+tags/notes, and prompt/reasoning/answer/tool content. The Home list derives a
+display-only Agent/project/local-start-time label from non-content metadata; it
+does not store a replacement title or inspect content. Detailed Session routes
+and the compatibility `/api/sessions` array retain their existing contracts.
+Only 120 matching rows load initially, with explicit cursor-backed incremental
+batches for larger result sets.
 
 ### Current scale boundaries
 
-The 120-row Web render limit bounds DOM creation only. The current Home request
-still returns all Session summaries, and the browser performs its filtering,
-sorting, project counting, and time grouping over that complete response.
-`/api/stats` likewise reads all Session summaries and calculates several
-distributions in-process. Session detail analysis and evidence reports load the
-complete stored Span set for the selected Session; the analysis endpoint also
-loads all stored Spans for the selected Session's project when calculating the
-current project-relative score. These are correct current behaviors, not
-large-history performance guarantees.
+Home no longer transfers the full Session-summary array. Its discovery page is
+bounded by a query-bound keyset cursor, and filtering, sorting, counts, and
+facets execute in SQLite. `home-statistics/v1` is a separate bounded Dashboard
+contract, while `/api/stats` retains its public result shape and computes
+overview, Agent/project baselines, anomaly IDs, distributions, and trends with
+set-based queries instead of loading all Session rows into JavaScript. The
+legacy `/api/sessions` full-array route remains available for compatibility and
+is still measured as a regression baseline.
+
+Session detail analysis and evidence reports still load the complete stored
+Span set for the selected Session; the analysis endpoint also loads all stored
+Spans for the selected Session's project when calculating the current
+project-relative score. These remain T84 scale boundaries rather than
+large-history guarantees.
 
 The source import coordinator discovers all source items but skips an unchanged
 item before loading/parsing it. When a source revision changes, the complete
@@ -230,12 +243,13 @@ normalized Session is parsed and atomically replaces its stored Spans. This
 preserves revision and annotation guarantees, but transcript append-only parsing
 is not implemented.
 
-The reproducible T82 benchmark in `docs/performance.md` now fixes a content-free
+The reproducible T82/T83 benchmark in `docs/performance.md` fixes a content-free
 desktop workload at 500 Sessions, 75,000 Spans, one 3,000-Span detail Session,
 and a 24,600-Span project cohort. It measures the current full-list, stats,
-analysis, no-content evidence, unchanged-revision, query-plan, response-size,
-and process high-water paths through the normal implementation. Its budgets are
-generous regression guards rather than product SLOs. T83–T85 own bounded
+bounded discovery/Home statistics, analysis, no-content evidence,
+unchanged-revision, query-plan, response-size, and process high-water paths
+through the normal implementation. Its budgets are generous regression guards
+rather than product SLOs. T84–T85 own bounded
 read/render contracts and source-safe incremental-import work; they must not
 change metric, privacy, coverage, or atomic-replacement semantics merely to
 improve throughput.
@@ -312,7 +326,8 @@ stale provider-labelled rows once; no generated-data reset is required.
 `apps/server/src/database.ts` owns eleven current internal tables:
 
 - `sessions` — source identity and revision metadata (`source_kind`,
-  `source_updated_at`, `source_fingerprint`); agent/model/project fields; four
+  `source_updated_at`, `source_fingerprint`); agent/model fields plus the
+  migration-backed analytical `project_key`; four
   token totals; context, cache, cost, duration, annotation tags, and notes.
 - `spans` — normalized `llm_turn` and `tool_call` evidence, token/context/cost
   fields, timing, parent/sidechain links, tool input/output metadata, and
@@ -336,6 +351,12 @@ stale provider-labelled rows once; no generated-data reset is required.
 - `cohorts` — local comparison definitions and lifecycle state.
 - `experiments` — control/candidate configurations, cohort, primary metric,
   guardrails, evidence state, and bounded decision state.
+
+Migration v6 (`bounded_session_discovery`) backfills `sessions.project_key`
+through the shared project classifier and adds time, Agent+time, and
+project+time discovery indexes. New and replaced Sessions write the same key in
+the existing atomic repository path; the migration does not rewrite source
+`cwd` or file-path evidence.
 
 Prompt-review requests and results are not part of this persistence model. The
 server processes prompt text within one request and neither inserts it into
@@ -544,7 +565,8 @@ page exposes the same contract and privacy boundaries.
 | `POST` | `/api/scan` | Scan/import a selected transcript directory |
 | `GET` | `/api/data-management/summary` | Return reset impact counts and the required confirmation phrase |
 | `POST` | `/api/data-management/reset` | Confirm and transactionally delete generated Sessions/Spans while retaining pricing, model configuration, migrations, and Task/Outcome/experiment records |
-| `GET` | `/api/sessions` | Session list |
+| `GET` | `/api/sessions` | Compatibility full-array Session list |
+| `GET` | `/api/session-discovery` | Versioned bounded Session page with server-side filters, sort, counts, facets, selected preview, and keyset cursor |
 | `PATCH` | `/api/session/:id` | Update session tags/notes |
 | `GET` | `/api/session/:id` | Session with spans |
 | `GET` | `/api/session/:id/analysis` | Aggregated detail analysis |
@@ -562,7 +584,8 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/session/:id/report` | Session report |
 | `GET` | `/api/session/:id/evidence` | Versioned normalized event timeline; optional bounded redacted previews |
 | `GET` | `/api/sessions/compare` | Selected-session comparison |
-| `GET` | `/api/stats` | Aggregate statistics and distributions |
+| `GET` | `/api/home-statistics` | Bounded `home-statistics/v1` overview, recent tools, and cost/token highlights |
+| `GET` | `/api/stats` | Compatibility aggregate statistics and distributions, computed with set-based Session aggregation |
 | `GET` | `/api/profiles/agents` | Versioned process profiles for all observed Agents |
 | `GET` | `/api/profiles/agents/:agent` | One observed Agent profile with peer-relative context |
 | `POST` | `/api/prompt-review` | Ephemeral deterministic prompt review and guarded iteration hints |

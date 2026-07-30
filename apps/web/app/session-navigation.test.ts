@@ -6,9 +6,11 @@ import {
   filterProjectPickerOptions,
   filterSessions,
   groupSessionsByTime,
+  groupSessionsForDisplay,
   parseSessionNavigation,
   projectOptions,
   projectPickerOptions,
+  projectPickerOptionsFromFacets,
   serializeSessionNavigation,
   sessionDisplayTitle,
   sessionProject,
@@ -188,6 +190,17 @@ describe('flat Session navigation', () => {
       'Codex 会话记录',
     ]);
     expect(filterProjectPickerOptions(options, 'agent-profile')).toEqual([]);
+
+    expect(
+      projectPickerOptionsFromFacets(
+        options.map((option) => ({
+          project: option.project,
+          count: option.count,
+          lastUsedAt: option.lastUsedAt,
+        })),
+        2,
+      ),
+    ).toEqual(options);
   });
 
   it('groups recent Sessions by time and bounds a 400-row render', () => {
@@ -209,6 +222,24 @@ describe('flat Session navigation', () => {
       '最近 30 天',
     ]);
     expect(projectOptions(sessions)[0]).toEqual({ project: '/repo/project-0', count: 100 });
+  });
+
+  it('preserves server order when the active sort is not chronological', () => {
+    const sessions = [
+      session('today-high', '/repo/alpha', 'codex', 300, 0),
+      session('yesterday-mid', '/repo/alpha', 'codex', 100, 0),
+      session('today-low', '/repo/alpha', 'codex', 200, 0),
+    ];
+
+    const groups = groupSessionsForDisplay(sessions, 'cost');
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe('成本最高');
+    expect(groups[0].sessions.map((item) => item.id)).toEqual([
+      'today-high',
+      'yesterday-mid',
+      'today-low',
+    ]);
   });
 });
 

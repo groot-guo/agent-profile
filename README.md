@@ -153,19 +153,28 @@ its project label. A searchable grouped project picker separates Session-record
 categories from recently used and other filesystem projects, displaying short
 name, parent path, and count without losing the canonical project key. It composes
 with all/1/7/30/90-day range selection, progressively disclosed Agent and quick
-views, free-text title/project/path search, and sorting; stable state remains in
-the URL when a Session is opened or the browser goes back. Source-provided Session
-titles remain authoritative; an untitled Session gets a display-only
-Agent/project/start-time label instead of an opaque ID. That fallback is not
-persisted and does not inspect or preview prompt, answer, or reasoning content.
+views, project/Agent/Session-ID search, and time/cost/token/cache/duration sorting.
+The versioned `session-discovery/v1` API applies those filters and sorts in
+SQLite, returns matched/total counts plus Agent/project facets, and uses a
+query-bound keyset cursor. Home loads 120 matching Sessions at a time; the API
+accepts at most 200. Filter and selected-Session state remains in the URL when a
+Session is opened or the browser goes back.
+
+The bounded Home response deliberately omits source Session names, local paths,
+transcript identifiers, annotations, and prompt/reasoning/answer/tool content.
+Rows therefore use a display-only Agent/project/start-time title instead of
+inspecting content or exposing an opaque source title. Detailed Session surfaces
+and the compatibility `/api/sessions` route retain their existing contracts.
 Project labels prefer captured `cwd`. Codex Sessions without that evidence are
 grouped as **Codex 会话记录**. Codex Desktop Sessions whose non-empty `cwd` is a
 generated `~/Documents/Codex/YYYY-MM-DD/<session>` workspace use the same group;
 that workspace and the dated `~/.codex/sessions/YYYY/MM/DD/` source storage are
 runtime/time partitions, not project names. The raw paths remain available as
 evidence, and this display/statistics rule does not require re-importing Sessions.
-Large result sets render in bounded batches instead of creating every row at
-once.
+Home overview totals, recent tools, and top-cost/top-token highlights come from
+the bounded `home-statistics/v1` response rather than transferring the full
+statistics report. The full `/api/stats` report remains available and now uses
+set-based SQLite aggregation for Session-level totals and distributions.
 
 The **任务** workspace adds local delivery evidence above Session analysis. A
 Task can link multiple Sessions, attach version/hash-only Configuration

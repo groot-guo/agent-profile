@@ -1,6 +1,6 @@
-import type { SessionSummary } from '@agent-profile/core';
+import type { HomeStatisticsResponse, SessionDiscoveryPage } from '@agent-profile/contracts';
 import type { ImportJobStatus } from './config';
-import type { StatsOverview, ToolFreq } from './dashboard';
+import type { SessionNavigationState } from './session-navigation';
 
 interface JsonResponse {
   ok: boolean;
@@ -10,27 +10,42 @@ interface JsonResponse {
 
 type FetchJson = (url: string) => Promise<JsonResponse>;
 
-export interface HomeStatsResponse {
-  overview: StatsOverview;
-  recentTools?: ToolFreq[];
-  baseline?: { anomalySessions?: string[] };
+export const HOME_SESSION_PAGE_LIMIT = 120;
+
+export async function loadSessionDiscovery(
+  api: string,
+  state: SessionNavigationState,
+  cursor?: string,
+  request: FetchJson = fetch,
+): Promise<SessionDiscoveryPage> {
+  const params = new URLSearchParams({ limit: String(HOME_SESSION_PAGE_LIMIT) });
+  if (state.agent !== 'all') params.set('agent', state.agent);
+  if (state.project) params.set('project', state.project);
+  if (state.query) params.set('q', state.query);
+  if (state.timeRange !== 'all') params.set('range', state.timeRange);
+  if (state.sort !== 'time') params.set('sort', state.sort);
+  if (state.quickView !== 'all') params.set('view', state.quickView);
+  if (state.selectedId) params.set('selected', state.selectedId);
+  if (cursor) params.set('cursor', cursor);
+
+  const response = await request(`${api}/session-discovery?${params}`);
+  if (!response.ok) throw new Error(`Session discovery HTTP ${response.status}`);
+  return (await response.json()) as SessionDiscoveryPage;
 }
 
-export async function loadDashboardData(api: string, request: FetchJson = fetch) {
-  const [sessionsResponse, statsResponse] = await Promise.all([
-    request(`${api}/sessions`),
-    request(`${api}/stats`),
-  ]);
-  if (!sessionsResponse.ok) throw new Error(`Sessions HTTP ${sessionsResponse.status}`);
-  if (!statsResponse.ok) throw new Error(`Stats HTTP ${statsResponse.status}`);
-  const [sessions, stats] = (await Promise.all([
-    sessionsResponse.json(),
-    statsResponse.json(),
-  ])) as [SessionSummary[], HomeStatsResponse];
-  return { sessions, stats };
+export async function loadHomeStatistics(
+  api: string,
+  request: FetchJson = fetch,
+): Promise<HomeStatisticsResponse> {
+  const response = await request(`${api}/home-statistics`);
+  if (!response.ok) throw new Error(`Home statistics HTTP ${response.status}`);
+  return (await response.json()) as HomeStatisticsResponse;
 }
 
-export async function loadImportStatus(api: string, request: FetchJson = fetch) {
+export async function loadImportStatus(
+  api: string,
+  request: FetchJson = fetch,
+): Promise<ImportJobStatus> {
   const response = await request(`${api}/imports/status`);
   if (!response.ok) throw new Error(`Import status HTTP ${response.status}`);
   return (await response.json()) as ImportJobStatus;

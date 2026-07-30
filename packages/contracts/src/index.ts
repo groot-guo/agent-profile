@@ -31,3 +31,16 @@ export type {
   ResetResponse,
   ScanSkipReason,
 } from './common';
+export {
+  HOME_STATISTICS_SCHEMA_VERSION,
+  type HomeSessionHighlight,
+  type HomeStatisticsResponse,
+} from './home-statistics';
+export {
+  SESSION_DISCOVERY_SCHEMA_VERSION,
+  type SessionDiscoveryItem,
+  type SessionDiscoveryPage,
+  type SessionDiscoveryQuickView,
+  type SessionDiscoverySort,
+  type SessionDiscoveryTimeRange,
+} from './session-discovery';

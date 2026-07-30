@@ -120,15 +120,21 @@ Server 启动后会创建一个可观察的后台导入任务。没有已存 Ses
 会话默认按时间边界展示为一个扁平的最近列表，不需要先展开项目文件夹；每行仍显示项目
 标签。可搜索、分组的项目选择器将会话记录分类、最近使用项目和其他文件系统项目分开，
 分别显示短项目名、父路径与数量，同时继续用规范项目 key 保存筛选。它可与不限时间/最近
-1/7/30/90 天、折叠的 Agent/结果视图、标题/项目/路径文本搜索和排序组合使用，打开 Session
-或浏览器返回时筛选状态由 URL 保留。来源提供的标题优先；没有标题时，界面只用 Agent、
-项目和开始时间组成展示
-标题，不再主显不透明 ID，也不会为此读取、预览或持久化 prompt、answer 或 reasoning
-内容。项目标签优先使用来源捕获的 `cwd`；没有这项项目证据的 Codex Session 统一显示为
+1/7/30/90 天、折叠的 Agent/结果视图、项目/Agent/Session ID 搜索，以及按时间、成本、
+Token、缓存、耗时排序组合使用。版本化 `session-discovery/v1` 在 SQLite 中执行筛选和排序，
+返回匹配数/总数、Agent/项目 facets，并用与查询绑定的 keyset cursor 翻页。首页每次加载
+120 条匹配 Session，接口上限为 200 条；打开 Session 或浏览器返回时筛选与选中状态由 URL
+保留。
+
+有界首页响应不会返回来源 Session 标题、本地路径、transcript 标识、标签/备注，以及
+prompt、reasoning、answer 或工具内容。因此列表只用 Agent、项目和开始时间生成展示标题，
+不读取内容，也不暴露不透明来源标题；Session 详情和兼容 `/api/sessions` 继续保持原合同。
+项目标签优先使用来源捕获的 `cwd`；没有这项项目证据的 Codex Session 统一显示为
 “Codex 会话记录”。Codex Desktop 为无项目会话生成的非空
 `~/Documents/Codex/YYYY-MM-DD/<session>` 工作目录也归入同一分类；该工作目录和
 `~/.codex/sessions/YYYY/MM/DD/` 来源目录都只是运行/日期分区，不会被推断成项目。该
-展示与统计规则保留原始路径，不需要重新导入。大结果集按批次渲染，不会一次创建全部行。
+展示与统计规则保留原始路径，不需要重新导入。首页总览、最近工具、成本/Token Top 列表
+来自有界 `home-statistics/v1`；完整 `/api/stats` 仍保留，并改为 SQLite set-based 聚合。
 
 **任务**页面在 Session 过程分析之上补充本地交付证据。一个 Task 可关联多个 Session、
 绑定只保存版本/Hash 的 Configuration Snapshot，并在页面记录 build/test/lint/Git Outcome。

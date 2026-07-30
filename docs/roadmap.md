@@ -3601,7 +3601,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T83 bounded Session discovery and statistics data contract
 
-- status: planned
+- status: completed
+- started_at: 2026-07-30
+- completed_at: 2026-07-30
 - estimated size/risk: large / high; changes public API/query behavior and Home
   navigation state, so compatibility and exact filter semantics are central
 - purpose: remove the all-summary transfer and browser-wide filtering/sorting
@@ -3620,6 +3622,110 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   checks, timing/response-size comparison against T82, focused lint, and build
 - documentation: update API, Home navigation, performance boundaries, and Task
   evidence in architecture, README/overview where user-visible, and roadmap
+- delivery plan:
+  1. define one versioned, bounded discovery contract covering stable cursor
+     pagination, project/Agent/time/query/quick-view filters, deterministic sort
+     tie-breakers, result totals, and project/Agent facets without exposing
+     stored prompt, reasoning, answer, tool, path, or transcript content
+  2. implement the contract as a reusable Server service and new HTTP endpoint;
+     retain the existing `/api/sessions` array route as a compatibility surface
+     until the Web and external callers can migrate deliberately
+  3. add additive ordering/filter indexes only after query-plan measurement, and
+     move statistics overview/Agent/distribution/trend work to set-based SQLite
+     aggregation where the returned values remain exactly compatible
+  4. migrate Home discovery, filtering, sorting, project/Agent facets, loading,
+     pagination, URL restoration, selected-Session navigation, and dashboard top
+     lists to bounded responses; coordinate but do not absorb T70 detail-page
+     transition work or T84 detail/evidence pagination
+  5. extend the privacy-safe representative benchmark with the bounded endpoint,
+     record before/after response and query-plan evidence, run browser checks,
+     and update current-state documentation with exact limits and compatibility
+- baseline recorded at start:
+  - `pnpm benchmark:scale:ci` passed on 2026-07-30 with 500 Sessions / 75,000
+    Spans; legacy `/api/sessions` returned 324,418 bytes at 2.8 ms median and
+    `/api/stats` returned 9,719 bytes at 11.9 ms median
+  - the pre-change Session-list plan remained `SCAN sessions` plus a temporary
+    ordering B-tree; whole-process maximum RSS was 426,819,584 bytes
+- implemented behavior:
+  - added privacy-safe `session-discovery/v1` and `home-statistics/v1` contracts,
+    exposed through `GET /api/session-discovery` and `GET /api/home-statistics`;
+    the existing `/api/sessions` and `/api/stats` responses remain compatibility
+    surfaces
+  - discovery defaults to 120 and permits at most 200 rows, uses a query-bound
+    keyset cursor, stable sort tie-breakers, matched/total counts, Agent/project
+    facets, and an optional selected-Session preview; Agent/project/time/query,
+    anomaly/unpriced, and time/cost/token/cache/duration semantics execute in
+    SQLite
+  - the bounded contract omits source names, local/transcript paths,
+    tags/notes, and prompt/reasoning/answer/tool content; Home search therefore
+    covers analytical project, Agent, and Session ID rather than stored title or
+    path text, and Home titles are generated from Agent/project/time metadata
+  - migration v6 `bounded_session_discovery` adds and backfills
+    `sessions.project_key`, then creates time, Agent+time, and project+time
+    indexes; ordinary atomic Session replacement and the scale fixture write the
+    same analytical key without changing source `cwd`/path evidence
+  - Home now loads discovery in cursor-backed 120-row pages, restores all
+    filters/sort/selection from the URL, preserves selected Session/back
+    navigation, and reads overview/recent-tools/top-ten highlights from the
+    bounded Home statistics response; `/api/stats` now performs Session-level
+    aggregation with set-based SQLite queries and preserves anomaly order by
+    `start_time DESC, id DESC`
+- verification evidence:
+  - focused Server verification passed 18 files / 71 tests, including route,
+    cursor/query binding, migration/index/backfill, privacy, set-based stats, and
+    anomaly-order coverage; Web verification passed 4 files / 17 tests
+  - `pnpm lint` passed with no Biome errors (18 existing warnings and 2 infos),
+    `pnpm test` passed Core 28/202, Server 18/71, Web 4/17, and CLI 1/19;
+    `pnpm build` passed contracts/core/server/CLI TypeScript and the nine-route
+    Next.js production build; `pnpm check:boundaries` and `git diff --check`
+    passed
+  - browser verification against 245 primary Sessions loaded 120 initially and
+    240 after one cursor page, verified the final five-row continuation,
+    `agent-profile` search (30/245), cost ordering, direct restoration of
+    `agent=codex&range=30d&sort=tokens&view=unpriced` (50/245), selected Session
+    URL state, browser-back filter restoration, and a clean console
+  - final `pnpm benchmark:scale:ci` passed with zero budget failures:
+    compatibility sessions 324,418 bytes / 2.5 ms, discovery 51,929 bytes /
+    2.2 ms, compatibility stats 8,488 bytes / 10.7 ms, Home statistics 5,711
+    bytes / 2.0 ms, and maximum process RSS 411,680,768 bytes; the default list
+    and discovery plans use `idx_sessions_discovery_time`
+  - the external high-effort `codex review --uncommitted` path was not used for
+    the final pass because the configured custom LiteLLM endpoint would require
+    an unapproved third-party upload of uncommitted code; the permitted local
+    manual high review covered input/SQL safety, cursor/filter/sort correctness,
+    privacy fields, migration/atomic replacement, stats compatibility, bounded
+    behavior, tests, and documentation
+  - manual review found and fixed two correctness issues before the final gate:
+    non-time sorts were being regrouped by date and could lose global server
+    order, and Home averages ignored nullable cache/context metrics instead of
+    preserving the existing zero-default semantics; regression tests now cover
+    both, and the post-fix manual re-review has no remaining CRITICAL/HIGH findings
+- actual changed files:
+  - contracts: `packages/contracts/src/index.ts`,
+    `packages/contracts/src/session-discovery.ts`, and
+    `packages/contracts/src/home-statistics.ts`
+  - Server/runtime: `apps/server/src/database.ts`,
+    `apps/server/src/ingestion/session-repository.ts`,
+    `apps/server/src/session-discovery-service.ts`,
+    `apps/server/src/routes/sessions.ts`, `apps/server/src/routes/stats.ts`,
+    `apps/server/src/performance/scale-fixture.ts`, and
+    `apps/server/src/performance/scale-benchmark.ts`
+  - tests: `apps/server/src/__tests__/database.test.ts`,
+    `scale-fixture.test.ts`, `session-discovery-routes.test.ts`,
+    `session-discovery-service.test.ts`, `stats-aggregation.test.ts`,
+    `apps/web/app/home-data.test.ts`, and
+    `apps/web/app/session-navigation.test.ts`
+  - Web: `apps/web/app/home-data.ts`, `apps/web/app/page.tsx`,
+    `apps/web/app/dashboard.tsx`, and `apps/web/app/session-navigation.ts`
+  - documentation: `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/performance.md`, `docs/zh/OVERVIEW.md`, and `docs/roadmap.md`
+- known limits intentionally left open:
+  - `/api/sessions` remains a full-array compatibility route; selected Session
+    detail/analysis/evidence and project-relative analysis still load complete
+    stored Span sets and remain T84 scope
+  - Agent/project facets are exact aggregates over primary Sessions and are not
+    independently paginated; they contain no source content, but extremely high
+    project cardinality can still grow that portion of the discovery response
 
 ### T84 bounded Session detail and evidence retrieval
 

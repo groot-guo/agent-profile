@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { loadDashboardData, loadImportStatus } from './home-data';
+import { loadHomeStatistics, loadImportStatus, loadSessionDiscovery } from './home-data';
 
 describe('Home data ownership', () => {
-  it('loads Sessions, Stats, and import status once without per-Session tool requests', async () => {
+  it('loads one bounded Session window, bounded Home statistics, and import status', async () => {
     const urls: string[] = [];
     const request = async (url: string) => {
       urls.push(url);
@@ -10,23 +10,43 @@ describe('Home data ownership', () => {
         ok: true,
         status: 200,
         json: async () => {
-          if (url.endsWith('/sessions')) return Array.from({ length: 400 }, (_, id) => ({ id }));
-          if (url.endsWith('/stats')) return { overview: {}, recentTools: [] };
+          if (url.includes('/session-discovery')) {
+            return {
+              page: { limit: 120 },
+              sessions: Array.from({ length: 120 }, (_, id) => ({ id })),
+            };
+          }
+          if (url.endsWith('/home-statistics')) return { overview: {}, recentTools: [] };
           return { jobId: null, active: false, operation: null, sources: [] };
         },
       };
     };
 
     await Promise.all([
-      loadDashboardData('http://local/api', request),
+      loadSessionDiscovery(
+        'http://local/api',
+        {
+          agent: 'codex',
+          project: '/repo/alpha',
+          query: 'cache',
+          timeRange: '7d',
+          sort: 'tokens',
+          quickView: 'unpriced',
+          selectedId: 'selected',
+        },
+        undefined,
+        request,
+      ),
+      loadHomeStatistics('http://local/api', request),
       loadImportStatus('http://local/api', request),
     ]);
 
     expect(urls).toEqual([
-      'http://local/api/sessions',
-      'http://local/api/stats',
+      'http://local/api/session-discovery?limit=120&agent=codex&project=%2Frepo%2Falpha&q=cache&range=7d&sort=tokens&view=unpriced&selected=selected',
+      'http://local/api/home-statistics',
       'http://local/api/imports/status',
     ]);
+    expect(urls[0]).not.toContain('/sessions?');
     expect(urls.some((url) => url.includes('/tools'))).toBe(false);
   });
 });

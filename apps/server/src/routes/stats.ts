@@ -1,9 +1,13 @@
+import {
+  HOME_STATISTICS_SCHEMA_VERSION,
+  type HomeSessionHighlight,
+  type HomeStatisticsResponse,
+} from '@agent-profile/contracts';
 import { classifySessionProject, identifyModel, type ModelIdentityKind } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
 import type { AppRuntime } from '../runtime';
-import { SESSION_COLS } from './shared';
 
 type StatsRuntime = Pick<AppRuntime, 'database'>;
 
@@ -77,6 +81,25 @@ export interface StatsReport {
 }
 
 type StatsQueryConnection = Pick<DatabaseConnection, 'prepare'>;
+
+const HOME_PROJECT_EXPRESSION =
+  "COALESCE(NULLIF(TRIM(s.project_key), ''), 'agent-profile:session-records:unknown')";
+
+const SESSION_TOKEN_SQL =
+  '(COALESCE(s.input_tokens, 0) + COALESCE(s.cache_creation_tokens, 0) + COALESCE(s.cache_read_tokens, 0) + COALESCE(s.output_tokens, 0))';
+
+const HOME_SESSION_HIGHLIGHT_COLUMNS = `
+  s.id,
+  s.agent,
+  ${HOME_PROJECT_EXPRESSION} AS project,
+  s.start_time AS startTime,
+  s.end_time AS endTime,
+  COALESCE(s.input_tokens, 0) AS inputTokens,
+  COALESCE(s.cache_creation_tokens, 0) AS cacheCreationTokens,
+  COALESCE(s.cache_read_tokens, 0) AS cacheReadTokens,
+  COALESCE(s.output_tokens, 0) AS outputTokens,
+  COALESCE(s.total_cost, 0) AS totalCost,
+  COALESCE(s.cost_unknown_count, 0) AS costUnknownCount`;
 
 export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
   const modelRows = database
@@ -175,28 +198,6 @@ export function buildModelViews(
   return { byModel, modelDistribution };
 }
 
-function buildLogBins(
-  values: number[],
-  config: { label: string; thresholds: [number, number | null] }[],
-): { bin: string; min: number; max: number | null; count: number }[] {
-  const bins = config.map((c) => ({
-    bin: c.label,
-    min: c.thresholds[0],
-    max: c.thresholds[1] ?? null,
-    count: 0,
-  }));
-  for (const v of values) {
-    for (let i = 0; i < config.length; i++) {
-      const c = config[i];
-      if (v >= c.thresholds[0] && (c.thresholds[1] == null || v < c.thresholds[1])) {
-        bins[i].count++;
-        break;
-      }
-    }
-  }
-  return bins;
-}
-
 export function buildProjectStats(sessions: Record<string, unknown>[]) {
   const projectMap = new Map<
     string,
@@ -271,6 +272,74 @@ export function buildProjectStats(sessions: Record<string, unknown>[]) {
   return { byProject, baselineProjects, anomalySessions };
 }
 
+export function buildHomeStatistics(database: DatabaseConnection): HomeStatisticsResponse {
+  const overview = database
+    .prepare(
+      `SELECT
+        COUNT(*) AS totalSessions,
+        COALESCE(SUM(
+          COALESCE(s.input_tokens, 0) + COALESCE(s.cache_creation_tokens, 0) +
+          COALESCE(s.cache_read_tokens, 0) + COALESCE(s.output_tokens, 0)
+        ), 0) AS totalTokens,
+        COALESCE(SUM(s.total_cost), 0) AS totalCost,
+        COALESCE(SUM(s.input_tokens), 0) AS totalInputTokens,
+        COALESCE(SUM(s.output_tokens), 0) AS totalOutputTokens,
+        COALESCE(AVG(COALESCE(s.cache_hit_rate, 0)), 0) AS avgCacheHitRate,
+        CAST(ROUND(COALESCE(AVG(COALESCE(s.peak_context_tokens, 0)), 0)) AS INTEGER)
+          AS avgPeakContext,
+        COALESCE(SUM(CASE WHEN s.cost_unknown_count > 0 THEN 1 ELSE 0 END), 0)
+          AS sessionsWithCostUnknown
+       FROM sessions s
+       WHERE ${primarySessionPredicate('s')}`,
+    )
+    .get() as HomeStatisticsResponse['overview'];
+  const recentTools = database
+    .prepare(
+      `WITH recent_sessions AS (
+        SELECT s.id
+        FROM sessions s
+        WHERE ${primarySessionPredicate('s')}
+        ORDER BY s.start_time DESC, s.id DESC
+        LIMIT 30
+       )
+       SELECT spans.name, COUNT(*) AS count,
+         SUM(CASE WHEN spans.is_error = 1 THEN 1 ELSE 0 END) AS errors
+       FROM spans
+       INNER JOIN recent_sessions ON recent_sessions.id = spans.session_id
+       WHERE spans.type = 'tool_call'
+       GROUP BY spans.name
+       ORDER BY count DESC, spans.name ASC
+       LIMIT 15`,
+    )
+    .all() as HomeStatisticsResponse['recentTools'];
+
+  return {
+    schemaVersion: HOME_STATISTICS_SCHEMA_VERSION,
+    overview,
+    recentTools,
+    topByCost: loadHomeHighlights(database, 'COALESCE(s.total_cost, 0)'),
+    topByTokens: loadHomeHighlights(
+      database,
+      '(COALESCE(s.input_tokens, 0) + COALESCE(s.cache_creation_tokens, 0) + COALESCE(s.cache_read_tokens, 0) + COALESCE(s.output_tokens, 0))',
+    ),
+  };
+}
+
+function loadHomeHighlights(
+  database: DatabaseConnection,
+  orderExpression: string,
+): HomeSessionHighlight[] {
+  return database
+    .prepare(
+      `SELECT ${HOME_SESSION_HIGHLIGHT_COLUMNS}
+       FROM sessions s
+       WHERE ${primarySessionPredicate('s')}
+       ORDER BY ${orderExpression} DESC, s.id DESC
+       LIMIT 10`,
+    )
+    .all() as HomeSessionHighlight[];
+}
+
 function projectForStats(session: Record<string, unknown>): string {
   return classifySessionProject({
     agent: typeof session.agent === 'string' ? session.agent : undefined,
@@ -294,170 +363,24 @@ function percentile(values: number[], quantile: number): number {
 }
 
 export function buildStatsReport(database: DatabaseConnection): StatsReport {
-  const db = database;
-  const sessions = db
-    .prepare(
-      `SELECT ${SESSION_COLS}
-         FROM sessions
-         WHERE ${primarySessionPredicate()}
-         ORDER BY start_time DESC`,
-    )
-    .all() as Record<string, unknown>[];
-
-  if (sessions.length === 0) {
+  const overview = loadStatsOverview(database);
+  if (overview.totalSessions === 0) {
     return {
-      overview: {
-        totalSessions: 0,
-        totalTokens: 0,
-        totalCost: 0,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        avgCacheHitRate: 0,
-        avgPeakContext: 0,
-        sessionsWithCostUnknown: 0,
-      },
-      byAgent: [] as AgentStats[],
-      byProject: [] as ProjectStats[],
-      byModel: [] as ModelStats[],
-      recentTools: [] as ToolFrequency[],
+      overview,
+      byAgent: [],
+      byProject: [],
+      byModel: [],
+      recentTools: [],
       distribution: { costBins: [], tokenBins: [], modelDistribution: [], agentDistribution: [] },
     };
   }
 
-  // Overview
-  let totalTokens = 0,
-    totalCost = 0,
-    totalInput = 0,
-    totalOutput = 0,
-    sumCacheHit = 0,
-    sumPeak = 0,
-    unknownCost = 0;
-  for (const s of sessions) {
-    const input = (s.inputTokens as number) || 0;
-    const cc = (s.cacheCreationTokens as number) || 0;
-    const cr = (s.cacheReadTokens as number) || 0;
-    const out = (s.outputTokens as number) || 0;
-    totalInput += input;
-    totalOutput += out;
-    totalTokens += input + cc + cr + out;
-    totalCost += (s.totalCost as number) || 0;
-    sumCacheHit += (s.cacheHitRate as number) || 0;
-    sumPeak += (s.peakContextTokens as number) || 0;
-    if ((s.costUnknownCount as number) > 0) unknownCost++;
-  }
-  const overview: StatsOverview = {
-    totalSessions: sessions.length,
-    totalTokens,
-    totalCost,
-    totalInputTokens: totalInput,
-    totalOutputTokens: totalOutput,
-    avgCacheHitRate: sumCacheHit / sessions.length,
-    avgPeakContext: Math.round(sumPeak / sessions.length),
-    sessionsWithCostUnknown: unknownCost,
-  };
-
-  // By agent
-  const agentMap = new Map<
-    string,
-    { sessions: number; tokens: number; cost: number; cacheHit: number }
-  >();
-  for (const s of sessions) {
-    const a = (s.agent as string) || 'unknown';
-    const entry = agentMap.get(a) || { sessions: 0, tokens: 0, cost: 0, cacheHit: 0 };
-    entry.sessions++;
-    entry.tokens +=
-      ((s.inputTokens as number) || 0) +
-      ((s.cacheCreationTokens as number) || 0) +
-      ((s.cacheReadTokens as number) || 0) +
-      ((s.outputTokens as number) || 0);
-    entry.cost += (s.totalCost as number) || 0;
-    entry.cacheHit += (s.cacheHitRate as number) || 0;
-    agentMap.set(a, entry);
-  }
-  const byAgent: AgentStats[] = [...agentMap.entries()]
-    .map(([agent, e]) => ({
-      agent,
-      sessions: e.sessions,
-      totalTokens: e.tokens,
-      totalCost: e.cost,
-      avgCacheHitRate: e.cacheHit / e.sessions,
-    }))
-    .sort((a, b) => b.sessions - a.sessions);
-
-  const { byProject, baselineProjects, anomalySessions } = buildProjectStats(sessions);
-
-  // By model (from spans)
+  const byAgent = loadAgentStats(database);
+  const { byProject, baselineProjects, anomalySessions } = loadProjectStatistics(database);
   const { modelMap, recentTools } = loadDashboardSpanAggregates(database);
   const { byModel, modelDistribution } = buildModelViews(modelMap);
-
-  // Distributions
-  const sessionTokens = sessions.map(
-    (s) =>
-      ((s.inputTokens as number) || 0) +
-      ((s.cacheCreationTokens as number) || 0) +
-      ((s.cacheReadTokens as number) || 0) +
-      ((s.outputTokens as number) || 0),
-  );
-  const sessionCosts = sessions.map((s) => (s.totalCost as number) || 0);
-
-  const costBins = buildLogBins(sessionCosts, [
-    { label: '¥0', thresholds: [0, 0.001] },
-    { label: '¥0-0.01', thresholds: [0.001, 0.01] },
-    { label: '¥0.01-0.1', thresholds: [0.01, 0.1] },
-    { label: '¥0.1-1', thresholds: [0.1, 1] },
-    { label: '¥1-5', thresholds: [1, 5] },
-    { label: '¥5+', thresholds: [5, null] },
-  ]);
-
-  const tokenBins = buildLogBins(sessionTokens, [
-    { label: '<1k', thresholds: [0, 1_000] },
-    { label: '1k-10k', thresholds: [1_000, 10_000] },
-    { label: '10k-100k', thresholds: [10_000, 100_000] },
-    { label: '100k-500k', thresholds: [100_000, 500_000] },
-    { label: '500k-1M', thresholds: [500_000, 1_000_000] },
-    { label: '1M+', thresholds: [1_000_000, null] },
-  ]);
-
-  const agentDist = [...agentMap.entries()].map(([agent, e]) => ({
-    agent,
-    count: e.sessions,
-    tokens: e.tokens,
-  }));
-
-  const distribution: DistributionData = {
-    costBins,
-    tokenBins,
-    modelDistribution,
-    agentDistribution: agentDist,
-  };
-
-  // Time series trends: daily aggregation
-  const dailyMap = new Map<
-    string,
-    { tokens: number; cost: number; sessions: number; cacheHit: number }
-  >();
-  for (const s of sessions) {
-    const day = new Date(s.startTime as number).toISOString().slice(0, 10);
-    const entry = dailyMap.get(day) || { tokens: 0, cost: 0, sessions: 0, cacheHit: 0 };
-    entry.tokens +=
-      ((s.inputTokens as number) || 0) +
-      ((s.cacheCreationTokens as number) || 0) +
-      ((s.cacheReadTokens as number) || 0) +
-      ((s.outputTokens as number) || 0);
-    entry.cost += (s.totalCost as number) || 0;
-    entry.sessions++;
-    entry.cacheHit += (s.cacheHitRate as number) || 0;
-    dailyMap.set(day, entry);
-  }
-  const trends = [...dailyMap.entries()]
-    .map(([day, e]) => ({
-      day,
-      tokens: e.tokens,
-      cost: e.cost,
-      sessions: e.sessions,
-      avgCacheHit: e.sessions > 0 ? e.cacheHit / e.sessions : 0,
-    }))
-    .sort((a, b) => a.day.localeCompare(b.day));
+  const { costBins, tokenBins } = loadDistributionBins(database);
+  const trends = loadTrends(database);
 
   return {
     overview,
@@ -465,12 +388,231 @@ export function buildStatsReport(database: DatabaseConnection): StatsReport {
     byProject,
     byModel,
     recentTools,
-    distribution,
+    distribution: {
+      costBins,
+      tokenBins,
+      modelDistribution,
+      agentDistribution: byAgent.map((entry) => ({
+        agent: entry.agent,
+        count: entry.sessions,
+        tokens: entry.totalTokens,
+      })),
+    },
     baseline: { projects: baselineProjects, anomalySessions },
     trends,
   };
 }
 
+function loadStatsOverview(database: DatabaseConnection): StatsOverview {
+  return database
+    .prepare(
+      `SELECT
+        COUNT(*) AS totalSessions,
+        COALESCE(SUM(${SESSION_TOKEN_SQL}), 0) AS totalTokens,
+        COALESCE(SUM(s.total_cost), 0) AS totalCost,
+        COALESCE(SUM(s.input_tokens), 0) AS totalInputTokens,
+        COALESCE(SUM(s.output_tokens), 0) AS totalOutputTokens,
+        COALESCE(AVG(COALESCE(s.cache_hit_rate, 0)), 0) AS avgCacheHitRate,
+        CAST(ROUND(COALESCE(AVG(COALESCE(s.peak_context_tokens, 0)), 0)) AS INTEGER)
+          AS avgPeakContext,
+        COALESCE(SUM(CASE WHEN COALESCE(s.cost_unknown_count, 0) > 0 THEN 1 ELSE 0 END), 0)
+          AS sessionsWithCostUnknown
+       FROM sessions s
+       WHERE ${primarySessionPredicate('s')}`,
+    )
+    .get() as StatsOverview;
+}
+
+function loadAgentStats(database: DatabaseConnection): AgentStats[] {
+  return database
+    .prepare(
+      `SELECT
+        COALESCE(NULLIF(s.agent, ''), 'unknown') AS agent,
+        COUNT(*) AS sessions,
+        COALESCE(SUM(${SESSION_TOKEN_SQL}), 0) AS totalTokens,
+        COALESCE(SUM(s.total_cost), 0) AS totalCost,
+        COALESCE(AVG(COALESCE(s.cache_hit_rate, 0)), 0) AS avgCacheHitRate
+       FROM sessions s
+       WHERE ${primarySessionPredicate('s')}
+       GROUP BY COALESCE(NULLIF(s.agent, ''), 'unknown')
+       ORDER BY sessions DESC, agent ASC`,
+    )
+    .all() as AgentStats[];
+}
+
+function loadProjectStatistics(database: DatabaseConnection): {
+  byProject: ProjectStats[];
+  baselineProjects: ReturnType<typeof buildProjectStats>['baselineProjects'];
+  anomalySessions: string[];
+} {
+  const rows = database
+    .prepare(
+      `WITH primary_rows AS (
+        SELECT
+          s.id,
+          ${HOME_PROJECT_EXPRESSION} AS project,
+          ${SESSION_TOKEN_SQL} AS tokens,
+          COALESCE(s.total_cost, 0) AS cost,
+          COALESCE(s.cache_hit_rate, 0) AS cache_hit_rate
+        FROM sessions s
+        WHERE ${primarySessionPredicate('s')}
+       ), ranked AS (
+        SELECT
+          primary_rows.*,
+          ROW_NUMBER() OVER (PARTITION BY project ORDER BY cost, id) AS cost_position,
+          COUNT(*) OVER (PARTITION BY project) AS project_sessions
+        FROM primary_rows
+       )
+       SELECT
+         project,
+         MAX(project_sessions) AS sessions,
+         SUM(tokens) AS totalTokens,
+         SUM(cost) AS totalCost,
+         AVG(cost) AS avgCost,
+         MAX(CASE
+           WHEN cost_position = CAST(project_sessions * 0.5 AS INTEGER) + 1 THEN cost
+           ELSE NULL
+         END) AS medCost,
+         MAX(CASE
+           WHEN cost_position = CAST(project_sessions * 0.95 AS INTEGER) + 1 THEN cost
+           ELSE NULL
+         END) AS p95Cost,
+         CAST(ROUND(AVG(tokens)) AS INTEGER) AS avgTokens,
+         AVG(cache_hit_rate) AS avgCacheHit
+       FROM ranked
+       GROUP BY project
+       ORDER BY sessions DESC, project ASC`,
+    )
+    .all() as Array<{
+    project: string;
+    sessions: number;
+    totalTokens: number;
+    totalCost: number;
+    avgCost: number;
+    medCost: number;
+    p95Cost: number;
+    avgTokens: number;
+    avgCacheHit: number;
+  }>;
+  const baselineProjects: ReturnType<typeof buildProjectStats>['baselineProjects'] = {};
+  for (const row of rows) {
+    baselineProjects[row.project] = {
+      sessions: row.sessions,
+      avgCost: row.avgCost,
+      medCost: row.medCost,
+      p95Cost: row.p95Cost,
+      avgTokens: row.avgTokens,
+      avgCacheHit: row.avgCacheHit,
+    };
+  }
+  const anomalySessions = database
+    .prepare(
+      `WITH primary_rows AS (
+        SELECT
+          s.id,
+          s.start_time,
+          ${HOME_PROJECT_EXPRESSION} AS project,
+          COALESCE(s.total_cost, 0) AS cost
+        FROM sessions s
+        WHERE ${primarySessionPredicate('s')}
+       ), ranked AS (
+        SELECT
+          primary_rows.*,
+          ROW_NUMBER() OVER (PARTITION BY project ORDER BY cost, id) AS cost_position,
+          COUNT(*) OVER (PARTITION BY project) AS project_sessions
+        FROM primary_rows
+       ), baselines AS (
+        SELECT
+          project,
+          MAX(project_sessions) AS sessions,
+          MAX(CASE
+            WHEN cost_position = CAST(project_sessions * 0.5 AS INTEGER) + 1 THEN cost
+            ELSE NULL
+          END) AS median_cost
+        FROM ranked
+        GROUP BY project
+       )
+       SELECT ranked.id
+       FROM ranked
+       INNER JOIN baselines ON baselines.project = ranked.project
+       WHERE baselines.sessions >= 3
+         AND baselines.median_cost > 0.001
+         AND ranked.cost > baselines.median_cost * 3
+       ORDER BY ranked.start_time DESC, ranked.id DESC`,
+    )
+    .all() as Array<{ id: string }>;
+  return {
+    byProject: rows.map((row) => ({
+      cwd: row.project,
+      sessions: row.sessions,
+      totalTokens: row.totalTokens,
+      totalCost: row.totalCost,
+    })),
+    baselineProjects,
+    anomalySessions: anomalySessions.map((row) => row.id),
+  };
+}
+
+function loadDistributionBins(database: DatabaseConnection): {
+  costBins: DistributionData['costBins'];
+  tokenBins: DistributionData['tokenBins'];
+} {
+  const row = database
+    .prepare(
+      `SELECT
+        SUM(CASE WHEN COALESCE(s.total_cost, 0) >= 0 AND COALESCE(s.total_cost, 0) < 0.001 THEN 1 ELSE 0 END) AS cost0,
+        SUM(CASE WHEN COALESCE(s.total_cost, 0) >= 0.001 AND COALESCE(s.total_cost, 0) < 0.01 THEN 1 ELSE 0 END) AS cost1,
+        SUM(CASE WHEN COALESCE(s.total_cost, 0) >= 0.01 AND COALESCE(s.total_cost, 0) < 0.1 THEN 1 ELSE 0 END) AS cost2,
+        SUM(CASE WHEN COALESCE(s.total_cost, 0) >= 0.1 AND COALESCE(s.total_cost, 0) < 1 THEN 1 ELSE 0 END) AS cost3,
+        SUM(CASE WHEN COALESCE(s.total_cost, 0) >= 1 AND COALESCE(s.total_cost, 0) < 5 THEN 1 ELSE 0 END) AS cost4,
+        SUM(CASE WHEN COALESCE(s.total_cost, 0) >= 5 THEN 1 ELSE 0 END) AS cost5,
+        SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 0 AND ${SESSION_TOKEN_SQL} < 1000 THEN 1 ELSE 0 END) AS token0,
+        SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 1000 AND ${SESSION_TOKEN_SQL} < 10000 THEN 1 ELSE 0 END) AS token1,
+        SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 10000 AND ${SESSION_TOKEN_SQL} < 100000 THEN 1 ELSE 0 END) AS token2,
+        SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 100000 AND ${SESSION_TOKEN_SQL} < 500000 THEN 1 ELSE 0 END) AS token3,
+        SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 500000 AND ${SESSION_TOKEN_SQL} < 1000000 THEN 1 ELSE 0 END) AS token4,
+        SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 1000000 THEN 1 ELSE 0 END) AS token5
+       FROM sessions s
+       WHERE ${primarySessionPredicate('s')}`,
+    )
+    .get() as Record<string, number>;
+  return {
+    costBins: [
+      { bin: '¥0', min: 0, max: 0.001, count: row.cost0 },
+      { bin: '¥0-0.01', min: 0.001, max: 0.01, count: row.cost1 },
+      { bin: '¥0.01-0.1', min: 0.01, max: 0.1, count: row.cost2 },
+      { bin: '¥0.1-1', min: 0.1, max: 1, count: row.cost3 },
+      { bin: '¥1-5', min: 1, max: 5, count: row.cost4 },
+      { bin: '¥5+', min: 5, max: null, count: row.cost5 },
+    ],
+    tokenBins: [
+      { bin: '<1k', min: 0, max: 1_000, count: row.token0 },
+      { bin: '1k-10k', min: 1_000, max: 10_000, count: row.token1 },
+      { bin: '10k-100k', min: 10_000, max: 100_000, count: row.token2 },
+      { bin: '100k-500k', min: 100_000, max: 500_000, count: row.token3 },
+      { bin: '500k-1M', min: 500_000, max: 1_000_000, count: row.token4 },
+      { bin: '1M+', min: 1_000_000, max: null, count: row.token5 },
+    ],
+  };
+}
+
+function loadTrends(database: DatabaseConnection): NonNullable<StatsReport['trends']> {
+  return database
+    .prepare(
+      `SELECT
+        strftime('%Y-%m-%d', s.start_time / 1000, 'unixepoch') AS day,
+        SUM(${SESSION_TOKEN_SQL}) AS tokens,
+        SUM(COALESCE(s.total_cost, 0)) AS cost,
+        COUNT(*) AS sessions,
+        AVG(COALESCE(s.cache_hit_rate, 0)) AS avgCacheHit
+       FROM sessions s
+       WHERE ${primarySessionPredicate('s')}
+       GROUP BY strftime('%Y-%m-%d', s.start_time / 1000, 'unixepoch')
+       ORDER BY day ASC`,
+    )
+    .all() as NonNullable<StatsReport['trends']>;
+}
 export function registerStatsRoutes(app: FastifyInstance, runtime: StatsRuntime): void {
   app.get('/api/stats', async () => buildStatsReport(runtime.database));
+  app.get('/api/home-statistics', async () => buildHomeStatistics(runtime.database));
 }

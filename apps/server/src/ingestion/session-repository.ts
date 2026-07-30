@@ -1,4 +1,10 @@
-import { analyzeSession, type Pricing, type SessionSummary, type Span } from '@agent-profile/core';
+import {
+  analyzeSession,
+  classifySessionProject,
+  type Pricing,
+  type SessionSummary,
+  type Span,
+} from '@agent-profile/core';
 import type { DatabaseConnection } from '../database';
 import type { LoadedSourceSession, SourceRevision, StoredSessionRevision } from './types';
 
@@ -32,7 +38,7 @@ export class SessionRepository {
       INSERT INTO sessions (
         id, name, file_path, agent, file_mtime, file_size, file_lines,
         source_kind, source_updated_at, source_fingerprint, start_time, end_time,
-        cwd, git_branch, claude_version, input_tokens, cache_creation_tokens,
+        cwd, project_key, git_branch, claude_version, input_tokens, cache_creation_tokens,
         cache_read_tokens, output_tokens, total_cost, cost_unknown_count,
         cost_currency, cost_calculated_at, cost_calculator_version,
         peak_context_tokens, avg_context_tokens, cache_hit_rate, message_count,
@@ -40,7 +46,7 @@ export class SessionRepository {
       ) VALUES (
         @id, @name, @filePath, @agent, @fileMtime, @fileSize, @fileLines,
         @sourceKind, @sourceUpdatedAt, @sourceFingerprint, @startTime, @endTime,
-        @cwd, @gitBranch, @claudeVersion, @inputTokens, @cacheCreationTokens,
+        @cwd, @projectKey, @gitBranch, @claudeVersion, @inputTokens, @cacheCreationTokens,
         @cacheReadTokens, @outputTokens, @totalCost, @costUnknownCount,
         @costCurrency, @costCalculatedAt, @costCalculatorVersion,
         @peakContextTokens, @avgContextTokens, @cacheHitRate, @messageCount,
@@ -59,6 +65,7 @@ export class SessionRepository {
         start_time = excluded.start_time,
         end_time = excluded.end_time,
         cwd = excluded.cwd,
+        project_key = excluded.project_key,
         git_branch = excluded.git_branch,
         claude_version = excluded.claude_version,
         input_tokens = excluded.input_tokens,
@@ -109,6 +116,7 @@ export class SessionRepository {
           startTime: summary.startTime,
           endTime: summary.endTime ?? null,
           cwd: summary.cwd ?? null,
+          projectKey: classifySessionProject(summary),
           gitBranch: summary.gitBranch ?? null,
           claudeVersion: summary.claudeVersion ?? null,
           inputTokens: summary.inputTokens,

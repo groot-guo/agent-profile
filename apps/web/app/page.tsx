@@ -1,10 +1,14 @@
 'use client';
 
-import type { SessionSummary } from '@agent-profile/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  HomeStatisticsResponse,
+  SessionDiscoveryItem,
+  SessionDiscoveryPage,
+} from '@agent-profile/contracts';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { API, type DataManagementSummary, type ImportJobStatus } from './config';
-import { DashboardView, type StatsOverview, type ToolFreq } from './dashboard';
-import { loadDashboardData, loadImportStatus } from './home-data';
+import { DashboardView } from './dashboard';
+import { loadHomeStatistics, loadImportStatus, loadSessionDiscovery } from './home-data';
 import { AgentMark } from './icons';
 import { ImportProgressPanel } from './import-progress';
 import { canResetData, summarizeImport, summarizeReset } from './import-state';
@@ -12,35 +16,32 @@ import { projectLabel } from './project-label';
 import { ProjectPicker } from './project-picker';
 import {
   DEFAULT_SESSION_NAVIGATION,
-  filterSessions,
-  groupSessionsByTime,
+  groupSessionsForDisplay,
   parseSessionNavigation,
-  projectPickerOptions,
+  projectPickerOptionsFromFacets,
   type SessionQuickView,
   type SessionSort,
   type SessionTimeRange,
   serializeSessionNavigation,
   sessionDisplayTitle,
   sessionProject,
-  visibleSessionSlice,
 } from './session-navigation';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtAgo, R, SP } from './theme';
 import { Chip, Empty, Notice, SoftButton, TokenStrip } from './ui';
 
-const SESSION_RENDER_BATCH = 120;
 const SESSION_SCROLL_KEY = 'agent-profile:session-list-scroll';
 
 export default function HomePage() {
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [overview, setOverview] = useState<StatsOverview | null>(null);
-  const [toolFreqs, setToolFreqs] = useState<ToolFreq[]>([]);
+  const [discovery, setDiscovery] = useState<SessionDiscoveryPage | null>(null);
+  const [homeStatistics, setHomeStatistics] = useState<HomeStatisticsResponse | null>(null);
   const [importStatus, setImportStatus] = useState<ImportJobStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statisticsLoading, setStatisticsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [scanResult, setScanResult] = useState('');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [anomalyIds, setAnomalyIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SessionSort>('time');
   const [projectFilter, setProjectFilter] = useState('');
@@ -48,7 +49,6 @@ export default function HomePage() {
   const [quickView, setQuickView] = useState<SessionQuickView>('all');
   const [showSecondaryFilters, setShowSecondaryFilters] = useState(false);
   const [navigationReady, setNavigationReady] = useState(false);
-  const [visibleLimit, setVisibleLimit] = useState(SESSION_RENDER_BATCH);
   const [showDataManagement, setShowDataManagement] = useState(false);
   const [showCompactImport, setShowCompactImport] = useState(false);
   const [dataSummary, setDataSummary] = useState<DataManagementSummary | null>(null);
@@ -56,13 +56,13 @@ export default function HomePage() {
   const [resetting, setResetting] = useState(false);
   const sessionListRef = useRef<HTMLElement | null>(null);
   const actionMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const discoveryRequestRef = useRef(0);
+  const deferredSearch = useDeferredValue(search);
+  selectedIdRef.current = selectedId;
 
-  const fetchDashboardData = useCallback(async () => {
-    const { sessions: sessionList, stats } = await loadDashboardData(API);
-    setSessions(sessionList);
-    setOverview(stats.overview);
-    setToolFreqs(stats.recentTools ?? []);
-    setAnomalyIds(new Set(stats.baseline?.anomalySessions ?? []));
+  const fetchHomeStatistics = useCallback(async () => {
+    setHomeStatistics(await loadHomeStatistics(API));
     setError('');
   }, []);
 
@@ -72,20 +72,67 @@ export default function HomePage() {
     return status;
   }, []);
 
+  const refreshSessionDiscovery = useCallback(
+    async (cursor?: string, append = false) => {
+      const requestId = ++discoveryRequestRef.current;
+      if (append) setLoadingMore(true);
+      else {
+        setLoading(true);
+        setDiscovery(null);
+      }
+      try {
+        const page = await loadSessionDiscovery(
+          API,
+          {
+            query: deferredSearch,
+            project: projectFilter,
+            agent: agentFilter,
+            timeRange,
+            sort: sortBy,
+            quickView,
+            selectedId: selectedIdRef.current,
+          },
+          cursor,
+        );
+        if (requestId !== discoveryRequestRef.current) return;
+        setDiscovery((current) =>
+          append && current
+            ? {
+                ...page,
+                sessions: [...current.sessions, ...page.sessions],
+                selectedSession: page.selectedSession ?? current.selectedSession,
+              }
+            : page,
+        );
+        setError('');
+      } catch (reason: unknown) {
+        if (requestId === discoveryRequestRef.current) {
+          setError(reason instanceof Error ? reason.message : '会话加载失败');
+        }
+      } finally {
+        if (requestId === discoveryRequestRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [agentFilter, deferredSearch, projectFilter, quickView, sortBy, timeRange],
+  );
+
   useEffect(() => {
     let cancelled = false;
-    Promise.allSettled([fetchDashboardData(), fetchImportStatus()]).then((results) => {
+    Promise.allSettled([fetchHomeStatistics(), fetchImportStatus()]).then((results) => {
       if (cancelled) return;
       const failure = results.find((result) => result.status === 'rejected');
       if (failure?.status === 'rejected') {
         setError(failure.reason instanceof Error ? failure.reason.message : '加载失败');
       }
-      setLoading(false);
+      setStatisticsLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [fetchDashboardData, fetchImportStatus]);
+  }, [fetchHomeStatistics, fetchImportStatus]);
 
   useEffect(() => {
     if (!importStatus?.active) return;
@@ -95,7 +142,7 @@ export default function HomePage() {
       try {
         const status = await fetchImportStatus();
         if (!status.active && !cancelled) {
-          await fetchDashboardData();
+          await Promise.all([fetchHomeStatistics(), refreshSessionDiscovery()]);
           setScanResult(summarizeImport(status));
         }
       } catch (reason: unknown) {
@@ -109,7 +156,7 @@ export default function HomePage() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [importStatus?.active, fetchDashboardData, fetchImportStatus]);
+  }, [importStatus?.active, fetchHomeStatistics, fetchImportStatus, refreshSessionDiscovery]);
 
   useEffect(() => {
     const applyLocation = () => {
@@ -154,8 +201,9 @@ export default function HomePage() {
   ]);
 
   useEffect(() => {
-    setVisibleLimit(SESSION_RENDER_BATCH);
-  }, [agentFilter, projectFilter, quickView, search, sortBy, timeRange]);
+    if (!navigationReady) return;
+    void refreshSessionDiscovery();
+  }, [navigationReady, refreshSessionDiscovery]);
 
   useEffect(() => {
     const closeMenu = (event: MouseEvent) => {
@@ -202,7 +250,7 @@ export default function HomePage() {
       setImportStatus(status);
       setShowDataManagement(false);
       if (!status.active) {
-        await fetchDashboardData();
+        await Promise.all([fetchHomeStatistics(), refreshSessionDiscovery()]);
         setScanResult(summarizeImport(status));
       }
     } catch (err: unknown) {
@@ -225,7 +273,7 @@ export default function HomePage() {
       setShowDataManagement(false);
       window.requestAnimationFrame(() => actionMenuRef.current?.querySelector('summary')?.focus());
       if (!status.active) {
-        await fetchDashboardData();
+        await Promise.all([fetchHomeStatistics(), refreshSessionDiscovery()]);
         setScanResult(summarizeImport(status));
       }
     } catch (err: unknown) {
@@ -268,7 +316,12 @@ export default function HomePage() {
       };
       setSelectedId(null);
       setResetConfirmation('');
-      await Promise.all([fetchDashboardData(), fetchImportStatus(), loadDataSummary()]);
+      await Promise.all([
+        fetchHomeStatistics(),
+        refreshSessionDiscovery(),
+        fetchImportStatus(),
+        loadDataSummary(),
+      ]);
       setScanResult(summarizeReset(result.deleted));
       setShowDataManagement(false);
       window.requestAnimationFrame(() => actionMenuRef.current?.querySelector('summary')?.focus());
@@ -298,10 +351,12 @@ export default function HomePage() {
 
   const refreshDashboard = () => {
     actionMenuRef.current?.removeAttribute('open');
-    setLoading(true);
-    Promise.allSettled([fetchDashboardData(), fetchImportStatus()]).finally(() =>
-      setLoading(false),
-    );
+    setStatisticsLoading(true);
+    Promise.allSettled([
+      fetchHomeStatistics(),
+      refreshSessionDiscovery(),
+      fetchImportStatus(),
+    ]).finally(() => setStatisticsLoading(false));
   };
 
   const navigationState = useMemo(
@@ -317,20 +372,29 @@ export default function HomePage() {
     }),
     [agentFilter, projectFilter, quickView, search, selectedId, sortBy, timeRange],
   );
-  const filtered = useMemo(
-    () => filterSessions(sessions, anomalyIds, navigationState),
-    [anomalyIds, navigationState, sessions],
+  const sessions = discovery?.sessions ?? [];
+  const projects = useMemo(
+    () => projectPickerOptionsFromFacets(discovery?.facets.projects ?? []),
+    [discovery?.facets.projects],
   );
-  const projects = useMemo(() => projectPickerOptions(sessions), [sessions]);
-  const visibleSessions = visibleSessionSlice(filtered, visibleLimit);
-  const timeGroups = groupSessionsByTime(visibleSessions);
+  const timeGroups = groupSessionsForDisplay(sessions, sortBy);
 
   const agentCounts = new Map<string, number>();
-  agentCounts.set('all', sessions.length);
-  for (const s of sessions) agentCounts.set(s.agent, (agentCounts.get(s.agent) || 0) + 1);
-  const agents = ['all', ...new Set(sessions.map((s) => s.agent))];
+  agentCounts.set('all', discovery?.counts.total ?? 0);
+  for (const facet of discovery?.facets.agents ?? []) {
+    agentCounts.set(facet.agent, facet.count);
+  }
+  const agents = ['all', ...(discovery?.facets.agents.map((facet) => facet.agent) ?? [])];
 
-  const selected = sessions.find((x) => x.id === selectedId);
+  const selected =
+    sessions.find((session) => session.id === selectedId) ??
+    discovery?.selectedSession ??
+    homeStatistics?.topByCost.find((session) => session.id === selectedId) ??
+    homeStatistics?.topByTokens.find((session) => session.id === selectedId) ??
+    undefined;
+  const matchedCount = discovery?.counts.matched ?? 0;
+  const totalCount = discovery?.counts.total ?? homeStatistics?.overview.totalSessions ?? 0;
+  const remainingCount = Math.max(0, matchedCount - sessions.length);
   const hasActiveFilters =
     Boolean(search || projectFilter) ||
     agentFilter !== 'all' ||
@@ -372,7 +436,7 @@ export default function HomePage() {
     setShowSecondaryFilters(false);
   };
 
-  const showFirstRunImport = !loading && sessions.length === 0 && Boolean(importStatus?.active);
+  const showFirstRunImport = !loading && totalCount === 0 && Boolean(importStatus?.active);
   if (showFirstRunImport && importStatus) {
     return (
       <div className="first-run-import-shell">
@@ -402,8 +466,8 @@ export default function HomePage() {
               <h1>会话浏览</h1>
             </div>
             <div className="session-filter-result" aria-live="polite">
-              <strong className="tnum">{filtered.length}</strong>
-              <span className="tnum">/ {sessions.length}</span>
+              <strong className="tnum">{matchedCount}</strong>
+              <span className="tnum">/ {totalCount}</span>
               <small>匹配会话</small>
             </div>
           </div>
@@ -414,7 +478,7 @@ export default function HomePage() {
             </span>
             <input
               aria-label="搜索会话"
-              placeholder="搜索会话、项目或 ID"
+              placeholder="搜索项目、Agent 或 ID"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -428,7 +492,7 @@ export default function HomePage() {
           <div className="session-filter-grid">
             <ProjectPicker
               options={projects}
-              totalCount={sessions.length}
+              totalCount={totalCount}
               value={projectFilter}
               onChange={setProjectFilter}
             />
@@ -535,7 +599,7 @@ export default function HomePage() {
                               ? 'MiMo'
                               : AGENT_LABELS[agent] || agent}
                       </span>
-                      <span className="tnum">{agentCounts.get(agent)}</span>
+                      <span className="tnum">{agentCounts.get(agent) ?? 0}</span>
                     </button>
                   );
                 })}
@@ -601,7 +665,7 @@ export default function HomePage() {
         <section ref={sessionListRef} aria-label="最近会话列表" className="session-list">
           {loading ? (
             <SessionListSkeleton />
-          ) : filtered.length === 0 ? (
+          ) : sessions.length === 0 ? (
             <Empty
               text="没有匹配的会话"
               hint={hasActiveFilters ? '试试清除筛选条件' : '点击「同步数据」导入本地会话'}
@@ -620,19 +684,22 @@ export default function HomePage() {
                       s={session}
                       project={sessionProject(session)}
                       selected={selectedId === session.id}
-                      anomaly={anomalyIds.has(session.id)}
+                      anomaly={session.isAnomaly}
                       onSelect={selectSession}
                     />
                   ))}
                 </section>
               ))}
-              {visibleSessions.length < filtered.length && (
+              {discovery?.page.hasMore && discovery.page.nextCursor && (
                 <div style={{ padding: `${SP.sm}px ${SP.lg}px` }}>
                   <SoftButton
-                    onClick={() => setVisibleLimit((limit) => limit + SESSION_RENDER_BATCH)}
+                    onClick={() =>
+                      void refreshSessionDiscovery(discovery.page.nextCursor ?? undefined, true)
+                    }
+                    disabled={loadingMore}
                     style={{ width: '100%' }}
                   >
-                    加载更多 · 尚有 {filtered.length - visibleSessions.length} 个会话
+                    {loadingMore ? '正在加载…' : `加载更多 · 尚有 ${remainingCount} 个会话`}
                   </SoftButton>
                 </div>
               )}
@@ -682,7 +749,7 @@ export default function HomePage() {
                   }}
                 >
                   <AgentMark agent={selected.agent} size={18} />
-                  <span className="clamp1" title={selected.name || selected.id}>
+                  <span className="clamp1" title={sessionDisplayTitle(selected)}>
                     {sessionDisplayTitle(selected)}
                   </span>
                 </span>
@@ -697,13 +764,15 @@ export default function HomePage() {
           </div>
         ) : (
           <DashboardView
-            sessions={sessions}
-            overview={overview}
-            toolFreqs={toolFreqs}
-            loading={loading}
+            overview={homeStatistics?.overview ?? null}
+            toolFreqs={homeStatistics?.recentTools ?? []}
+            topByCost={homeStatistics?.topByCost ?? []}
+            topByTokens={homeStatistics?.topByTokens ?? []}
+            agentCounts={discovery?.facets.agents ?? []}
+            loading={statisticsLoading || loading}
             importStatus={importStatus}
             onStartImport={onScan}
-            onSelectSession={(id) => setSelectedId(id)}
+            onSelectSession={selectSession}
           />
         )}
       </div>
@@ -933,7 +1002,7 @@ function SessionRow({
   anomaly,
   onSelect,
 }: {
-  s: SessionSummary;
+  s: SessionDiscoveryItem;
   project: string;
   selected: boolean;
   anomaly: boolean;

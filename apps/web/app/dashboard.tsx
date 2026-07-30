@@ -1,6 +1,6 @@
 'use client';
 
-import type { SessionSummary } from '@agent-profile/core';
+import type { HomeSessionHighlight, HomeStatisticsResponse } from '@agent-profile/contracts';
 import type { ImportJobStatus } from './config';
 import { AgentMark } from './icons';
 import { importExperienceState, sourceStatusText } from './import-state';
@@ -20,16 +20,7 @@ const DASHBOARD_SKELETON_KEYS = [
   'pricing',
 ] as const;
 
-export interface StatsOverview {
-  totalSessions: number;
-  totalTokens: number;
-  totalCost: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  avgCacheHitRate: number;
-  avgPeakContext: number;
-  sessionsWithCostUnknown: number;
-}
+export type StatsOverview = HomeStatisticsResponse['overview'];
 
 export interface ToolFreq {
   name: string;
@@ -38,35 +29,39 @@ export interface ToolFreq {
 }
 
 export function DashboardView({
-  sessions,
   overview,
   toolFreqs,
+  topByCost,
+  topByTokens,
+  agentCounts,
   loading,
   importStatus,
   onStartImport,
   onSelectSession,
 }: {
-  sessions: SessionSummary[];
   overview: StatsOverview | null;
   toolFreqs: ToolFreq[];
+  topByCost: HomeSessionHighlight[];
+  topByTokens: HomeSessionHighlight[];
+  agentCounts: Array<{ agent: string; count: number }>;
   loading: boolean;
   importStatus: ImportJobStatus | null;
   onStartImport: () => void;
   onSelectSession?: (id: string) => void;
 }) {
-  const experienceState = importExperienceState(loading, sessions.length, importStatus);
+  const experienceState = importExperienceState(
+    loading,
+    overview?.totalSessions ?? 0,
+    importStatus,
+  );
   if (experienceState === 'loading') return <DashboardSkeleton />;
   if (!overview) return null;
-  if (sessions.length === 0) {
+  if (overview.totalSessions === 0) {
     return <FirstRunOnboarding importStatus={importStatus} onStartImport={onStartImport} />;
   }
 
-  const totalOf = (s: SessionSummary) =>
+  const totalOf = (s: HomeSessionHighlight) =>
     s.inputTokens + s.cacheCreationTokens + s.cacheReadTokens + s.outputTokens;
-  const topByCost = [...sessions].sort((a, b) => b.totalCost - a.totalCost).slice(0, 10);
-  const topByTokens = [...sessions].sort((a, b) => totalOf(b) - totalOf(a)).slice(0, 10);
-  const agentCounts = new Map<string, number>();
-  for (const s of sessions) agentCounts.set(s.agent, (agentCounts.get(s.agent) || 0) + 1);
 
   return (
     <div style={{ padding: SP.xl, maxWidth: 1200, margin: '0 auto' }}>
@@ -128,7 +123,7 @@ export function DashboardView({
       {/* Agent 分布 */}
       <SectionTitle>Agent 分布</SectionTitle>
       <div style={{ display: 'flex', gap: SP.md, flexWrap: 'wrap', marginBottom: SP.xl }}>
-        {[...agentCounts.entries()].map(([agent, count]) => (
+        {agentCounts.map(({ agent, count }) => (
           <div
             key={agent}
             style={{
@@ -359,8 +354,8 @@ function TopList({
   metricColor,
   onSelect,
 }: {
-  sessions: SessionSummary[];
-  metric: (s: SessionSummary) => string;
+  sessions: HomeSessionHighlight[];
+  metric: (s: HomeSessionHighlight) => string;
   metricColor: string;
   onSelect?: (id: string) => void;
 }) {

@@ -4,6 +4,7 @@ import type { DatabaseConnection } from '../database';
 import { importFromSource } from '../ingestion/import-coordinator';
 import type { SessionRepository } from '../ingestion/session-repository';
 import type { SourceAdapter } from '../ingestion/types';
+import { primarySessionPredicate } from '../primary-sessions';
 
 export interface ScaleFixtureConfig {
   sessions: number;
@@ -28,6 +29,7 @@ export const REPRESENTATIVE_SCALE: ScaleFixtureConfig = {
 
 export interface QueryPlanReport {
   sessionList: string[];
+  sessionDiscovery: string[];
   sessionSpans: string[];
 }
 
@@ -50,14 +52,14 @@ export function seedScaleFixture(
   const insertSession = database.prepare(`
     INSERT INTO sessions (
       id, name, file_path, agent, source_kind, source_updated_at,
-      source_fingerprint, start_time, end_time, cwd, input_tokens,
+      source_fingerprint, start_time, end_time, cwd, project_key, input_tokens,
       cache_creation_tokens, cache_read_tokens, output_tokens, total_cost,
       cost_unknown_count, cost_currency, cost_calculated_at,
       cost_calculator_version, peak_context_tokens, avg_context_tokens,
       cache_hit_rate, message_count, imported_at
     ) VALUES (
       @id, @name, @filePath, @agent, 'fixture', @sourceUpdatedAt,
-      @sourceFingerprint, @startTime, @endTime, @cwd, @inputTokens,
+      @sourceFingerprint, @startTime, @endTime, @cwd, @cwd, @inputTokens,
       @cacheCreationTokens, @cacheReadTokens, @outputTokens, @totalCost,
       0, 'CNY', @costCalculatedAt, 'fixture-v1', @peakContextTokens,
       @avgContextTokens, @cacheHitRate, @messageCount, @importedAt
@@ -171,6 +173,18 @@ export function collectQueryPlans(
     sessionList: planDetails(
       database
         .prepare('EXPLAIN QUERY PLAN SELECT id, start_time FROM sessions ORDER BY start_time DESC')
+        .all(),
+    ),
+    sessionDiscovery: planDetails(
+      database
+        .prepare(
+          `EXPLAIN QUERY PLAN
+           SELECT s.id, s.start_time
+           FROM sessions s
+           WHERE ${primarySessionPredicate('s')}
+           ORDER BY s.start_time DESC, s.id DESC
+           LIMIT 121`,
+        )
         .all(),
     ),
     sessionSpans: planDetails(

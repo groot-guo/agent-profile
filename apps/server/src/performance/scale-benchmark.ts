@@ -38,7 +38,10 @@ interface BenchmarkReport {
     scanned: number;
     unchanged: number;
   };
-  endpoints: Record<'sessions' | 'stats' | 'analysis' | 'evidence', EndpointMeasurement>;
+  endpoints: Record<
+    'sessions' | 'sessionDiscovery' | 'stats' | 'homeStatistics' | 'analysis' | 'evidence',
+    EndpointMeasurement
+  >;
   process: { startMaxRssBytes: number; finalMaxRssBytes: number; growthBytes: number };
   budgets: typeof DESKTOP_BUDGETS;
   budgetFailures: string[];
@@ -50,7 +53,9 @@ const DESKTOP_BUDGETS = {
   maxRssBytes: 768 * 1024 * 1024,
   endpoints: {
     sessions: { medianMs: 300, responseBytes: 1_500_000 },
+    sessionDiscovery: { medianMs: 300, responseBytes: 200_000 },
     stats: { medianMs: 2_000, responseBytes: 750_000 },
+    homeStatistics: { medianMs: 500, responseBytes: 100_000 },
     analysis: { medianMs: 4_000, responseBytes: 5_000_000 },
     evidence: { medianMs: 2_000, responseBytes: 4_000_000 },
   } satisfies Record<string, EndpointBudget>,
@@ -89,9 +94,21 @@ try {
         throw new Error('Session-list response does not cover the representative fixture');
       }
     }),
+    sessionDiscovery: await measureEndpoint(app, '/api/session-discovery?limit=120', (body) => {
+      if (discoverySessionCount(body) !== 120 || discoveryTotal(body) !== fixture.sessions) {
+        throw new Error(
+          'Session discovery response does not preserve its bounded window and total',
+        );
+      }
+    }),
     stats: await measureEndpoint(app, '/api/stats', (body) => {
       if (statsSessionCount(body) !== fixture.sessions) {
         throw new Error('Stats response does not cover the representative fixture');
+      }
+    }),
+    homeStatistics: await measureEndpoint(app, '/api/home-statistics', (body) => {
+      if (statsSessionCount(body) !== fixture.sessions || homeHighlightCount(body) > 20) {
+        throw new Error('Home statistics response is incomplete or unbounded');
       }
     }),
     analysis: await measureEndpoint(
@@ -218,6 +235,29 @@ function statsSessionCount(body: unknown): number | null {
   if (!overview || typeof overview !== 'object') return null;
   const value = (overview as { totalSessions?: unknown }).totalSessions;
   return typeof value === 'number' ? value : null;
+}
+
+function discoverySessionCount(body: unknown): number | null {
+  if (!body || typeof body !== 'object') return null;
+  const sessions = (body as { sessions?: unknown }).sessions;
+  return Array.isArray(sessions) ? sessions.length : null;
+}
+
+function discoveryTotal(body: unknown): number | null {
+  if (!body || typeof body !== 'object') return null;
+  const counts = (body as { counts?: unknown }).counts;
+  if (!counts || typeof counts !== 'object') return null;
+  const total = (counts as { total?: unknown }).total;
+  return typeof total === 'number' ? total : null;
+}
+
+function homeHighlightCount(body: unknown): number {
+  if (!body || typeof body !== 'object') return Number.POSITIVE_INFINITY;
+  const report = body as { topByCost?: unknown; topByTokens?: unknown };
+  if (!Array.isArray(report.topByCost) || !Array.isArray(report.topByTokens)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return report.topByCost.length + report.topByTokens.length;
 }
 
 function analysisSpanCount(body: unknown): number | null {
