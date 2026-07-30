@@ -3729,7 +3729,8 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T84 bounded Session detail and evidence retrieval
 
-- status: planned
+- status: in_progress
+- started_at: 2026-07-30
 - estimated size/risk: large / high; touches diagnosis inputs, evidence privacy,
   coverage language, API contracts, and browser state
 - purpose: prevent one large Session or project from creating avoidable API and
@@ -3748,6 +3749,58 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   timing samples, browser paging/filter checks, privacy regression checks, build
 - documentation: update detail/evidence API, coverage/limitation language,
   architecture, Chinese overview, and roadmap with exact bounded behavior
+- initial audit plan:
+  1. map the current detail, analysis, evidence, score, diagnosis, tool, context,
+     export, and Git request paths and identify which ones load complete Session
+     or project Span sets, metadata, or content
+  2. define a versioned bounded evidence/page contract that preserves stable
+     event order, parent/sidechain fields, explicit coverage, and opt-in bounded
+     redacted previews while allowing all stored events to be reached
+  3. separate bounded detail summaries from full analytical work, then replace
+     project-relative full-Span loading with equivalent aggregate inputs before
+     changing diagnosis or score semantics
+  4. extend the representative fixture/benchmark and browser checks with a
+     large-Session paging path; update API/privacy/coverage documentation only
+     after the implemented limits are measured
+- audit findings recorded at start:
+  - `GET /api/session/:id/evidence?content=none` selects `SPAN_COLS` for every
+    stored Span, including `metadata`, parses all metadata in Node, builds the
+    complete `session-evidence/v1` event array, and only then lets the Web reveal
+    80 rows at a time; the UI batch therefore bounds DOM work but not query,
+    serialization, transfer, or browser-memory work
+  - `GET /api/session/:id/analysis` improves on the legacy nine-request path by
+    reading the selected Session's Span set once, but it still parses every Span,
+    returns every Span without metadata, and synchronously derives diagnosis,
+    efficiency, context, cost, performance, tool parameters, Git commits, and
+    score before the first detail render
+  - project-relative score calculation loads every Session summary with the same
+    `cwd` and every stored Span for that cohort, then reruns diagnosis/efficiency
+    per Session in one request; compatibility `score`, detail, turns, tools,
+    performance, tool-parameter, export, and report routes also retain complete
+    Span reads
+  - `findAssociatedCommits` uses synchronous `git log` with a five-second timeout
+    in the request path; it is bounded by time but can still block the Server
+    event loop
+  - the final T83 benchmark is the T84 start baseline: the 3,000-Span analysis
+    response is 1,882,040 bytes at 215.4 ms median, the no-content evidence
+    response is 1,627,750 bytes at 11.8 ms median, and the combined benchmark
+    process high-water RSS is 411,680,768 bytes
+- working compatibility decisions:
+  - keep `session-evidence/v1` and complete export/report routes as explicit
+    compatibility/full-export surfaces while introducing a new versioned,
+    cursor-paged evidence contract for the Web; do not silently redefine v1's
+    promise that `events` contains every normalized stored Span
+  - the paged contract will use stable `(start_time, id)` event order, query-bound
+    cursors, default 80 / maximum 200 events, server-side type/lane/outcome
+    filters, full-session scope/coverage aggregates, and explicit matched/total
+    counts plus window limitations
+  - no-content pages must not select metadata text into Node; SQL may derive
+    availability/truncation flags, while opt-in preview pages may load only the
+    current window's relevant metadata fields for the existing bounded secret-
+    redaction path
+  - parent-link status and global sequence must be computed against the complete
+    stored Session even when the parent lies outside the current page; every
+    filtered event must remain reachable by following the cursor
 
 ### T85 append-only JSONL import for Claude Code and Codex
 
