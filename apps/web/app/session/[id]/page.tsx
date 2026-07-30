@@ -6,7 +6,12 @@ import type {
   EfficiencyMetrics,
   EfficiencyScore,
   PerformanceMetrics,
+  SessionAnalysisContextPoint,
+  SessionAnalysisSpanSummary,
+  SessionAnalysisToolEvent,
+  SessionAnalysisTurnEvent,
   SessionDetail,
+  SessionSummary,
   Span,
   ToolParamAnalysis,
 } from '@agent-profile/core';
@@ -34,23 +39,25 @@ import {
 import { BarRow, Card, Chip, Empty, Notice, SoftButton, StatCard, TokenStrip } from '../../ui';
 import { EvidencePanel } from './evidence-panel';
 
-// 明细表分页每页行数
-const TABLE_LIMIT = 30;
-
-interface ContextPoint {
-  startTime: number;
-  contextTokens: number;
-  inputTokens: number;
-  cacheCreationTokens: number;
-  cacheReadTokens: number;
-  outputTokens?: number;
-  model?: string;
-  contextWindow: number | null;
-}
-
 interface SessionAnalysis {
-  session: SessionDetail;
-  context: ContextPoint[];
+  schemaVersion: string;
+  session: SessionSummary;
+  spanSummary: SessionAnalysisSpanSummary;
+  context: {
+    total: number;
+    isSampled: boolean;
+    points: SessionAnalysisContextPoint[];
+  };
+  toolWindow: {
+    total: number;
+    isWindowed: boolean;
+    events: SessionAnalysisToolEvent[];
+  };
+  sidechainTurnWindow: {
+    total: number;
+    isWindowed: boolean;
+    events: SessionAnalysisTurnEvent[];
+  };
   diagnosis: DiagnosisResult;
   efficiency: EfficiencyMetrics;
   costAttribution: CostAttribution;
@@ -58,11 +65,12 @@ interface SessionAnalysis {
   commits: { hash: string; message: string; date: string; author: string }[];
   performance: PerformanceMetrics;
   toolParams: ToolParamAnalysis;
+  limitations: string[];
 }
 
 type SessionView = 'overview' | 'context' | 'tools' | 'evidence';
 
-async function loadLegacyAnalysis(id: string): Promise<SessionAnalysis> {
+async function loadLegacyAnalysis(id: string, signal: AbortSignal): Promise<SessionAnalysis> {
   const [
     session,
     context,
@@ -74,23 +82,34 @@ async function loadLegacyAnalysis(id: string): Promise<SessionAnalysis> {
     performance,
     toolParams,
   ] = await Promise.all([
-    fetch(`${API}/session/${id}`).then((r) =>
+    fetch(`${API}/session/${id}`, { signal }).then((r) =>
       r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
     ),
-    fetch(`${API}/session/${id}/context`).then((r) =>
+    fetch(`${API}/session/${id}/context`, { signal }).then((r) =>
       r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)),
     ),
-    fetch(`${API}/session/${id}/diagnosis`).then((r) => (r.ok ? r.json() : null)),
-    fetch(`${API}/session/${id}/efficiency`).then((r) => (r.ok ? r.json() : null)),
-    fetch(`${API}/session/${id}/cost-attribution`).then((r) => (r.ok ? r.json() : null)),
-    fetch(`${API}/session/${id}/score`).then((r) => (r.ok ? r.json() : null)),
-    fetch(`${API}/session/${id}/commits`).then((r) => (r.ok ? r.json() : { commits: [] })),
-    fetch(`${API}/session/${id}/performance`).then((r) => (r.ok ? r.json() : null)),
-    fetch(`${API}/session/${id}/tool-params`).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/diagnosis`, { signal }).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/efficiency`, { signal }).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/cost-attribution`, { signal }).then((r) =>
+      r.ok ? r.json() : null,
+    ),
+    fetch(`${API}/session/${id}/score`, { signal }).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/commits`, { signal }).then((r) =>
+      r.ok ? r.json() : { commits: [] },
+    ),
+    fetch(`${API}/session/${id}/performance`, { signal }).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API}/session/${id}/tool-params`, { signal }).then((r) => (r.ok ? r.json() : null)),
   ]);
+  const legacySession = session as SessionDetail;
+  const windows = buildLegacyAnalysisWindows(legacySession.spans);
+  const { spans: _spans, ...summary } = legacySession;
   return {
-    session,
-    context,
+    schemaVersion: 'legacy-session-analysis',
+    session: summary,
+    spanSummary: windows.spanSummary,
+    context: { total: context.length, isSampled: false, points: context },
+    toolWindow: windows.toolWindow,
+    sidechainTurnWindow: windows.sidechainTurnWindow,
     diagnosis,
     efficiency,
     costAttribution,
@@ -98,7 +117,86 @@ async function loadLegacyAnalysis(id: string): Promise<SessionAnalysis> {
     commits: commits.commits || [],
     performance,
     toolParams,
+    limitations: [
+      'Legacy Server fallback returned a complete Span response. Restart the API to use bounded analysis.',
+    ],
   } as SessionAnalysis;
+}
+
+function buildLegacyAnalysisWindows(
+  spans: Span[],
+): Pick<SessionAnalysis, 'spanSummary' | 'toolWindow' | 'sidechainTurnWindow'> {
+  const turns = spans.filter((span) => span.type === 'llm_turn');
+  const mainTools = spans.filter((span) => span.type === 'tool_call' && !span.isSidechain);
+  const sidechainTurns = turns.filter((turn) => turn.isSidechain);
+  const sidechainTools = spans.filter((span) => span.type === 'tool_call' && span.isSidechain);
+  const toolStats = new Map<string, { total: number; errors: number }>();
+  for (const tool of mainTools) {
+    const current = toolStats.get(tool.name) ?? { total: 0, errors: 0 };
+    toolStats.set(tool.name, {
+      total: current.total + 1,
+      errors: current.errors + (tool.isError ? 1 : 0),
+    });
+  }
+  const sortedTools = [...toolStats.entries()].sort(
+    ([leftName, left], [rightName, right]) =>
+      right.total - left.total || leftName.localeCompare(rightName),
+  );
+  return {
+    spanSummary: {
+      events: spans.length,
+      llmTurns: turns.length,
+      mainToolCalls: mainTools.length,
+      sidechainToolCalls: sidechainTools.length,
+      observedToolErrors: mainTools.filter((tool) => tool.isError).length,
+      toolNames: sortedTools.map(([name, value]) => ({ name, count: value.total })),
+      toolErrors: sortedTools
+        .filter(([, value]) => value.errors > 0)
+        .map(([name, value]) => ({ name, total: value.total, errors: value.errors })),
+      sidechain: {
+        turns: sidechainTurns.length,
+        tools: sidechainTools.length,
+        tokens: sidechainTurns.reduce(
+          (total, turn) =>
+            total +
+            turn.inputTokens +
+            turn.cacheCreationTokens +
+            turn.cacheReadTokens +
+            turn.outputTokens,
+          0,
+        ),
+        cost: sidechainTurns.reduce((total, turn) => total + turn.cost, 0),
+        costUnknownCount: sidechainTurns.filter((turn) => turn.costUnknown).length,
+        taskNames: [...new Set(sidechainTurns.map((turn) => turn.name).filter(Boolean))].slice(
+          0,
+          20,
+        ),
+      },
+    },
+    toolWindow: {
+      total: mainTools.length,
+      isWindowed: mainTools.length > 50,
+      events: mainTools.slice(-50).map((tool) => ({
+        id: tool.id,
+        name: tool.name,
+        startTime: tool.startTime,
+        endTime: tool.endTime ?? null,
+        outputBytes: tool.outputBytes,
+        isError: tool.isError,
+      })),
+    },
+    sidechainTurnWindow: {
+      total: sidechainTurns.length,
+      isWindowed: sidechainTurns.length > 20,
+      events: sidechainTurns.slice(0, 20).map((turn) => ({
+        id: turn.id,
+        name: turn.name,
+        startTime: turn.startTime,
+        inputTokens: turn.inputTokens,
+        outputTokens: turn.outputTokens,
+      })),
+    },
+  };
 }
 
 export default function SessionPage() {
@@ -106,8 +204,21 @@ export default function SessionPage() {
   const searchParams = useSearchParams();
   const id = params.id as string;
   const isEmbed = searchParams.get('embed') === '1';
-  const [data, setData] = useState<SessionDetail | null>(null);
-  const [ctx, setCtx] = useState<ContextPoint[]>([]);
+  const [data, setData] = useState<SessionSummary | null>(null);
+  const [spanSummary, setSpanSummary] = useState<SessionAnalysisSpanSummary | null>(null);
+  const [context, setContext] = useState<SessionAnalysis['context']>({
+    total: 0,
+    isSampled: false,
+    points: [],
+  });
+  const [toolWindow, setToolWindow] = useState<SessionAnalysis['toolWindow']>({
+    total: 0,
+    isWindowed: false,
+    events: [],
+  });
+  const [sidechainTurnWindow, setSidechainTurnWindow] = useState<
+    SessionAnalysis['sidechainTurnWindow']
+  >({ total: 0, isWindowed: false, events: [] });
   const [diag, setDiag] = useState<DiagnosisResult | null>(null);
   const [eff, setEff] = useState<EfficiencyMetrics | null>(null);
   const [costAttr, setCostAttr] = useState<CostAttribution | null>(null);
@@ -122,20 +233,25 @@ export default function SessionPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const controller = new AbortController();
     setActiveView('overview');
     setLoading(true);
     setError('');
-    fetch(`${API}/session/${id}/analysis`)
+    fetch(`${API}/session/${id}/analysis-summary`, { signal: controller.signal })
       .then((r) => {
         if (r.ok) return r.json() as Promise<SessionAnalysis>;
         // The web app can update before a non-watch server process restarts.
         // Keep the detail page usable during that short version skew.
-        if (r.status === 404) return loadLegacyAnalysis(id);
+        if (r.status === 404) return loadLegacyAnalysis(id, controller.signal);
         return Promise.reject(new Error(`HTTP ${r.status}`));
       })
       .then((analysis) => {
+        if (controller.signal.aborted) return;
         setData(analysis.session);
-        setCtx(analysis.context);
+        setSpanSummary(analysis.spanSummary);
+        setContext(analysis.context);
+        setToolWindow(analysis.toolWindow);
+        setSidechainTurnWindow(analysis.sidechainTurnWindow);
         setDiag(analysis.diagnosis);
         setEff(analysis.efficiency);
         setCostAttr(analysis.costAttribution);
@@ -144,8 +260,15 @@ export default function SessionPage() {
         setPerf(analysis.performance);
         setToolParams(analysis.toolParams);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
-      .finally(() => setLoading(false));
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        if (reason instanceof DOMException && reason.name === 'AbortError') return;
+        setError(reason instanceof Error ? reason.message : 'failed');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [id]);
 
   if (loading) return <Empty text="加载会话中…" />;
@@ -155,28 +278,15 @@ export default function SessionPage() {
         <Notice kind="err">{error}</Notice>
       </div>
     );
-  if (!data) return null;
+  if (!data || !spanSummary) return null;
 
   const dur = data.endTime ? data.endTime - data.startTime : 0;
-  const turns = data.spans.filter((s) => s.type === 'llm_turn');
-  const allTools = data.spans.filter((s) => s.type === 'tool_call');
-  const mainTools = allTools.filter((s) => !s.isSidechain);
-  const sidechainSpans = data.spans.filter((s) => s.isSidechain);
-  const sidechainTurns = sidechainSpans.filter((s) => s.type === 'llm_turn');
-  const sidechainTools = sidechainSpans.filter((s) => s.type === 'tool_call');
-  const sidechainTokens = sidechainTurns.reduce(
-    (acc, t) => acc + t.inputTokens + t.cacheCreationTokens + t.cacheReadTokens + t.outputTokens,
-    0,
-  );
-  const sidechainCost = sidechainTurns.reduce((acc, t) => acc + t.cost, 0);
-
-  const toolCounts = new Map<string, number>();
-  for (const t of mainTools) toolCounts.set(t.name, (toolCounts.get(t.name) || 0) + 1);
-  const toolBars = [...toolCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const mainTools = toolWindow.events;
+  const toolBars = spanSummary.toolNames.map(({ name, count }) => [name, count] as const);
   const maxToolCount = toolBars[0]?.[1] || 1;
   const totalTokens =
     data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens + data.outputTokens;
-  const errorToolCount = mainTools.filter((tool) => tool.isError).length;
+  const errorToolCount = spanSummary.observedToolErrors;
   const diagnosisCount = diag?.findings.length ?? 0;
 
   return (
@@ -222,7 +332,7 @@ export default function SessionPage() {
             {data.gitBranch || data.cwd}
           </Chip>
         )}
-        <TagEditor id={id} initialTags={(data as SessionDetail & { tags?: string }).tags || ''} />
+        <TagEditor id={id} initialTags={data.tags || ''} />
         <span style={{ flex: 1 }} />
         <ExportLink href={`${API}/session/${id}/export`} label="JSON" />
         <ExportLink href={`${API}/session/${id}/export?format=csv`} label="CSV" />
@@ -250,10 +360,10 @@ export default function SessionPage() {
         <StatCard label="消息轮数" value={`${data.messageCount}`} />
         <StatCard
           label="工具调用"
-          value={`${mainTools.length}${sidechainTools.length > 0 ? ` +${sidechainTools.length}` : ''}`}
+          value={`${spanSummary.mainToolCalls}${spanSummary.sidechainToolCalls > 0 ? ` +${spanSummary.sidechainToolCalls}` : ''}`}
           tip={
-            sidechainTools.length > 0
-              ? `主链路 ${mainTools.length} 次 + 子 agent ${sidechainTools.length} 次`
+            spanSummary.sidechainToolCalls > 0
+              ? `主链路 ${spanSummary.mainToolCalls} 次 + 子 agent ${spanSummary.sidechainToolCalls} 次`
               : '主链路工具调用次数'
           }
         />
@@ -303,8 +413,8 @@ export default function SessionPage() {
             label: '上下文与成本',
             meta: `峰值 ${fmtTokens(data.peakContextTokens)}`,
           },
-          { id: 'tools', label: '工具与链路', meta: `${mainTools.length} 次调用` },
-          { id: 'evidence', label: '运行证据', meta: `${data.spans.length} 个 Span` },
+          { id: 'tools', label: '工具与链路', meta: `${spanSummary.mainToolCalls} 次调用` },
+          { id: 'evidence', label: '运行证据', meta: `${spanSummary.events} 个 Span` },
         ]}
         onChange={setActiveView}
       />
@@ -375,8 +485,15 @@ export default function SessionPage() {
               title="上下文怎样增长，成本花在哪里"
               description="把上下文曲线、四类 Token 和成本归因放在同一条分析路径里，避免在互不相邻的卡片之间来回对照。"
             />
-            <Card title="上下文窗口增长曲线" meta="窗口上限·内置估算">
-              <ContextChart points={ctx} tools={mainTools} />
+            <Card
+              title="上下文窗口增长曲线"
+              meta={
+                context.isSampled
+                  ? `${context.points.length} / ${context.total} points · 有界采样`
+                  : '窗口上限 · 内置估算'
+              }
+            >
+              <ContextChart points={context.points} tools={mainTools} />
             </Card>
             <Card title="Token 拆解" meta={`合计 ${fmtTokens(totalTokens)}`}>
               <TokenStrip
@@ -428,16 +545,10 @@ export default function SessionPage() {
             <ViewIntro
               eyebrow="执行过程"
               title="工具、参数与子链路放在一起看"
-              description={`主链路 ${mainTools.length} 次调用，其中 ${errorToolCount} 次观察到错误；Sidechain 单独计量，不混入主链路分布。`}
+              description={`主链路 ${spanSummary.mainToolCalls} 次调用，其中 ${errorToolCount} 次观察到错误；Sidechain 单独计量，不混入主链路分布。事件明细通过有界窗口和 Evidence 分页查看。`}
             />
-            {sidechainTurns.length > 0 && (
-              <SidechainSummary
-                turns={sidechainTurns.length}
-                tools={sidechainTools.length}
-                tokens={sidechainTokens}
-                cost={sidechainCost}
-                spans={sidechainSpans}
-              />
+            {spanSummary.sidechain.turns > 0 && (
+              <SidechainSummary summary={spanSummary.sidechain} turnWindow={sidechainTurnWindow} />
             )}
             {eff && <EfficiencyPanel metrics={eff} />}
             {toolParams && (
@@ -473,7 +584,7 @@ export default function SessionPage() {
             <div className="session-card-grid">
               <Card
                 title="工具调用次数"
-                meta={mainTools.length < allTools.length ? '主链路' : undefined}
+                meta={spanSummary.sidechainToolCalls > 0 ? '主链路' : undefined}
                 style={{ marginBottom: 0 }}
               >
                 {toolBars.length === 0 ? (
@@ -486,21 +597,28 @@ export default function SessionPage() {
                       labelWidth={120}
                       ratio={count / maxToolCount}
                       color={CAT_COLOR[catOf(name)] || C.mute}
-                      right={`${count} 次 · ${mainTools.length > 0 ? ((count / mainTools.length) * 100).toFixed(0) : 0}%`}
+                      right={`${count} 次 · ${spanSummary.mainToolCalls > 0 ? ((count / spanSummary.mainToolCalls) * 100).toFixed(0) : 0}%`}
                     />
                   ))
                 )}
               </Card>
               <Card
                 title="工具错误"
-                meta={`${errorToolCount} / ${mainTools.length}`}
+                meta={`${errorToolCount} / ${spanSummary.mainToolCalls}`}
                 style={{ marginBottom: 0 }}
               >
-                <ToolErrors tools={mainTools} />
+                <ToolErrors errors={spanSummary.toolErrors} />
               </Card>
             </div>
-            <Card title="工具调用时间线" meta={`共 ${mainTools.length} 次`}>
-              <ToolTimeline tools={mainTools} />
+            <Card
+              title="工具调用时间线"
+              meta={
+                toolWindow.isWindowed
+                  ? `最近 ${mainTools.length} / ${toolWindow.total} 次`
+                  : `共 ${toolWindow.total} 次`
+              }
+            >
+              <ToolTimeline window={toolWindow} />
             </Card>
           </>
         )}
@@ -513,12 +631,6 @@ export default function SessionPage() {
               description="默认只加载结构化事件和覆盖度；输入、输出、thinking 与 answer 内容仍需主动请求脱敏且有界的预览。"
             />
             <EvidencePanel sessionId={id} />
-            <Card title="每轮 LLM 调用" meta={`${turns.length} 轮`}>
-              <TurnsTable turns={turns} />
-            </Card>
-            <Card title="每次工具调用" meta={`${mainTools.length} 次`}>
-              <ToolsTable tools={mainTools} />
-            </Card>
           </>
         )}
       </section>
@@ -666,7 +778,13 @@ function Note({ color, children }: { color: string; children: React.ReactNode })
   );
 }
 
-function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[] }) {
+function ContextChart({
+  points,
+  tools,
+}: {
+  points: SessionAnalysisContextPoint[];
+  tools: SessionAnalysisToolEvent[];
+}) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -703,7 +821,13 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
   };
 
   // Spike 检测:单轮增量 > 峰值 20% 或 > 20k
-  const spikes: { turnIdx: number; delta: number; tools: Span[]; cx: number; cy: number }[] = [];
+  const spikes: {
+    turnIdx: number;
+    delta: number;
+    tools: SessionAnalysisToolEvent[];
+    cx: number;
+    cy: number;
+  }[] = [];
   for (let i = 1; i < points.length; i++) {
     const delta = points[i].contextTokens - points[i - 1].contextTokens;
     if (delta <= 0) continue;
@@ -725,7 +849,10 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
   }
 
   // 堆叠面积:cr(底) + cc + input(顶),累加 = contextTokens
-  const area = (topFn: (p: ContextPoint) => number, botFn: (p: ContextPoint) => number) => {
+  const area = (
+    topFn: (p: SessionAnalysisContextPoint) => number,
+    botFn: (p: SessionAnalysisContextPoint) => number,
+  ) => {
     let d = '';
     points.forEach((p, i) => {
       d += `${i === 0 ? 'M' : 'L'}${x(i)},${y(topFn(p))} `;
@@ -735,9 +862,9 @@ function ContextChart({ points, tools }: { points: ContextPoint[]; tools: Span[]
     }
     return `${d}Z`;
   };
-  const crTop = (p: ContextPoint) => p.cacheReadTokens;
-  const ccTop = (p: ContextPoint) => p.cacheReadTokens + p.cacheCreationTokens;
-  const inTop = (p: ContextPoint) => p.contextTokens;
+  const crTop = (p: SessionAnalysisContextPoint) => p.cacheReadTokens;
+  const ccTop = (p: SessionAnalysisContextPoint) => p.cacheReadTokens + p.cacheCreationTokens;
+  const inTop = (p: SessionAnalysisContextPoint) => p.contextTokens;
   const zero = () => 0;
   const linePath = points
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.contextTokens)}`)
@@ -984,184 +1111,14 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
-function Pager({
-  page,
-  totalPages,
-  onPage,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-  return (
-    <div
-      style={{
-        display: 'flex',
-        gap: SP.md,
-        alignItems: 'center',
-        marginTop: SP.md,
-        fontSize: FS.sm,
-        color: C.sub,
-        justifyContent: 'center',
-      }}
-    >
-      <SoftButton disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        上一页
-      </SoftButton>
-      <span className="tnum">
-        {page} / {totalPages} 页 · 每页 {TABLE_LIMIT} 行
-      </span>
-      <SoftButton disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
-        下一页
-      </SoftButton>
-    </div>
-  );
-}
-
-const TH: React.CSSProperties = {
-  padding: '7px 10px',
-  fontSize: FS.cap,
-  fontWeight: 500,
-  color: C.sub,
-  textAlign: 'left',
-  boxShadow: `0 1px 0 ${C.border}`,
-  whiteSpace: 'nowrap',
-};
-const TD: React.CSSProperties = {
-  padding: '7px 10px',
-  fontSize: FS.sm,
-  color: C.text,
-  whiteSpace: 'nowrap',
-  boxShadow: `0 1px 0 ${C.borderSoft}`,
-};
-const TD_NUM: React.CSSProperties = {
-  ...TD,
-  textAlign: 'right',
-  fontFamily: 'var(--font-mono)',
-  fontVariantNumeric: 'tabular-nums',
-};
-
-function TurnsTable({ turns }: { turns: Span[] }) {
-  const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(turns.length / TABLE_LIMIT));
-  const shown = turns.slice((page - 1) * TABLE_LIMIT, page * TABLE_LIMIT);
-  return (
-    <div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={TH}>#</th>
-              <th style={TH}>时间</th>
-              <th style={TH}>模型</th>
-              <th style={{ ...TH, textAlign: 'right' }}>耗时</th>
-              <th style={{ ...TH, textAlign: 'right' }}>input</th>
-              <th style={{ ...TH, textAlign: 'right' }}>cache_create</th>
-              <th style={{ ...TH, textAlign: 'right' }}>cache_read</th>
-              <th style={{ ...TH, textAlign: 'right' }}>output</th>
-              <th style={{ ...TH, textAlign: 'right' }}>上下文</th>
-              <th style={TH}>stop</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((t, i) => (
-              <tr key={t.id} className="ap-row">
-                <td style={{ ...TD, color: C.mute }}>{(page - 1) * TABLE_LIMIT + i + 1}</td>
-                <td style={TD_NUM}>{fmtTime(t.startTime)}</td>
-                <td
-                  style={{ ...TD, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  title={t.model || ''}
-                >
-                  {t.model || '-'}
-                </td>
-                <td style={TD_NUM}>{fmtDuration(t.endTime ? t.endTime - t.startTime : 0)}</td>
-                <td style={{ ...TD_NUM, color: C.input }}>{fmtTokens(t.inputTokens)}</td>
-                <td style={{ ...TD_NUM, color: C.cc }}>{fmtTokens(t.cacheCreationTokens)}</td>
-                <td style={{ ...TD_NUM, color: C.cr }}>{fmtTokens(t.cacheReadTokens)}</td>
-                <td style={{ ...TD_NUM, color: C.out }}>{fmtTokens(t.outputTokens)}</td>
-                <td style={{ ...TD_NUM, fontWeight: 600 }}>{fmtTokens(t.contextTokens)}</td>
-                <td style={{ ...TD, color: C.sub }}>{t.stopReason || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Pager page={Math.min(page, totalPages)} totalPages={totalPages} onPage={setPage} />
-    </div>
-  );
-}
-
-function ToolsTable({ tools }: { tools: Span[] }) {
-  const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(tools.length / TABLE_LIMIT));
-  const shown = tools.slice((page - 1) * TABLE_LIMIT, page * TABLE_LIMIT);
-  return (
-    <div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={TH}>#</th>
-              <th style={TH}>工具</th>
-              <th style={TH}>类别</th>
-              <th style={TH}>时间</th>
-              <th style={{ ...TH, textAlign: 'right' }}>耗时</th>
-              <th style={{ ...TH, textAlign: 'right' }}>输出</th>
-              <th style={TH}>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((t, i) => (
-              <tr key={t.id} className="ap-row">
-                <td style={{ ...TD, color: C.mute }}>{(page - 1) * TABLE_LIMIT + i + 1}</td>
-                <td
-                  style={{ ...TD, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  title={t.name}
-                >
-                  {t.name}
-                </td>
-                <td style={TD}>
-                  <Chip color={CAT_COLOR[catOf(t.name)] || C.mute}>{catOf(t.name)}</Chip>
-                </td>
-                <td style={TD_NUM}>{fmtTime(t.startTime)}</td>
-                <td style={TD_NUM}>{fmtDuration(t.endTime ? t.endTime - t.startTime : 0)}</td>
-                <td style={TD_NUM}>{fmtBytes(t.outputBytes)}</td>
-                <td style={TD}>
-                  {t.isError ? (
-                    <Chip color={C.high} tip="工具返回错误">
-                      错误
-                    </Chip>
-                  ) : (
-                    <span style={{ color: C.cr, fontSize: FS.cap }}>✓</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Pager page={Math.min(page, totalPages)} totalPages={totalPages} onPage={setPage} />
-    </div>
-  );
-}
-
 function SidechainSummary({
-  turns,
-  tools,
-  tokens,
-  cost,
-  spans,
+  summary,
+  turnWindow,
 }: {
-  turns: number;
-  tools: number;
-  tokens: number;
-  cost: number;
-  spans: Span[];
+  summary: SessionAnalysisSpanSummary['sidechain'];
+  turnWindow: SessionAnalysis['sidechainTurnWindow'];
 }) {
   const [open, setOpen] = useState(false);
-  const tasks = spans.filter((s) => s.type === 'llm_turn');
-  const taskNames = new Set(tasks.map((t) => t.name).filter(Boolean));
 
   return (
     <Card style={{ boxShadow: `inset 3px 0 0 ${C.cc}, var(--shadow-card)` }}>
@@ -1178,10 +1135,15 @@ function SidechainSummary({
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: FS.title, fontWeight: 600, color: C.text }}>子 agent 调用链</div>
           <div style={{ fontSize: FS.sm, color: C.sub, marginTop: 4 }}>
-            <span className="tnum">{turns}</span> 轮推理 · <span className="tnum">{tools}</span>{' '}
-            次工具调用 · <span className="tnum">{fmtTokens(tokens)}</span> token · 成本{' '}
-            {cost > 0 ? <span className="tnum">¥{cost.toFixed(4)}</span> : '未定价'}
-            {taskNames.size > 0 && ` · 任务: ${[...taskNames].slice(0, 3).join(', ')}`}
+            <span className="tnum">{summary.turns}</span> 轮推理 ·{' '}
+            <span className="tnum">{summary.tools}</span> 次工具调用 ·{' '}
+            <span className="tnum">{fmtTokens(summary.tokens)}</span> token · 成本{' '}
+            {summary.costUnknownCount > 0 ? (
+              '部分未定价'
+            ) : (
+              <span className="tnum">¥{summary.cost.toFixed(4)}</span>
+            )}
+            {summary.taskNames.length > 0 && ` · 任务: ${summary.taskNames.slice(0, 3).join(', ')}`}
           </div>
         </div>
         <span
@@ -1205,28 +1167,31 @@ function SidechainSummary({
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {tasks.slice(0, 20).map((t) => (
+            {turnWindow.events.map((turn) => (
               <div
-                key={t.id}
+                key={turn.id}
                 style={{ fontSize: FS.sm, color: C.sub, display: 'flex', gap: SP.sm }}
               >
                 <span className="tnum" style={{ minWidth: 64, flexShrink: 0, color: C.mute }}>
-                  {fmtTime(t.startTime)}
+                  {fmtTime(turn.startTime)}
                 </span>
                 <span
                   className="clamp1"
-                  title={t.name || t.id}
+                  title={turn.name || turn.id}
                   style={{ color: C.text, minWidth: 0, flex: 1 }}
                 >
-                  {t.name || t.id.slice(0, 12)}
+                  {turn.name || turn.id.slice(0, 12)}
                 </span>
                 <span className="tnum" style={{ flexShrink: 0 }}>
-                  in {fmtTokens(t.inputTokens)} · out {fmtTokens(t.outputTokens)}
+                  in {fmtTokens(turn.inputTokens)} · out {fmtTokens(turn.outputTokens)}
                 </span>
               </div>
             ))}
-            {tasks.length > 20 && (
-              <div style={{ fontSize: FS.cap, color: C.mute }}>… 还有 {tasks.length - 20} 轮</div>
+            {turnWindow.isWindowed && (
+              <div style={{ fontSize: FS.cap, color: C.mute }}>
+                当前显示前 {turnWindow.events.length} / {turnWindow.total} 轮；完整事件请使用
+                Evidence 分页。
+              </div>
             )}
           </div>
         </div>
@@ -1235,31 +1200,21 @@ function SidechainSummary({
   );
 }
 
-function ToolErrors({ tools }: { tools: Span[] }) {
-  const byName = new Map<string, { total: number; errors: number }>();
-  for (const t of tools) {
-    const entry = byName.get(t.name) || { total: 0, errors: 0 };
-    entry.total++;
-    if (t.isError) entry.errors++;
-    byName.set(t.name, entry);
-  }
-  const list = [...byName.entries()]
-    .filter(([, e]) => e.errors > 0)
-    .sort((a, b) => b[1].errors - a[1].errors);
-  if (list.length === 0) return <div style={{ fontSize: FS.sm, color: C.cr }}>✓ 无工具错误</div>;
+function ToolErrors({ errors }: { errors: SessionAnalysisSpanSummary['toolErrors'] }) {
+  if (errors.length === 0) return <div style={{ fontSize: FS.sm, color: C.cr }}>✓ 无工具错误</div>;
 
   return (
     <div>
-      {list.map(([name, e]) => (
+      {errors.map((entry) => (
         <BarRow
-          key={name}
-          label={name}
+          key={entry.name}
+          label={entry.name}
           labelWidth={180}
-          ratio={(e.total - e.errors) / e.total}
+          ratio={(entry.total - entry.errors) / entry.total}
           color={C.cr}
           right={
             <span style={{ color: C.high }}>
-              {e.errors}/{e.total} 错误 ({((e.errors / e.total) * 100).toFixed(0)}%)
+              {entry.errors}/{entry.total} 错误 ({((entry.errors / entry.total) * 100).toFixed(0)}%)
             </span>
           }
         />
@@ -1268,20 +1223,19 @@ function ToolErrors({ tools }: { tools: Span[] }) {
   );
 }
 
-function ToolTimeline({ tools }: { tools: Span[] }) {
-  const [showAll, setShowAll] = useState(false);
-  const displayed = showAll ? tools : tools.slice(-50);
-  if (tools.length === 0) return <Empty text="无工具调用" />;
+function ToolTimeline({ window }: { window: SessionAnalysis['toolWindow'] }) {
+  if (window.total === 0) return <Empty text="无工具调用" />;
+  const sequenceStart = window.total - window.events.length;
 
   return (
     <div>
       <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-        {displayed.map((t, i) => {
-          const dur = t.endTime ? t.endTime - t.startTime : 0;
-          const cat = catOf(t.name);
+        {window.events.map((tool, index) => {
+          const duration = tool.endTime ? tool.endTime - tool.startTime : 0;
+          const category = catOf(tool.name);
           return (
             <div
-              key={t.id}
+              key={tool.id}
               className="ap-row"
               style={{
                 display: 'flex',
@@ -1303,25 +1257,25 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
                   fontSize: FS.cap,
                 }}
               >
-                {showAll || tools.length <= 50 ? i + 1 : tools.length - 50 + i + 1}
+                {sequenceStart + index + 1}
               </span>
               <span
                 className="tnum"
                 style={{ width: 58, color: C.mute, flexShrink: 0, fontSize: FS.cap }}
               >
-                {fmtTime(t.startTime)}
+                {fmtTime(tool.startTime)}
               </span>
               <Chip
-                color={CAT_COLOR[cat] || C.mute}
+                color={CAT_COLOR[category] || C.mute}
                 style={{ width: 62, justifyContent: 'center', flexShrink: 0 }}
               >
-                {cat}
+                {category}
               </Chip>
-              <span className="clamp1" title={t.name} style={{ flex: 1, minWidth: 0 }}>
-                {t.name}
+              <span className="clamp1" title={tool.name} style={{ flex: 1, minWidth: 0 }}>
+                {tool.name}
               </span>
               <span className="tnum" style={{ color: C.sub, flexShrink: 0, fontSize: FS.cap }}>
-                {fmtDuration(dur)}
+                {fmtDuration(duration)}
               </span>
               <span
                 className="tnum"
@@ -1333,9 +1287,9 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
                   fontSize: FS.cap,
                 }}
               >
-                {fmtBytes(t.outputBytes)}
+                {fmtBytes(tool.outputBytes)}
               </span>
-              {t.isError ? (
+              {tool.isError ? (
                 <span style={{ color: C.high, flexShrink: 0 }} title="工具返回错误">
                   ✕
                 </span>
@@ -1346,21 +1300,9 @@ function ToolTimeline({ tools }: { tools: Span[] }) {
           );
         })}
       </div>
-      {tools.length > 50 && !showAll && (
+      {window.isWindowed && (
         <div style={{ textAlign: 'center', marginTop: SP.sm, fontSize: FS.cap, color: C.sub }}>
-          显示最近 50 次(共 {tools.length} 次)·{' '}
-          <button
-            onClick={() => setShowAll(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: C.link,
-              cursor: 'pointer',
-              fontSize: FS.cap,
-            }}
-          >
-            显示全部
-          </button>
+          仅显示最近 {window.events.length} / {window.total} 次；完整工具事件请使用 Evidence 分页。
         </div>
       )}
     </div>

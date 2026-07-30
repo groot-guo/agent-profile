@@ -76,13 +76,13 @@ CLI Runtime 命令的数据库路径优先级依次为 `--database`、`--data-di
 `sources` 会刷新本地来源可用性并输出已存主链 Session 计数，但不会返回本地路径或
 transcript 标识。`sync` 使用与 API 相同的 Runtime 导入服务，等待所选来源进入终态后输出
 逐来源结果。不传 `--source` 时选择全部支持的来源，重复该选项可选择多个来源。它不会启动
-HTTP，但会把派生的本地 Session/Span 数据导入所选数据库；详细 Session/证据查询和
-过程/Profile 报告仍在开发中。
+HTTP，但会把派生的本地 Session/Span 数据导入所选数据库；详细 Session/证据 CLI 查询仍在
+开发中，Web/API 已提供有界详情和证据体验。
 
 `sessions` 返回当前主链 Session 的有界摘要页：默认 20 条、最多 100 条，按开始时间和 ID
 排序。把上一份 JSON 报告中的不透明 `nextCursor` 通过 `--cursor` 传回即可继续翻页。报告不含
-本地路径、transcript 标识、Span metadata 或内容；详细 Session 分析、证据时间线和按需脱敏预览
-仍以 Web/API 为主。
+本地路径、transcript 标识、Span metadata 或内容；详细 Session 分析、cursor 分页证据时间线和
+按需脱敏预览仍以 Web/API 为主。
 
 `stats`、`profiles` 与 `task-profile <id>` 分别输出已经实现的汇总统计、Agent Process
 Profile 和显式 Task Profile。JSON 会保留原报告的指标覆盖度与 limitations。过程证据不能证明
@@ -128,7 +128,8 @@ Token、缓存、耗时排序组合使用。版本化 `session-discovery/v1` 在
 
 有界首页响应不会返回来源 Session 标题、本地路径、transcript 标识、标签/备注，以及
 prompt、reasoning、answer 或工具内容。因此列表只用 Agent、项目和开始时间生成展示标题，
-不读取内容，也不暴露不透明来源标题；Session 详情和兼容 `/api/sessions` 继续保持原合同。
+不读取内容，也不暴露不透明来源标题；Session 页面使用有界 `session-analysis/v1` 摘要和
+cursor 分页的 `session-evidence-page/v1`，兼容全量详情接口与 `/api/sessions` 继续保留。
 项目标签优先使用来源捕获的 `cwd`；没有这项项目证据的 Codex Session 统一显示为
 “Codex 会话记录”。Codex Desktop 为无项目会话生成的非空
 `~/Documents/Codex/YYYY-MM-DD/<session>` 工作目录也归入同一分类；该工作目录和
@@ -170,8 +171,11 @@ cost 当作可移植的计费证据。
   画像得到的建议是待验证假设，不会自动改写提示词。
 - **统计**：查看 Token、成本、上下文，以及项目、Agent、模型的汇总和分布。
 
-会话证据页展示的是所有**已存储并归一化的 Span**，不等同于完整原始 transcript。默认
-不显示内容；主动加载后也只会展示经过脱敏和长度限制的预览。
+会话证据页通过与查询绑定的 `(开始时间, ID)` cursor 可到达所有**已存储并归一化的 Span**，
+但不等同于完整原始 transcript。默认每页 80 条，类型、主链/Sidechain 和结果筛选在服务端
+执行，同时返回完整 Session 的覆盖度及匹配数/总数。默认不显示内容；主动加载时只读取当前
+页字段，并展示经过密钥遮蔽、每字段最多 500 字符的预览。详情概览保留完整聚合语义，但上下文、
+工具和 Sidechain 明细分别采用采样或有界窗口，不再把完整 Span 数组保存在浏览器中。
 
 Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`、缺少正常运行
 上下文，且工具过程只是文本包装，会被标记为不可分析并排除。这类记录的项目和工具证据

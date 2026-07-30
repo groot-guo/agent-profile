@@ -101,8 +101,8 @@ selected database.
 default and at most 100 records, ordered by start time and ID. Pass the prior
 JSON report's opaque `nextCursor` through `--cursor` to continue. Its report
 omits Session names, local paths, transcript identifiers, Span metadata, and
-content. Detailed Session analysis, evidence timelines, and opt-in redacted
-previews remain in the Web/API.
+content. Detailed Session analysis, cursor-paged evidence timelines, and opt-in
+redacted previews remain in the Web/API.
 
 `stats`, `profiles`, and `task-profile <id>` expose the already implemented
 aggregate statistics, Agent Process Profile, and explicit Task Profile reports.
@@ -163,8 +163,9 @@ Session is opened or the browser goes back.
 The bounded Home response deliberately omits source Session names, local paths,
 transcript identifiers, annotations, and prompt/reasoning/answer/tool content.
 Rows therefore use a display-only Agent/project/start-time title instead of
-inspecting content or exposing an opaque source title. Detailed Session surfaces
-and the compatibility `/api/sessions` route retain their existing contracts.
+inspecting content or exposing an opaque source title. The Session page uses the
+bounded `session-analysis/v1` summary and cursor-paged `session-evidence-page/v1`
+contracts; compatibility full-detail routes and `/api/sessions` remain available.
 Project labels prefer captured `cwd`. Codex Sessions without that evidence are
 grouped as **Codex 会话记录**. Codex Desktop Sessions whose non-empty `cwd` is a
 generated `~/Documents/Codex/YYYY-MM-DD/<session>` workspace use the same group;
@@ -214,9 +215,14 @@ process metrics.
 - **统计** — inspect aggregate token, cost, context, project, Agent, and model
   distributions.
 
-The Session evidence view contains every *stored normalized Span*, not every
-line of the original transcript. Content previews are off by default; when
-requested, previews are redacted and bounded.
+The Session evidence view can reach every *stored normalized Span* through a
+query-bound `(start time, ID)` cursor, but it is not every line of the original
+transcript. It loads 80 events by default, supports server-side type/lane/outcome
+filters, and reports full-Session coverage plus matched/total counts. Content
+previews are off by default; when requested, only the current page's fields are
+loaded, redacted, and bounded to 500 characters each. The overview uses complete
+aggregates with sampled/windowed context, tool, and sidechain displays rather
+than retaining the complete Span array in the browser.
 
 Codex Desktop external-history materializations are excluded when they contain
 `external-import-turn-*` records without normal runtime context and only
@@ -317,9 +323,10 @@ pnpm dev
 - The workspace `agent-profile` CLI package and source binary supports `help`,
   `version`, `doctor`, `sources`, `sync`, and bounded `sessions`; it is not yet
   a published release or desktop application. It also exposes existing `stats`,
-  `profiles`, and `task-profile <id>` reports. Detailed Session/evidence views
-  and `serve` remain in active development, while `pnpm start` remains the
-  supported non-watch Web launcher.
+  `profiles`, and `task-profile <id>` reports. Detailed Session/evidence CLI
+  commands and `serve` remain in active development, while the Web/API provide
+  the bounded detail/evidence experience and `pnpm start` remains the supported
+  non-watch Web launcher.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
   local foundations. Automated cohort statistics, regression detection,
   causal experiment conclusions, and Runtime feedback/SDK integration are not

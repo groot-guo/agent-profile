@@ -121,8 +121,43 @@ Session Spans:
 Migration v6 adds `sessions(start_time DESC, id DESC)`,
 `sessions(agent, start_time DESC, id DESC)`, and
 `sessions(project_key, start_time DESC, id DESC)`. The representative default
-discovery query uses the first index. T84 still owns the remaining Session-Span
-ordering and complete detail/evidence loading boundary.
+discovery query uses the first index.
+
+## Measured T84 bounded-detail result
+
+The final T84 run on 2026-07-30 used the same Node v24.18.0 / Darwin arm64
+fixture and passed every budget. Compatibility full-detail endpoints remain in
+the benchmark, while the Web-facing analysis summary and first evidence page are
+measured as separate bounded contracts.
+
+| Workload | Median time | Response size |
+| --- | ---: | ---: |
+| compatibility `GET /api/session/:id/analysis` | 165.3 ms | 1,882,040 bytes |
+| `GET /api/session/:id/analysis-summary` | 135.1 ms | 222,469 bytes |
+| compatibility `GET /api/session/:id/evidence?content=none` | 12.5 ms | 1,627,750 bytes |
+| `GET /api/session/:id/evidence-page` | 5.0 ms | 45,268 bytes |
+
+The analysis summary still validates all 3,000 fixture events through its
+complete aggregates, but returns no complete Span array: context is capped at
+240 points and the main-chain tool window at 50 events. The evidence page still
+reports the complete 3,000-event scope while returning the default 80-event
+window. On this fixture the bounded responses are about 88% and 97% smaller than
+their compatibility counterparts. The synthetic database was 26,787,840 bytes
+and whole-process maximum RSS was 310,034,432 bytes; as with earlier runs, this
+is a combined process high-water mark rather than endpoint-retained memory.
+
+Migration v7 adds `spans(session_id, start_time, id)`. The current Session-Span
+query plan is:
+
+```text
+Session Spans:
+  SEARCH spans USING COVERING INDEX idx_spans_session_time_id (session_id=?)
+```
+
+The evidence page uses that order for its `(start_time, id)` keyset cursor. The
+default no-content query derives content availability/truncation flags in SQLite
+without selecting metadata text into Node; opt-in preview loads only the current
+page's relevant fields.
 
 ## Desktop regression budgets
 
@@ -135,7 +170,9 @@ ordering and complete detail/evidence loading boundary.
 | Stats median / response | 2,000 ms / 750,000 bytes |
 | Home statistics median / response | 500 ms / 100,000 bytes |
 | Analysis median / response | 4,000 ms / 5,000,000 bytes |
+| Analysis summary median / response | 4,000 ms / 500,000 bytes |
 | Evidence median / response | 2,000 ms / 4,000,000 bytes |
+| Evidence page median / response | 500 ms / 250,000 bytes |
 
 These intentionally generous guards cover slower developer/CI machines while
 still detecting order-of-magnitude latency changes, accidental response
@@ -157,6 +194,7 @@ response must state whether evidence became windowed or paged.
   temporary allocation, SQLite/native memory, and V8 retained heap.
 - The timing guard is intentionally desktop-oriented and should be compared by
   workload and report schema, not used to rank machines or Agents.
-- T83's bounded Session discovery/statistics workloads are now part of the
-  benchmark. T84 owns bounded detail and evidence retrieval; T85 owns
-  source-safe append-only JSONL import.
+- T83's bounded Session discovery/statistics and T84's bounded detail/evidence
+  workloads are now part of the benchmark. Compatibility full-array/full-detail
+  routes remain regression baselines. T85 owns source-safe append-only JSONL
+  import.

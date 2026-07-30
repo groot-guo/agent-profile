@@ -190,7 +190,7 @@ export function collectQueryPlans(
     sessionSpans: planDetails(
       database
         .prepare(
-          'EXPLAIN QUERY PLAN SELECT id, start_time FROM spans WHERE session_id = ? ORDER BY start_time ASC',
+          'EXPLAIN QUERY PLAN SELECT id, start_time FROM spans WHERE session_id = ? ORDER BY start_time ASC, id ASC',
         )
         .all(sessionId),
     ),

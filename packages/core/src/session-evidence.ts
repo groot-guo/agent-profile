@@ -1,6 +1,7 @@
 import type { SessionSummary, Span, SpanType } from './types';
 
 export const SESSION_EVIDENCE_SCHEMA_VERSION = 'session-evidence/v1' as const;
+export const SESSION_EVIDENCE_PAGE_SCHEMA_VERSION = 'session-evidence-page/v1' as const;
 export const MAX_EVIDENCE_PREVIEW_CHARACTERS = 500;
 
 export type EvidenceContentMode = 'none' | 'preview';
@@ -83,6 +84,45 @@ export interface SessionEvidenceReport {
     secretRedaction: true;
     rawContentIncluded: false;
   };
+  events: SessionEvidenceEvent[];
+  limitations: string[];
+}
+
+export type EvidenceTypeFilter = 'all' | SpanType;
+export type EvidenceLaneFilter = 'all' | EvidenceLane;
+export type EvidenceOutcomeFilter = 'all' | EvidenceOutcome;
+
+export interface SessionEvidencePage {
+  schemaVersion: typeof SESSION_EVIDENCE_PAGE_SCHEMA_VERSION;
+  generatedAt: number;
+  session: {
+    id: string;
+    name: string | null;
+    agent: string;
+    startTime: number;
+    endTime: number | null;
+  };
+  query: {
+    content: EvidenceContentMode;
+    type: EvidenceTypeFilter;
+    lane: EvidenceLaneFilter;
+    outcome: EvidenceOutcomeFilter;
+  };
+  counts: {
+    matched: number;
+    total: number;
+  };
+  page: {
+    limit: number;
+    returned: number;
+    hasMore: boolean;
+    nextCursor: string | null;
+    startSequence: number | null;
+    endSequence: number | null;
+  };
+  scope: SessionEvidenceReport['scope'];
+  coverage: SessionEvidenceReport['coverage'];
+  privacy: SessionEvidenceReport['privacy'];
   events: SessionEvidenceEvent[];
   limitations: string[];
 }
@@ -230,7 +270,7 @@ function contentFields(span: Span, mode: EvidenceContentMode): EvidenceContentFi
     return {
       name,
       status: available ? 'available' : 'not_captured',
-      ...(available && mode === 'preview' ? { preview: preview(value) } : {}),
+      ...(available && mode === 'preview' ? { preview: redactEvidencePreview(value) } : {}),
       sourceTruncated: available && /\[truncated \d+ chars\]/i.test(value),
     };
   });
@@ -246,7 +286,7 @@ function storedText(value: unknown): string | null {
   }
 }
 
-function preview(value: string): string {
+export function redactEvidencePreview(value: string): string {
   const redacted = value
     .replace(
       /\b(api[_-]?key|access[_-]?token|token|password|passwd|secret)\s*[:=：]\s*["']?[^,\s"']+/gi,

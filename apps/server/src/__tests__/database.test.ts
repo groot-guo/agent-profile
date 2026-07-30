@@ -101,6 +101,7 @@ describe('database migrations', () => {
       { version: 4, name: 'agent_column' },
       { version: 5, name: 'task_outcome_experiments' },
       { version: 6, name: 'bounded_session_discovery' },
+      { version: 7, name: 'bounded_session_evidence' },
     ]);
 
     const legacySession = database
@@ -135,7 +136,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(6);
+    expect(count.count).toBe(7);
     database.close();
   });
 
@@ -158,6 +159,17 @@ describe('database migrations', () => {
       'idx_sessions_discovery_project_time',
       'idx_sessions_discovery_time',
     ]);
+    database.close();
+  });
+
+  it('creates the stable Session evidence ordering index', () => {
+    const database = createLegacyDatabase();
+    applyMigrations(database);
+
+    const index = database
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?")
+      .get('idx_spans_session_time_id') as { sql: string } | undefined;
+    expect(index?.sql).toContain('spans(session_id, start_time, id)');
     database.close();
   });
 

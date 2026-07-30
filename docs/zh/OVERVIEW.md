@@ -59,7 +59,7 @@ Runtime 导入服务，等待所选来源完成并输出终态结果。两者不
 transcript 标识。
 `sessions` 通过同一查询服务读取当前主链 Session 的安全摘要页，默认 20 条、最多 100 条，
 按开始时间和 ID 排序，并使用不透明 cursor 继续翻页；它不返回本地路径、transcript 标识、
-Span metadata 或内容。详细 Session 分析和证据时间线仍以 Web/API 为主。
+Span metadata 或内容。详细 Session 分析和 cursor 分页证据时间线仍以 Web/API 为主。
 `stats`、`profiles` 与 `task-profile <id>` 只读取已有的汇总统计、Agent Process Profile
 和 Task Profile，并保留覆盖度与 limitations；不新增指标公式、Outcome 结论或配置质量判断。
 
@@ -127,8 +127,12 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - Session 详情固定展示身份、Token 指纹和主要 KPI，再拆分为“概览”“上下文与成本”
   “工具与链路”“运行证据”四个视图，避免把所有分析卡片一次性纵向堆叠。
 - 查看 LLM 回合、工具调用与参数、上下文增长、耗时、子 Agent、Git commit 和成本归因。
-- 通过 `session-evidence/v1` 查看全部已归一化 Span 的统一时间线、父级/Sidechain
-  关系、保守结果状态和字段覆盖度，并按类型、链路、错误筛选。
+- Session 首屏使用 `session-analysis/v1`：完整分析、诊断、评分和工具/Sidechain 聚合
+  保持全 Session 语义，但上下文最多 240 点、最近主链工具最多 50 条、Sidechain 回合最多
+  20 条，并明确标记采样或窗口范围。
+- 通过 `session-evidence-page/v1` 按 `(开始时间, ID)` cursor 查看全部已归一化 Span；
+  默认每页 80 条、最多 200 条，类型、链路和结果筛选在服务端执行，父级链接、全局序号、
+  覆盖度及匹配数/总数仍按完整 Session 计算。`session-evidence/v1` 作为兼容全量合同保留。
 - 使用确定性启发式规则诊断重复读取、大输出、低缓存命中、上下文膨胀、长 thinking、
   重复失败和读取范围过大。
 - 在配置 Anthropic-native 或 OpenAI-compatible API 后执行可选的 LLM 语义诊断；
@@ -182,9 +186,10 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 提示词审查只使用本地确定性启发式，不调用语义模型、不写入数据库，也不返回总分。
   原文证据默认关闭；主动开启时，每项最多返回两段经过密钥遮蔽、长度受限的片段。
   结构命中与运行画像的相关性不是因果结论，最终必须由同类 Task Outcome 验证。
-- Session 证据默认不返回工具输入/输出、thinking 或 answer 文本；主动加载预览时才会
-  进行常见密钥遮蔽并限制为每字段 500 字符。时间线覆盖全部已存储 Span，但由于各来源
-  尚未统一生成用户消息 Span，它不是完整原始对话。“未观察到错误”也不等于已验证成功。
+- Session 证据默认不返回工具输入/输出、thinking 或 answer 文本，也不会把 metadata 文本
+  读入 Node；主动加载预览时只读取当前页相关字段，进行常见密钥遮蔽并限制为每字段 500
+  字符。cursor 可到达全部已存储 Span，但由于各来源尚未统一生成用户消息 Span，它不是
+  完整原始对话。“未观察到错误”也不等于已验证成功。
 
 ## 当前与未来
 

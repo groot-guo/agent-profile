@@ -211,6 +211,16 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 7,
+    name: 'bounded_session_evidence',
+    up(database) {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_spans_session_time_id
+          ON spans(session_id, start_time, id);
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -281,6 +291,7 @@ function createBaseSchema(database: DatabaseConnection): void {
 
     CREATE INDEX IF NOT EXISTS idx_spans_session ON spans(session_id);
     CREATE INDEX IF NOT EXISTS idx_spans_parent ON spans(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_spans_session_time_id ON spans(session_id, start_time, id);
 
     CREATE TABLE IF NOT EXISTS pricing (
       model                  TEXT NOT NULL,

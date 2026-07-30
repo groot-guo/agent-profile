@@ -39,7 +39,14 @@ interface BenchmarkReport {
     unchanged: number;
   };
   endpoints: Record<
-    'sessions' | 'sessionDiscovery' | 'stats' | 'homeStatistics' | 'analysis' | 'evidence',
+    | 'sessions'
+    | 'sessionDiscovery'
+    | 'stats'
+    | 'homeStatistics'
+    | 'analysis'
+    | 'analysisSummary'
+    | 'evidence'
+    | 'evidencePage',
     EndpointMeasurement
   >;
   process: { startMaxRssBytes: number; finalMaxRssBytes: number; growthBytes: number };
@@ -57,7 +64,9 @@ const DESKTOP_BUDGETS = {
     stats: { medianMs: 2_000, responseBytes: 750_000 },
     homeStatistics: { medianMs: 500, responseBytes: 100_000 },
     analysis: { medianMs: 4_000, responseBytes: 5_000_000 },
+    analysisSummary: { medianMs: 4_000, responseBytes: 500_000 },
     evidence: { medianMs: 2_000, responseBytes: 4_000_000 },
+    evidencePage: { medianMs: 500, responseBytes: 250_000 },
   } satisfies Record<string, EndpointBudget>,
 };
 
@@ -120,12 +129,40 @@ try {
         }
       },
     ),
+    analysisSummary: await measureEndpoint(
+      app,
+      `/api/session/${fixture.largestSessionId}/analysis-summary`,
+      (body) => {
+        if (
+          analysisSummarySpanCount(body) !== fixture.largeSessionSpans ||
+          analysisSummaryWindowSize(body, 'toolWindow') > 50 ||
+          analysisContextPointCount(body) > 240 ||
+          analysisSpanCount(body) !== null
+        ) {
+          throw new Error('Analysis summary response is incomplete or unbounded');
+        }
+      },
+    ),
     evidence: await measureEndpoint(
       app,
       `/api/session/${fixture.largestSessionId}/evidence?content=none`,
       (body) => {
         if (evidenceEventCount(body) !== fixture.largeSessionSpans) {
           throw new Error('Evidence response does not cover the largest fixture Session');
+        }
+      },
+    ),
+    evidencePage: await measureEndpoint(
+      app,
+      `/api/session/${fixture.largestSessionId}/evidence-page`,
+      (body) => {
+        if (
+          evidenceEventCount(body) !== fixture.largeSessionSpans ||
+          evidencePageEventCount(body) !== 80
+        ) {
+          throw new Error(
+            'Evidence page response does not preserve total scope and bounded window',
+          );
         }
       },
     ),
@@ -274,6 +311,36 @@ function evidenceEventCount(body: unknown): number | null {
   if (!scope || typeof scope !== 'object') return null;
   const events = (scope as { events?: unknown }).events;
   return typeof events === 'number' ? events : null;
+}
+
+function analysisSummarySpanCount(body: unknown): number | null {
+  if (!body || typeof body !== 'object') return null;
+  const summary = (body as { spanSummary?: unknown }).spanSummary;
+  if (!summary || typeof summary !== 'object') return null;
+  const events = (summary as { events?: unknown }).events;
+  return typeof events === 'number' ? events : null;
+}
+
+function analysisSummaryWindowSize(body: unknown, key: 'toolWindow'): number {
+  if (!body || typeof body !== 'object') return Number.POSITIVE_INFINITY;
+  const window = (body as Record<string, unknown>)[key];
+  if (!window || typeof window !== 'object') return Number.POSITIVE_INFINITY;
+  const events = (window as { events?: unknown }).events;
+  return Array.isArray(events) ? events.length : Number.POSITIVE_INFINITY;
+}
+
+function analysisContextPointCount(body: unknown): number {
+  if (!body || typeof body !== 'object') return Number.POSITIVE_INFINITY;
+  const context = (body as { context?: unknown }).context;
+  if (!context || typeof context !== 'object') return Number.POSITIVE_INFINITY;
+  const points = (context as { points?: unknown }).points;
+  return Array.isArray(points) ? points.length : Number.POSITIVE_INFINITY;
+}
+
+function evidencePageEventCount(body: unknown): number | null {
+  if (!body || typeof body !== 'object') return null;
+  const events = (body as { events?: unknown }).events;
+  return Array.isArray(events) ? events.length : null;
 }
 
 function databaseFileBytes(path: string): number {

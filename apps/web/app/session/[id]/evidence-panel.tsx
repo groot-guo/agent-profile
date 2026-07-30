@@ -3,70 +3,97 @@
 import type {
   CoverageStatus,
   EvidenceCoverage,
-  EvidenceLane,
-  EvidenceOutcome,
+  EvidenceLaneFilter,
+  EvidenceOutcomeFilter,
+  EvidenceTypeFilter,
   SessionEvidenceEvent,
-  SessionEvidenceReport,
+  SessionEvidencePage,
   SpanType,
 } from '@agent-profile/core';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
 import { C, FS, fmtBytes, fmtDuration, fmtTime, fmtTokens, R, SP } from '../../theme';
 import { Card, Chip, Empty, Notice } from '../../ui';
-
-const EVENT_BATCH = 80;
-
-type TypeFilter = 'all' | SpanType;
-type LaneFilter = 'all' | EvidenceLane;
-type OutcomeFilter = 'all' | EvidenceOutcome;
+import { type EvidencePageFilters, evidencePageUrl, mergeEvidenceEvents } from './evidence-data';
 
 export function EvidencePanel({ sessionId }: { sessionId: string }) {
-  const [report, setReport] = useState<SessionEvidenceReport | null>(null);
+  const [report, setReport] = useState<SessionEvidencePage | null>(null);
+  const [events, setEvents] = useState<SessionEvidenceEvent[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [laneFilter, setLaneFilter] = useState<LaneFilter>('all');
-  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
-  const [visible, setVisible] = useState(EVENT_BATCH);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [contentMode, setContentMode] = useState<EvidencePageFilters['content']>('none');
+  const [typeFilter, setTypeFilter] = useState<EvidenceTypeFilter>('all');
+  const [laneFilter, setLaneFilter] = useState<EvidenceLaneFilter>('all');
+  const [outcomeFilter, setOutcomeFilter] = useState<EvidenceOutcomeFilter>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const loadMoreControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    void load('none');
-  }, [sessionId]);
-
-  async function load(content: 'none' | 'preview') {
+    const controller = new AbortController();
+    loadMoreControllerRef.current?.abort();
+    loadMoreControllerRef.current = null;
+    setLoadingMore(false);
     setLoading(true);
     setError('');
+    setReport(null);
+    setEvents([]);
+    setExpanded(new Set());
+    void fetchEvidencePage(
+      sessionId,
+      { content: contentMode, type: typeFilter, lane: laneFilter, outcome: outcomeFilter },
+      undefined,
+      controller.signal,
+    )
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        setReport(next);
+        setEvents(next.events);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        if (reason instanceof DOMException && reason.name === 'AbortError') return;
+        setError(reason instanceof Error ? reason.message : '证据时间线加载失败');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => {
+      controller.abort();
+      loadMoreControllerRef.current?.abort();
+      loadMoreControllerRef.current = null;
+    };
+  }, [contentMode, laneFilter, outcomeFilter, sessionId, typeFilter]);
+
+  async function loadMore(): Promise<void> {
+    if (!report?.page.nextCursor || loadingMore) return;
+    const controller = new AbortController();
+    loadMoreControllerRef.current = controller;
+    setLoadingMore(true);
+    setError('');
     try {
-      const response = await fetch(
-        `${API}/session/${encodeURIComponent(sessionId)}/evidence?content=${content}`,
+      const next = await fetchEvidencePage(
+        sessionId,
+        { content: contentMode, type: typeFilter, lane: laneFilter, outcome: outcomeFilter },
+        report.page.nextCursor,
+        controller.signal,
       );
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      setReport((await response.json()) as SessionEvidenceReport);
-    } catch (reason) {
+      if (controller.signal.aborted) return;
+      setReport(next);
+      setEvents((current) => mergeEvidenceEvents(current, next.events));
+    } catch (reason: unknown) {
+      if (controller.signal.aborted) return;
+      if (reason instanceof DOMException && reason.name === 'AbortError') return;
       setError(reason instanceof Error ? reason.message : '证据时间线加载失败');
     } finally {
-      setLoading(false);
+      if (loadMoreControllerRef.current === controller) {
+        loadMoreControllerRef.current = null;
+        setLoadingMore(false);
+      }
     }
   }
 
-  const filtered = useMemo(
-    () =>
-      (report?.events ?? []).filter(
-        (event) =>
-          (typeFilter === 'all' || event.type === typeFilter) &&
-          (laneFilter === 'all' || event.lane === laneFilter) &&
-          (outcomeFilter === 'all' || event.outcome === outcomeFilter),
-      ),
-    [report, typeFilter, laneFilter, outcomeFilter],
-  );
-
-  function updateFilter(setter: (value: string) => void, value: string) {
-    setter(value);
-    setVisible(EVENT_BATCH);
-  }
-
-  function toggleEvent(id: string) {
+  function toggleEvent(id: string): void {
     setExpanded((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -75,7 +102,7 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
     });
   }
 
-  if (error) {
+  if (error && !report) {
     return (
       <Card title="规范化运行证据">
         <Notice kind="info">
@@ -87,16 +114,17 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
   if (!report) {
     return (
       <Card title="规范化运行证据">
-        <Empty text="正在组织完整的 Span 时间线…" />
+        <Empty text="正在加载有界证据窗口…" />
       </Card>
     );
   }
 
-  const showingPreviews = report.privacy.contentMode === 'preview';
+  const showingPreviews = contentMode === 'preview';
+  const remaining = Math.max(0, report.counts.matched - events.length);
   return (
     <Card
       title="规范化运行证据"
-      meta={`${report.scope.events} events · ${report.schemaVersion}`}
+      meta={`${report.counts.matched} / ${report.counts.total} events · ${report.schemaVersion}`}
       style={{ boxShadow: `inset 3px 0 0 ${C.link}, var(--shadow-card)` }}
     >
       <div
@@ -110,14 +138,15 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
         }}
       >
         <div style={{ maxWidth: 700, color: C.sub, fontSize: FS.sm, lineHeight: 1.65 }}>
-          这里按时间展示数据库中的全部规范化 Span，不等同于完整原始对话：当前各来源并未统一采集
-          用户消息和所有 Runtime 事件。缺失表示“未采集”，工具未标错只表示“未观察到错误”。
+          这里按稳定 cursor 分页展示数据库中的规范化 Span。覆盖度描述完整
+          Session，事件列表只是当前筛选下已加载的窗口；
+          可持续加载直到到达全部匹配事件。缺失表示“未采集”，工具未标错只表示“未观察到错误”。
         </div>
         <button
           type="button"
           className="ap-btn"
           disabled={loading}
-          onClick={() => void load(showingPreviews ? 'none' : 'preview')}
+          onClick={() => setContentMode(showingPreviews ? 'none' : 'preview')}
           style={{
             border: `1px solid ${showingPreviews ? C.high : C.border}`,
             borderRadius: R.md,
@@ -148,7 +177,7 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
         <FilterSelect
           label="事件"
           value={typeFilter}
-          onChange={(value) => updateFilter((next) => setTypeFilter(next as TypeFilter), value)}
+          onChange={(value) => setTypeFilter(value as EvidenceTypeFilter)}
           options={[
             ['all', '全部类型'],
             ['llm_turn', 'LLM 回合'],
@@ -160,7 +189,7 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
         <FilterSelect
           label="链路"
           value={laneFilter}
-          onChange={(value) => updateFilter((next) => setLaneFilter(next as LaneFilter), value)}
+          onChange={(value) => setLaneFilter(value as EvidenceLaneFilter)}
           options={[
             ['all', '主链 + Sidechain'],
             ['main', '主链'],
@@ -170,9 +199,7 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
         <FilterSelect
           label="状态"
           value={outcomeFilter}
-          onChange={(value) =>
-            updateFilter((next) => setOutcomeFilter(next as OutcomeFilter), value)
-          }
+          onChange={(value) => setOutcomeFilter(value as EvidenceOutcomeFilter)}
           options={[
             ['all', '全部状态'],
             ['observed_error', '观察到错误'],
@@ -181,15 +208,20 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
           ]}
         />
         <span className="tnum" style={{ marginLeft: 'auto', color: C.mute, fontSize: FS.cap }}>
-          {filtered.length} / {report.scope.events}
+          已加载 {events.length} / 匹配 {report.counts.matched} / 全部 {report.counts.total}
         </span>
       </div>
 
-      {filtered.length === 0 ? (
+      {error && (
+        <div style={{ marginTop: SP.sm }}>
+          <Notice kind="info">继续加载失败：{error}</Notice>
+        </div>
+      )}
+      {events.length === 0 ? (
         <Empty text="当前筛选条件下没有事件" />
       ) : (
         <div style={{ marginTop: SP.sm }}>
-          {filtered.slice(0, visible).map((event) => (
+          {events.map((event) => (
             <EvidenceRow
               key={event.id}
               event={event}
@@ -197,20 +229,21 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
               onToggle={() => toggleEvent(event.id)}
             />
           ))}
-          {visible < filtered.length && (
+          {report.page.hasMore && report.page.nextCursor && (
             <div style={{ textAlign: 'center', marginTop: SP.md }}>
               <button
                 type="button"
-                onClick={() => setVisible((current) => current + EVENT_BATCH)}
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
                 style={{
                   border: 0,
                   background: 'transparent',
                   color: C.link,
-                  cursor: 'pointer',
+                  cursor: loadingMore ? 'wait' : 'pointer',
                   fontSize: FS.sm,
                 }}
               >
-                再显示 {Math.min(EVENT_BATCH, filtered.length - visible)} 条
+                {loadingMore ? '加载中…' : `继续加载 ${Math.min(report.page.limit, remaining)} 条`}
               </button>
             </div>
           )}
@@ -220,7 +253,18 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
   );
 }
 
-function CoverageGrid({ report }: { report: SessionEvidenceReport }) {
+async function fetchEvidencePage(
+  sessionId: string,
+  filters: EvidencePageFilters,
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<SessionEvidencePage> {
+  const response = await fetch(evidencePageUrl(API, sessionId, filters, cursor), { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as SessionEvidencePage;
+}
+
+function CoverageGrid({ report }: { report: SessionEvidencePage }) {
   const items: Array<[string, EvidenceCoverage]> = [
     ['结束时间', report.coverage.timing],
     ['父级关联', report.coverage.parentLinks],

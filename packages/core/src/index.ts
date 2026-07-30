@@ -84,6 +84,18 @@ export {
 } from './scanners/transcript';
 export type { ZedThreadMeta } from './scanners/zed';
 export { hasZedThreadsDb, zedThreadsDbPath } from './scanners/zed';
+export {
+  buildSessionAnalysisWindows,
+  MAX_ANALYSIS_CONTEXT_POINTS,
+  MAX_ANALYSIS_SIDECHAIN_TURNS,
+  MAX_ANALYSIS_TOOL_EVENTS,
+  SESSION_ANALYSIS_SCHEMA_VERSION,
+  type SessionAnalysisContextPoint,
+  type SessionAnalysisSpanSummary,
+  type SessionAnalysisToolEvent,
+  type SessionAnalysisTurnEvent,
+  type SessionAnalysisWindows,
+} from './session-analysis';
 export type {
   CoverageStatus,
   EvidenceContentField,
@@ -91,14 +103,20 @@ export type {
   EvidenceCoverage,
   EvidenceFieldStatus,
   EvidenceLane,
+  EvidenceLaneFilter,
   EvidenceOutcome,
+  EvidenceOutcomeFilter,
+  EvidenceTypeFilter,
   ParentLinkStatus,
   SessionEvidenceEvent,
+  SessionEvidencePage,
   SessionEvidenceReport,
 } from './session-evidence';
 export {
   buildSessionEvidenceReport,
   MAX_EVIDENCE_PREVIEW_CHARACTERS,
+  redactEvidencePreview,
+  SESSION_EVIDENCE_PAGE_SCHEMA_VERSION,
   SESSION_EVIDENCE_SCHEMA_VERSION,
 } from './session-evidence';
 export {

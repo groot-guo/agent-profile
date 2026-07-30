@@ -231,11 +231,23 @@ set-based queries instead of loading all Session rows into JavaScript. The
 legacy `/api/sessions` full-array route remains available for compatibility and
 is still measured as a regression baseline.
 
-Session detail analysis and evidence reports still load the complete stored
-Span set for the selected Session; the analysis endpoint also loads all stored
-Spans for the selected Session's project when calculating the current
-project-relative score. These remain T84 scale boundaries rather than
-large-history guarantees.
+The Session page now starts from `session-analysis/v1`, which retains complete
+diagnosis, score, and aggregate semantics without returning the complete Span
+array. Context is sampled to at most 240 points while retaining the first, last,
+and peak observations; the main-chain tool timeline contains the most recent 50
+events, and the Sidechain turn window contains at most 20 events. Project-relative
+scoring still evaluates every comparable Session, but it loads and releases one
+Session's Spans at a time instead of retaining the complete project cohort in a
+single map. Related Git lookup uses asynchronous `git log`, so it no longer blocks
+the Node event loop.
+
+The evidence view uses `session-evidence-page/v1`, a query-bound `(start_time,
+id)` keyset cursor with a default of 80 and maximum of 200 events. Filtering and
+full-Session coverage/count aggregation execute in SQLite. No-content pages do
+not load metadata text into Node; preview pages read only the selected window's
+relevant fields. The compatibility `/api/session/:id/analysis`,
+`/api/session/:id/evidence`, export, report, and other focused routes retain
+their complete-Span behavior and remain explicit full-detail/export surfaces.
 
 The source import coordinator discovers all source items but skips an unchanged
 item before loading/parsing it. When a source revision changes, the complete
@@ -243,15 +255,15 @@ normalized Session is parsed and atomically replaces its stored Spans. This
 preserves revision and annotation guarantees, but transcript append-only parsing
 is not implemented.
 
-The reproducible T82/T83 benchmark in `docs/performance.md` fixes a content-free
+The reproducible T82–T84 benchmark in `docs/performance.md` fixes a content-free
 desktop workload at 500 Sessions, 75,000 Spans, one 3,000-Span detail Session,
 and a 24,600-Span project cohort. It measures the current full-list, stats,
-bounded discovery/Home statistics, analysis, no-content evidence,
+bounded discovery/Home statistics, compatibility analysis/evidence, bounded
+analysis summary/evidence page,
 unchanged-revision, query-plan, response-size, and process high-water paths
 through the normal implementation. Its budgets are generous regression guards
-rather than product SLOs. T84–T85 own bounded
-read/render contracts and source-safe incremental-import work; they must not
-change metric, privacy, coverage, or atomic-replacement semantics merely to
+rather than product SLOs. T85 owns source-safe incremental-import work; it must
+not change metric, privacy, coverage, or atomic-replacement semantics merely to
 improve throughput.
 
 ## Current data sources
@@ -358,6 +370,11 @@ project+time discovery indexes. New and replaced Sessions write the same key in
 the existing atomic repository path; the migration does not rewrite source
 `cwd` or file-path evidence.
 
+Migration v7 (`bounded_session_evidence`) adds
+`idx_spans_session_time_id` on `spans(session_id, start_time, id)`. Existing
+rows need no data backfill: the index provides stable keyset order for bounded
+evidence pages while the stored Session/Span model remains unchanged.
+
 Prompt-review requests and results are not part of this persistence model. The
 server processes prompt text within one request and neither inserts it into
 SQLite nor retains a review record.
@@ -452,11 +469,15 @@ analysis remains available and the service continues to function.
 
 ### Session evidence report contract
 
-`session-evidence/v1` is derived on demand from one stored Session and all of
-its normalized Spans. It adds no table or migration. Events are sorted by
-`startTime` with source order as a stable tie-breaker, then numbered so every
-stored `llm_turn`, `tool_call`, `thinking`, and `answer` Span appears exactly
-once. Each event exposes:
+`session-evidence/v1` remains the compatibility full-evidence report derived on
+demand from one stored Session and all of its normalized Spans.
+`session-evidence-page/v1` is the default Web contract: it uses stable
+`(startTime, id)` order, a query-bound cursor, a default limit of 80, and a
+maximum limit of 200. Server-side type, main/Sidechain lane, and outcome filters
+return explicit loaded, matched, and total counts. Every matching event remains
+reachable by following `nextCursor`; global sequence and root/linked/missing-parent
+status are still computed against the complete stored Session even when a parent
+is outside the current page. Each event exposes:
 
 - root/linked/missing-parent relationship and main/sidechain lane;
 - start time, captured end time/duration, model identity, token/context,
@@ -468,24 +489,35 @@ once. Each event exposes:
 formats cannot prove result correctness from a false/missing error flag.
 Report-level coverage distinguishes complete, partial, not-captured, and
 not-applicable evidence for timing, parent links, tool input/output, model
-identity, and content-bearing events.
+identity, and content-bearing events. Paged responses report this coverage for
+the complete Session, not only the current window.
 
-`GET /api/session/:id/evidence` defaults to `content=none`; therefore the
-response contains no stored tool input/output, thinking, or answer text.
-`content=preview` is an explicit local disclosure that returns at most 500
-characters per available field after common secret redaction. It also reports
-whether the parser had already truncated the stored source. There is no
-full-raw-content mode in this API. The aggregated Session-detail
-`/api/session/:id/analysis` response also strips Span metadata; the UI must use
-the evidence endpoint when a user explicitly requests previews.
+Both evidence endpoints default to `content=none`; therefore responses contain
+no stored tool input/output, thinking, or answer text. The paged no-content query
+derives availability and source-truncation flags in SQLite without selecting the
+metadata text into Node. `content=preview` is an explicit local disclosure that
+loads only the current page's relevant fields and returns at most 500 characters
+per available field after common secret redaction. It also reports whether the
+parser had already truncated the stored source. There is no full-raw-content mode
+in either evidence API.
+
+`session-analysis/v1` powers the first Session-detail render. It omits the
+complete Span array and all metadata/content while retaining the existing
+analysis, diagnosis, efficiency, attribution, performance, and score results.
+Its context series contains at most 240 representative points, the main-chain
+tool window contains the latest 50 events, and the Sidechain turn window contains
+the first 20 events; each window includes its complete total and whether it was
+sampled/windowed. The compatibility `/api/session/:id/analysis` response remains
+available and continues to strip Span metadata.
 
 The report is complete only for the normalized Span set. Parsers do not
 currently create first-class user-message Spans for every source, so neither
 the API nor the Session UI calls the result a complete original conversation.
-The Session detail page keeps this evidence layer in a dedicated view. That
-view is mounted on demand, provides filters and progressive disclosure, and
-does not request the evidence report while the user remains in the overview,
-context/cost, or tools/chain views.
+The Session detail page keeps this evidence layer in a dedicated view. That view
+is mounted on demand, performs filtering and paging on the Server, appends pages
+through `nextCursor`, and resets the window when filters or content mode change.
+It does not request evidence while the user remains in the overview, context/cost,
+or tools/chain views.
 
 ### Agent Process Profile report contract
 
@@ -570,6 +602,7 @@ page exposes the same contract and privacy boundaries.
 | `PATCH` | `/api/session/:id` | Update session tags/notes |
 | `GET` | `/api/session/:id` | Session with spans |
 | `GET` | `/api/session/:id/analysis` | Aggregated detail analysis |
+| `GET` | `/api/session/:id/analysis-summary` | Bounded `session-analysis/v1` detail response with complete aggregates and sampled/windowed displays |
 | `GET` | `/api/session/:id/turns` | LLM turns |
 | `GET` | `/api/session/:id/tools` | Tool calls |
 | `GET` | `/api/session/:id/context` | Context-growth data |
@@ -583,6 +616,7 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/session/:id/export` | Session export |
 | `GET` | `/api/session/:id/report` | Session report |
 | `GET` | `/api/session/:id/evidence` | Versioned normalized event timeline; optional bounded redacted previews |
+| `GET` | `/api/session/:id/evidence-page` | Cursor-paged `session-evidence-page/v1` timeline with server-side filters, full-Session coverage, and optional bounded redacted previews |
 | `GET` | `/api/sessions/compare` | Selected-session comparison |
 | `GET` | `/api/home-statistics` | Bounded `home-statistics/v1` overview, recent tools, and cost/token highlights |
 | `GET` | `/api/stats` | Compatibility aggregate statistics and distributions, computed with set-based Session aggregation |

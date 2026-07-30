@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type {
   SessionDiscoveryQuickView,
   SessionDiscoverySort,
@@ -9,10 +10,12 @@ import {
   analyzeEfficiency,
   analyzePerformance,
   analyzeToolParams,
+  buildSessionAnalysisWindows,
   calcEfficiencyScore,
   type DiagnosisResult,
   diagnoseSessionSync,
   type EfficiencyScore,
+  SESSION_ANALYSIS_SCHEMA_VERSION,
   type SessionDetail,
   type SessionSummary,
   type Span,
@@ -37,6 +40,8 @@ interface GitCommit {
   date: string;
   author: string;
 }
+
+const execFileAsync = promisify(execFile);
 
 function scoreSession(
   session: SessionSummary,
@@ -67,35 +72,24 @@ function scoreSession(
   );
 }
 
-function loadSpansForSessions(
-  database: DatabaseConnection,
-  sessionIds: string[],
-): Map<string, Span[]> {
-  const spansBySession = new Map<string, Span[]>();
-  if (sessionIds.length === 0) return spansBySession;
-  const placeholders = sessionIds.map(() => '?').join(',');
+function loadSessionSpans(database: DatabaseConnection, sessionId: string): Span[] {
   const rows = database
-    .prepare(
-      `SELECT ${SPAN_COLS} FROM spans WHERE session_id IN (${placeholders}) ORDER BY start_time ASC`,
-    )
-    .all(...sessionIds) as Record<string, unknown>[];
-  for (const span of rows.map(parseSpanRow)) {
-    const spans = spansBySession.get(span.sessionId) || [];
-    spans.push(span);
-    spansBySession.set(span.sessionId, spans);
-  }
-  return spansBySession;
+    .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC, id ASC`)
+    .all(sessionId) as Record<string, unknown>[];
+  return rows.map(parseSpanRow);
 }
 
-function findAssociatedCommits(session: Pick<SessionSummary, 'cwd' | 'startTime' | 'endTime'>): {
+async function findAssociatedCommits(
+  session: Pick<SessionSummary, 'cwd' | 'startTime' | 'endTime'>,
+): Promise<{
   commits: GitCommit[];
   error?: string;
-} {
+}> {
   if (!session.cwd) return { commits: [] };
   try {
     const after = new Date(session.startTime - 3_600_000).toISOString();
     const before = new Date((session.endTime || session.startTime) + 3_600_000).toISOString();
-    const output = execFileSync(
+    const { stdout } = await execFileAsync(
       'git',
       [
         '-C',
@@ -106,9 +100,9 @@ function findAssociatedCommits(session: Pick<SessionSummary, 'cwd' | 'startTime'
         `--before=${before}`,
         '--no-merges',
       ],
-      { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] },
+      { encoding: 'utf8', timeout: 5000, maxBuffer: 1_048_576 },
     );
-    const commits = output
+    const commits = String(stdout)
       .split('\x1e')
       .filter(Boolean)
       .flatMap((record) => {
@@ -119,6 +113,78 @@ function findAssociatedCommits(session: Pick<SessionSummary, 'cwd' | 'startTime'
   } catch {
     return { commits: [], error: 'git command failed (cwd may not be a git repo)' };
   }
+}
+
+function attachProjectPercentile(
+  database: DatabaseConnection,
+  session: SessionSummary,
+  score: EfficiencyScore,
+  pricingResolver: PricingResolver,
+  contextWindowResolver: ContextWindowResolver,
+): void {
+  if (!session.cwd) return;
+  const cohort = database
+    .prepare(
+      `SELECT ${SESSION_COLS}
+       FROM sessions
+       WHERE cwd = ? AND ${primarySessionPredicate()}`,
+    )
+    .all(session.cwd) as SessionSummary[];
+  const cohortScores: number[] = [];
+  for (const candidate of cohort) {
+    cohortScores.push(
+      candidate.id === session.id
+        ? score.score
+        : scoreSession(
+            candidate,
+            loadSessionSpans(database, candidate.id),
+            pricingResolver,
+            contextWindowResolver,
+          ).score,
+    );
+  }
+  score.cohortSize = cohortScores.length;
+  score.percentile =
+    cohortScores.length > 1
+      ? Math.round(
+          (cohortScores.filter((candidateScore) => candidateScore <= score.score).length /
+            cohortScores.length) *
+            100,
+        )
+      : undefined;
+}
+
+async function buildSessionAnalysisMetrics(
+  runtime: SessionRuntime,
+  session: SessionSummary,
+  spans: Span[],
+) {
+  const detail = { ...session, spans } as SessionDetail;
+  const diagnosis = await diagnoseDetail(detail, runtime);
+  const efficiency = analyzeEfficiency(spans);
+  const score = scoreSession(
+    session,
+    spans,
+    runtime.pricingResolver,
+    runtime.contextWindowResolver,
+    diagnosis,
+  );
+  attachProjectPercentile(
+    runtime.database,
+    session,
+    score,
+    runtime.pricingResolver,
+    runtime.contextWindowResolver,
+  );
+  return {
+    diagnosis,
+    efficiency,
+    costAttribution: analyzeCostAttribution(spans, diagnosis.totalWastedCost),
+    score,
+    commits: (await findAssociatedCommits(session)).commits,
+    performance: analyzePerformance(spans),
+    toolParams: analyzeToolParams(spans),
+  };
 }
 
 function csvCell(value: unknown): string {
@@ -243,51 +309,37 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
 
   // Detail-page data is derived from the same span set. Serve it in one read so
   // loading a large session does not repeat the full spans query eight times.
+  app.get<{ Params: { id: string } }>('/api/session/:id/analysis-summary', async (req, reply) => {
+    const session = db
+      .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`)
+      .get(req.params.id) as SessionSummary | undefined;
+    if (!session) return reply.status(404).send({ error: 'session not found' });
+    const spans = loadSessionSpans(db, req.params.id);
+    const analysis = await buildSessionAnalysisMetrics(runtime, session, spans);
+    const windows = buildSessionAnalysisWindows(spans, getModelContext);
+    return {
+      schemaVersion: SESSION_ANALYSIS_SCHEMA_VERSION,
+      session,
+      spanSummary: windows.summary,
+      context: windows.context,
+      toolWindow: windows.toolWindow,
+      sidechainTurnWindow: windows.sidechainTurnWindow,
+      ...analysis,
+      limitations: [
+        'Summary metrics and diagnosis use the complete normalized stored Span set.',
+        'Context points and event windows are bounded for transfer and browser memory; use the evidence view to reach every stored event.',
+        'The response omits stored input, output, thinking, answer, and metadata content.',
+      ],
+    };
+  });
+
   app.get<{ Params: { id: string } }>('/api/session/:id/analysis', async (req, reply) => {
     const session = db
       .prepare(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`)
       .get(req.params.id) as SessionSummary | undefined;
     if (!session) return reply.status(404).send({ error: 'session not found' });
-    const rows = db
-      .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
-      .all(req.params.id) as Record<string, unknown>[];
-    const spans = rows.map(parseSpanRow);
-    const detail = { ...session, spans } as SessionDetail;
-    const diagnosis = await diagnoseDetail(detail, runtime);
-    const efficiency = analyzeEfficiency(spans);
-    const score = scoreSession(session, spans, getPricing, getModelContext, diagnosis);
-
-    if (session.cwd) {
-      const cohort = db
-        .prepare(
-          `SELECT ${SESSION_COLS}
-           FROM sessions
-           WHERE cwd = ? AND ${primarySessionPredicate()}`,
-        )
-        .all(session.cwd) as SessionSummary[];
-      const spansBySession = loadSpansForSessions(
-        db,
-        cohort.map((candidate) => candidate.id),
-      );
-      const cohortScores = cohort.map(
-        (candidate) =>
-          scoreSession(
-            candidate,
-            spansBySession.get(candidate.id) || [],
-            getPricing,
-            getModelContext,
-          ).score,
-      );
-      score.cohortSize = cohortScores.length;
-      score.percentile =
-        cohortScores.length > 1
-          ? Math.round(
-              (cohortScores.filter((candidateScore) => candidateScore <= score.score).length /
-                cohortScores.length) *
-                100,
-            )
-          : undefined;
-    }
+    const spans = loadSessionSpans(db, req.params.id);
+    const analysis = await buildSessionAnalysisMetrics(runtime, session, spans);
 
     const context = spans
       .filter((span) => span.type === 'llm_turn')
@@ -305,13 +357,7 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
     return {
       session: { ...session, spans: spans.map(withoutStoredContent) },
       context,
-      diagnosis,
-      efficiency,
-      costAttribution: analyzeCostAttribution(spans, diagnosis.totalWastedCost),
-      score,
-      commits: findAssociatedCommits(session).commits,
-      performance: analyzePerformance(spans),
-      toolParams: analyzeToolParams(spans),
+      ...analysis,
     };
   });
 
@@ -359,37 +405,7 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
     const score = scoreSession(session, spans, getPricing, getModelContext);
     // A score is comparable only within the same project. Load the cohort's
     // spans in one query, then rank by the same composite score shown in UI.
-    if (session.cwd) {
-      const cohort = db
-        .prepare(
-          `SELECT ${SESSION_COLS}
-           FROM sessions
-           WHERE cwd = ? AND ${primarySessionPredicate()}`,
-        )
-        .all(session.cwd) as SessionSummary[];
-      const spansBySession = loadSpansForSessions(
-        db,
-        cohort.map((candidate) => candidate.id),
-      );
-      const cohortScores = cohort.map(
-        (candidate) =>
-          scoreSession(
-            candidate,
-            spansBySession.get(candidate.id) || [],
-            getPricing,
-            getModelContext,
-          ).score,
-      );
-      score.cohortSize = cohortScores.length;
-      score.percentile =
-        cohortScores.length > 1
-          ? Math.round(
-              (cohortScores.filter((candidateScore) => candidateScore <= score.score).length /
-                cohortScores.length) *
-                100,
-            )
-          : undefined;
-    }
+    attachProjectPercentile(db, session, score, getPricing, getModelContext);
     return score;
   });
 

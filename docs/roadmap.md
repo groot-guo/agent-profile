@@ -3729,8 +3729,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T84 bounded Session detail and evidence retrieval
 
-- status: in_progress
+- status: completed
 - started_at: 2026-07-30
+- completed_at: 2026-07-30
 - estimated size/risk: large / high; touches diagnosis inputs, evidence privacy,
   coverage language, API contracts, and browser state
 - purpose: prevent one large Session or project from creating avoidable API and
@@ -3801,6 +3802,109 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - parent-link status and global sequence must be computed against the complete
     stored Session even when the parent lies outside the current page; every
     filtered event must remain reachable by following the cursor
+- implemented behavior:
+  - added `session-analysis/v1` at
+    `GET /api/session/:id/analysis-summary`; it preserves the existing complete
+    analysis, diagnosis, efficiency, attribution, performance, Git, and score
+    semantics without returning the complete Span array or any metadata/content
+  - bounded the summary display data to 240 representative context points
+    (including first, last, and peak), the latest 50 main-chain tool events, and
+    the first 20 Sidechain turns; complete tool/error/Sidechain aggregates and
+    each window's total remain explicit
+  - added `session-evidence-page/v1` at
+    `GET /api/session/:id/evidence-page` with a query-bound `(start_time, id)`
+    cursor, default limit 80, maximum limit 200, server-side type/lane/outcome
+    filters, full-Session scope/coverage, and matched/total counts
+  - no-content evidence pages derive availability and parser-truncation flags in
+    SQLite without selecting metadata text into Node; preview pages read only
+    the current window's relevant fields and retain the existing 500-character
+    secret-redacted bound; malformed metadata is treated as not captured
+  - global event sequence and parent-link status are calculated against the
+    complete stored Session, including parents outside the current page; every
+    filtered event remains cursor-reachable
+  - the Web Session page now starts from the bounded analysis summary, keeps no
+    complete Span array in browser state, labels sampled/windowed context, tool,
+    and Sidechain data, and pages/resets the evidence window on Server filters or
+    content-mode changes; stale first-page and load-more requests are aborted so
+    old Session/filter responses cannot overwrite the active window
+  - project-relative scoring processes one comparable Session at a time instead
+    of retaining the complete cohort's Spans in a map, and Git lookup now uses
+    asynchronous `execFile`; compatibility `/analysis`, `/evidence`, focused
+    detail, export, and report routes retain their full-detail behavior
+  - migration v7 (`bounded_session_evidence`) adds
+    `idx_spans_session_time_id` on `spans(session_id, start_time, id)` without a
+    data backfill or stored evidence change
+- measured result:
+  - the representative 3,000-Span fixture measured compatibility analysis at
+    165.3 ms / 1,882,040 bytes versus `analysis-summary` at 135.1 ms / 222,469
+    bytes, and compatibility no-content evidence at 12.5 ms / 1,627,750 bytes
+    versus the default 80-event evidence page at 5.0 ms / 45,268 bytes
+  - the benchmark passed with zero budget failures, used
+    `idx_spans_session_time_id`, and recorded a 310,034,432-byte combined
+    process maximum RSS
+  - browser verification against Session
+    `019fb0b8-82a8-7963-b21a-99f3a24c2789` loaded 80/163 then 160/163 events,
+    reset to 80/119 for the Thinking filter, reloaded only the current 80-event
+    window for preview, displayed redacted previews, and returned HTTP 200 for
+    all bounded analysis/evidence requests
+- actual changed files:
+  - Core contracts/builders: `packages/core/src/index.ts`,
+    `packages/core/src/session-analysis.ts`,
+    `packages/core/src/session-evidence.ts`,
+    `packages/core/src/__tests__/session-analysis.test.ts`
+  - Server/runtime: `apps/server/src/database.ts`,
+    `apps/server/src/session-evidence-service.ts`,
+    `apps/server/src/routes/session-evidence.ts`,
+    `apps/server/src/routes/sessions.ts`,
+    `apps/server/src/performance/scale-fixture.ts`, and
+    `apps/server/src/performance/scale-benchmark.ts`
+  - Server tests: `apps/server/src/__tests__/database.test.ts`,
+    `apps/server/src/__tests__/scale-fixture.test.ts`,
+    `apps/server/src/__tests__/session-analysis-routes.test.ts`, and
+    `apps/server/src/__tests__/session-evidence-routes.test.ts`
+  - Web: `apps/web/app/session/[id]/page.tsx`,
+    `apps/web/app/session/[id]/evidence-panel.tsx`,
+    `apps/web/app/session/[id]/evidence-data.ts`, and
+    `apps/web/app/session/[id]/evidence-data.test.ts`
+  - documentation: `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/performance.md`, `docs/zh/OVERVIEW.md`, and `docs/roadmap.md`
+- compatibility and known limits:
+  - the compatibility full-detail endpoints still scale with a selected
+    Session's complete Span set; they remain available for API consumers,
+    explicit report/export work, and benchmark comparison rather than the Web
+    first-render path
+  - project-relative scoring still evaluates every comparable Session and is
+    semantically unbounded by project Session count, but no longer retains the
+    whole cohort's Span arrays concurrently
+  - the bounded evidence contract covers normalized stored Spans, not an
+    original transcript with universal user-message events; T85 separately owns
+    source-safe append-only import work
+- final verification:
+  - `pnpm --filter @agent-profile/core test`: 30 files / 206 tests passed
+  - `pnpm --filter trace-server test`: 19 files / 79 tests passed
+  - `pnpm --filter agent-profile-web test`: 5 files / 19 tests passed
+  - `pnpm lint`: passed with the repository's existing 18 warnings and 2 infos;
+    no new lint error was introduced
+  - `pnpm build`: all workspace builds passed, including the production Next.js
+    build; the final abort-guard adjustment was additionally verified with
+    `pnpm --filter agent-profile-web build`
+  - `pnpm check:boundaries`: passed
+  - `pnpm benchmark:scale:ci`: passed with zero budget failures and the measured
+    values recorded above and in `docs/performance.md`
+  - `git diff --check`: passed; production-file residue/security scan found no
+    debug logging, unsafe HTML insertion, synchronous Git execution, or secrets
+- review:
+  - automatic `codex review` was not used because the configured third-party
+    LiteLLM endpoint could upload repository code; the documented review-tool
+    error/security exception was handled with a high-effort manual review
+  - the first manual pass found a blocking stale-response race in evidence
+    pagination/Session switching and a non-blocking preview lookahead that read
+    one next-page content field into Node; both were fixed with abort guards and
+    a separate content-free `hasMore` query, then the same areas were re-reviewed
+  - final manual re-review found no remaining CRITICAL/HIGH findings; the
+    pre-existing 1,800-line Session page remains a non-blocking MEDIUM
+    maintainability limitation and was not split in this Task to avoid unrelated
+    refactoring
 
 ### T85 append-only JSONL import for Claude Code and Codex
 
