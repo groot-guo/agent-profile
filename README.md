@@ -31,8 +31,9 @@ Use Agent Profile when you want to answer questions such as:
 
 ## Requirements
 
-- Node.js (an active LTS release is recommended)
+- Node.js 22 or newer (an active LTS release is recommended)
 - pnpm
+- `zstd` on `PATH` for Zed transcript imports
 - At least one supported local agent data source; missing sources are optional
   and do not stop the application from starting
 
@@ -59,6 +60,21 @@ pnpm start
 The root command builds the workspace first, then starts the API and production
 Web server together. Both services bind to `127.0.0.1` by default.
 
+To build the initial Node-based release for the current platform and
+architecture:
+
+```bash
+pnpm build:release
+tar -xzf dist/releases/agent-profile-0.0.1-<platform>-<arch>.tar.gz
+./agent-profile-0.0.1-<platform>-<arch>/bin/agent-profile.mjs serve --open
+```
+
+The archive contains the CLI, Next.js standalone Web server, and the matching
+native `better-sqlite3` package. It still requires Node.js 22+ and `zstd` on the
+target machine and is only portable to the platform/architecture it names.
+The current release build is local automation rather than a published package
+or signed installer.
+
 The Web development server writes `apps/web/.next-dev`; production builds write
 `apps/web/.next`. You can safely run `pnpm build` while development is running.
 
@@ -74,6 +90,7 @@ The source workspace also provides the first `agent-profile` CLI entry point:
 ./packages/cli/bin/agent-profile.mjs stats --json
 ./packages/cli/bin/agent-profile.mjs profiles --json
 ./packages/cli/bin/agent-profile.mjs task-profile <task-id> --json
+./packages/cli/bin/agent-profile.mjs serve --open
 ```
 
 `doctor` opens and closes the same application Runtime as the Server, verifies
@@ -84,10 +101,14 @@ create the selected database and applies ordinary additive migrations and
 default pricing/model-context seeding.
 
 For CLI Runtime commands, the database path is selected from `--database`, then
-`--data-dir/trace.db`, then `TRACE_DB_PATH`, then the existing
-`apps/server/trace.db` default. Exit status is `0` for success, `2` for command
-usage errors, and `1` for Runtime failures. Reports, `serve`, and published
-release artifacts are not part of this initial CLI foundation.
+`--data-dir/trace.db`, then `TRACE_DB_PATH`, then the platform application-data
+default. Exit status is `0` for success, `2` for command usage errors, and `1`
+for Runtime failures.
+
+`serve` starts a private Next.js process and exposes both the Web UI and `/api`
+through one loopback Fastify origin. It defaults to public port `3000`, private
+Web port `3001`, and does not open a browser unless `--open` is supplied.
+`--host` accepts loopback addresses only; `--port` and `--web-port` must differ.
 
 `sources` refreshes local source availability and reports the stored primary
 Session count without returning local paths or transcript identifiers. `sync`
@@ -246,9 +267,9 @@ source database's aggregate cost is not treated as portable billing evidence.
 | `PORT` | API port; default `3000` |
 | `HOST` | API bind host; default `127.0.0.1` |
 | `WEB_ORIGIN` | Comma-separated browser origins allowed by API CORS; defaults to the local Web origins on port `3001` |
-| `NEXT_PUBLIC_API` | Web API origin; default `http://localhost:3000/api` |
+| `NEXT_PUBLIC_API` | Optional Web API override; packaged and default Web requests use same-origin `/api` |
 | `AUTO_SCAN_DIR` | Unset: scan default Claude Code and Codex directories. Empty: disable transcript auto-scan. A path: scan that one transcript directory. |
-| `TRACE_DB_PATH` | Override the Server SQLite path and the CLI `doctor` path when no CLI path option is supplied; default `apps/server/trace.db` |
+| `TRACE_DB_PATH` | Override the Server/CLI SQLite path when no CLI path option is supplied |
 | `LLM_API_KEY` | Enables optional semantic diagnosis; no key is required for deterministic analysis |
 | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Optional semantic-diagnosis provider settings |
 
@@ -262,8 +283,14 @@ AUTO_SCAN_DIR="" pnpm dev
 
 - Agent Profile reads local source histories and writes derived Session/Span
   data to SQLite. It does not upload transcript data by default.
-- The default database is `apps/server/trace.db`. Stop the Server before making
-  a file-level backup of it.
+- The default database is `~/Library/Application Support/agent-profile/trace.db`
+  on macOS, `%LOCALAPPDATA%\agent-profile\trace.db` on Windows, and
+  `${XDG_DATA_HOME:-~/.local/share}/agent-profile/trace.db` on Linux. Application
+  files and mutable data are separate.
+- A pre-T103 source-workspace database at `apps/server/trace.db` is not moved
+  automatically. Continue using it with `--database apps/server/trace.db` or
+  `TRACE_DB_PATH`, or copy it to the new default while every Agent Profile
+  process is stopped.
 - A forced rebuild is the normal recovery path after parser or metric changes.
   The danger-zone reset deletes every generated Session/Span, including tags
   and notes, but retains pricing, model-context configuration, migration,
@@ -274,15 +301,15 @@ AUTO_SCAN_DIR="" pnpm dev
 - Source data varies. A missing field means “not captured”, not zero, success,
   or failure.
 
-For a file-level backup, stop `pnpm dev` or `pnpm start`, then copy the database
-(or the path selected by `TRACE_DB_PATH`):
+For a file-level backup, stop `agent-profile serve`, `pnpm dev`, or `pnpm start`,
+then copy the selected database:
 
 ```bash
-cp apps/server/trace.db apps/server/trace.db.backup-YYYYMMDD
+cp "/selected/data/path/trace.db" "/selected/backup/path/trace.db.backup-YYYYMMDD"
 ```
 
 To restore, keep the Server stopped, preserve the current database if needed,
-then copy the selected backup over `apps/server/trace.db` and start the app.
+then copy the selected backup over the selected database path and start the app.
 Use **强制重建** instead when the database is healthy and only derived parser
 or metric results need refreshing.
 
@@ -320,13 +347,11 @@ pnpm dev
 
 ## Current product boundaries
 
-- The workspace `agent-profile` CLI package and source binary supports `help`,
-  `version`, `doctor`, `sources`, `sync`, and bounded `sessions`; it is not yet
-  a published release or desktop application. It also exposes existing `stats`,
-  `profiles`, and `task-profile <id>` reports. Detailed Session/evidence CLI
-  commands and `serve` remain in active development, while the Web/API provide
-  the bounded detail/evidence experience and `pnpm start` remains the supported
-  non-watch Web launcher.
+- The CLI supports `help`, `version`, `doctor`, `sources`, `sync`, bounded
+  `sessions`, `stats`, `profiles`, `task-profile <id>`, and loopback `serve`.
+  `build:release` produces an unsigned current-platform Node archive; there is
+  no published package, signed installer, cross-platform CI matrix, or desktop
+  application yet. Detailed Session/evidence CLI commands remain future work.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
   local foundations. Automated cohort statistics, regression detection,
   causal experiment conclusions, and Runtime feedback/SDK integration are not

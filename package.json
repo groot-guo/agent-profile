@@ -12,7 +12,8 @@
     "benchmark:scale:ci": "pnpm --filter trace-server benchmark:scale:ci",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "lint:fix": "biome check --write ."
+    "lint:fix": "biome check --write .",
+    "build:release": "AGENT_PROFILE_WEB_STANDALONE=1 pnpm --filter agent-profile-web build && pnpm --filter @agent-profile/cli build && node scripts/build-release.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",

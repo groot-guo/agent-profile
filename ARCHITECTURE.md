@@ -149,20 +149,26 @@ as requiring manual action instead of presenting them as retryable parse errors.
 The API is split by domain under `apps/server/src/routes/`; it is not a single
 monolithic routes file.
 
-The supported non-watch local launcher is root `pnpm start`: its `prestart`
-builds the workspace, then the Server and production Next.js process run
-together. API and Web listeners default to `127.0.0.1`; API CORS accepts only
-the local `localhost:3001` and `127.0.0.1:3001` Web origins. `HOST` and
-comma-separated `WEB_ORIGIN` are explicit overrides. Because the API has no
-authentication or directory authorization, a non-loopback `HOST` is an
-operator opt-in for trusted networks and emits a startup warning.
+The source workspace retains root `pnpm start`. The distributable launcher is
+`agent-profile serve`: it starts a private loopback Next.js standalone process,
+then a public loopback Fastify process that proxies non-API requests to Next and
+serves `/api` directly. Browser and API traffic therefore share one origin.
+Startup failure closes every already-created layer; SIGINT/SIGTERM close
+Fastify, wait for Runtime imports, close SQLite, and stop Next. The CLI rejects
+non-loopback hosts because this API has no authentication or directory
+authorization.
 
 The workspace CLI is available at `packages/cli/bin/agent-profile.mjs` after
-dependency installation. It exposes `help`, `version`, `doctor`, `sources`,
-`sync`, and bounded `sessions`; it is not a published release artifact or a
-replacement Web launcher.
+dependency installation. Its production esbuild bundle removes `tsx` and
+TypeScript source execution. `build:release` combines that bundle, Next
+standalone/static/public assets, and the current platform's native
+`better-sqlite3` tree in a versioned tar archive. A static export was rejected:
+the implemented `/session/[id]` route is dynamic and must support arbitrary
+stored Session IDs. Archives require Node.js 22+ and external `zstd`; only the
+current host platform/architecture is emitted and darwin-arm64 is the first
+smoke-tested target.
 `doctor` resolves its database from `--database`, `--data-dir/trace.db`,
-`TRACE_DB_PATH`, or the existing Runtime default, in that order. It never starts
+`TRACE_DB_PATH`, or the platform application-data default, in that order. It never starts
 imports or HTTP, and returns exit status `2` for usage errors and `1` for Runtime
 failures. `sources` refreshes the same bounded source status returned by the
 compatibility API. `sync` uses the shared import service, waits for selected
@@ -172,8 +178,15 @@ ordered by `start_time` and ID with an opaque cursor. It omits Session names,
 local paths, transcript identifiers, Span metadata, and content. The
 compatibility `GET /api/sessions` route retains its existing full-array response
 through the same query service; detailed Session/evidence CLI commands and
-reports remain T102 work. `serve`, stable per-user data paths, and distributable
-artifacts belong to T103.
+reports remain T102 work.
+
+The default database is outside application files:
+`~/Library/Application Support/agent-profile/trace.db` on macOS,
+`%LOCALAPPDATA%\agent-profile\trace.db` on Windows, and
+`${XDG_DATA_HOME:-~/.local/share}/agent-profile/trace.db` on Linux.
+Explicit database/data-directory options and `TRACE_DB_PATH` take precedence.
+Pre-T103 `apps/server/trace.db` files are not copied implicitly; users may keep
+selecting that path or copy it while all processes are stopped.
 
 `stats`, `profiles`, and `task-profile <id>` are read-only Runtime adapters over
 the current aggregate statistics, Agent Process Profile, and TaskRepository
@@ -651,6 +664,9 @@ page exposes the same contract and privacy boundaries.
 - CLI report commands share the current Statistics/Profile/Task Profile builders
   with their HTTP surfaces. The command layer only wraps the existing results in
   `agent-profile-cli/v1` and preserves report-specific coverage and limitations.
+- `agent-profile serve` composes Next standalone, the shared Runtime, and
+  Fastify behind one loopback origin. The release archive keeps mutable data
+  outside its installation tree and closes all three layers on signals.
 - Root `pnpm dev` uses parallel workspace execution to start the API and Web
   processes together. The API development command runs in watch mode; the Web
   process uses Next.js development reloads.

@@ -13,6 +13,7 @@ export type CliCommand =
   | 'doctor'
   | 'sources'
   | 'sync'
+  | 'serve'
   | 'sessions'
   | 'stats'
   | 'profiles'
@@ -72,6 +73,17 @@ export interface CliSyncReport {
   requestedSources: ImportSourceId[];
   imports: CliImportStatus;
   sources: ImportSourceStatusResponse[];
+  limitations: string[];
+}
+
+export interface CliServeReport {
+  schemaVersion: typeof CLI_SCHEMA_VERSION;
+  command: 'serve';
+  url: string;
+  apiUrl: string;
+  databasePath: string;
+  host: string;
+  port: number;
   limitations: string[];
 }
 
@@ -214,6 +226,7 @@ export type CliReport =
   | CliDoctorReport
   | CliSourcesReport
   | CliSyncReport
+  | CliServeReport
   | CliSessionsReport
   | CliStatsReport
   | CliProfilesReport

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { createDatabase } from '../database';
 import type { AppRuntime } from '../runtime';
@@ -75,6 +75,39 @@ describe('application factory', () => {
       inputPrice: 10,
       effectiveFrom: 1500,
     });
+  });
+
+  it('keeps API routes local and proxies unmatched Web routes to the private upstream', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('web response', { status: 200 }));
+    const proxyRuntime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+    });
+    const proxyApp = createApp(proxyRuntime, {
+      logger: false,
+      webOrigins: [],
+      webUpstream: 'http://127.0.0.1:4101',
+    });
+    await proxyApp.ready();
+
+    const health = await proxyApp.inject({ method: 'GET', url: '/api/health' });
+    const page = await proxyApp.inject({ method: 'GET', url: '/session/local-id?view=evidence' });
+
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toMatchObject({ ok: true });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toBe('web response');
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL('http://127.0.0.1:4101/session/local-id?view=evidence'),
+      expect.objectContaining({ method: 'GET', redirect: 'manual' }),
+    );
+
+    await proxyApp.close();
+    await proxyRuntime.close();
+    fetchMock.mockRestore();
   });
 
   it('keeps separately constructed runtimes isolated', async () => {

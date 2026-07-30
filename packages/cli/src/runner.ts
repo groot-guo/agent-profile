@@ -9,6 +9,7 @@ import {
   type CliImportStatus,
   type CliProfilesReport,
   type CliReport,
+  type CliServeReport,
   type CliSessionDiscoveryPage,
   type CliSessionsReport,
   type CliSourcesReport,
@@ -22,8 +23,13 @@ import {
 } from '@agent-profile/contracts';
 import { ImportServiceError } from 'trace-server/imports';
 import { SessionDiscoveryError } from 'trace-server/sessions';
+import type { LocalApplicationOptions, LocalApplicationReport } from './serve';
 
 const DATABASE_FILE_NAME = 'trace.db';
+const DEFAULT_SERVE_HOST = '127.0.0.1';
+const DEFAULT_SERVE_PORT = 3000;
+const DEFAULT_WEB_PORT = 3001;
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 const USAGE = `Usage: agent-profile <command> [options]
 
 Commands:
@@ -32,6 +38,7 @@ Commands:
   doctor               Check the local Runtime, database, and source availability
   sources              Show local source availability and stored Session counts
   sync                 Synchronize available local sources and report terminal results
+  serve                Start the local API and Web application
   sessions             List bounded primary Session summaries
   stats                Show the existing aggregate statistics report
   profiles             Show the existing Agent Process Profile report
@@ -42,6 +49,10 @@ Options:
   --database <path>    Select an explicit SQLite database path
   --data-dir <path>    Select a directory containing trace.db
   --source <id>        Limit sync to a source; may be repeated
+  --host <address>     Select a loopback listen address for serve
+  --port <number>      Select the public serve port (default 3000)
+  --web-port <number>  Select the private Web process port (default 3001)
+  --open                Open the local UI after serve is ready
   --limit <count>      Limit Session discovery to 1-100 records
   --cursor <value>     Continue Session discovery from a prior report
   --help               Show this help
@@ -56,6 +67,10 @@ export interface ParsedCliArguments {
   limit: number | undefined;
   cursor: string | undefined;
   taskId: string | undefined;
+  host: string | undefined;
+  port: number | undefined;
+  webPort: number | undefined;
+  openBrowser: boolean;
 }
 
 export interface CliRuntime {
@@ -95,6 +110,7 @@ export interface CliDependencies {
   ) => CliSessionDiscoveryPage;
   getStatsReport: (runtime: CliRuntime) => CliStatsData;
   getAgentProfileReport: (runtime: CliRuntime) => CliProfilesReport['agentProfiles'];
+  startServe: (options: LocalApplicationOptions) => Promise<LocalApplicationReport>;
   getTaskProfileReport: (
     runtime: CliRuntime,
     taskId: string,
@@ -115,6 +131,10 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     source?: string[];
     limit?: string;
     cursor?: string;
+    host?: string;
+    port?: string;
+    'web-port'?: string;
+    open?: boolean;
   };
   let positionals: string[];
 
@@ -132,6 +152,10 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
         source: { type: 'string', multiple: true },
         limit: { type: 'string' },
         cursor: { type: 'string' },
+        host: { type: 'string' },
+        port: { type: 'string' },
+        'web-port': { type: 'string' },
+        open: { type: 'boolean' },
       },
     }));
   } catch (error) {
@@ -141,7 +165,10 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
   if (values.help && values.version) {
     throw new CliUsageError('Use either --help or --version, not both');
   }
-  if ((values.help || values.version) && positionals.length > 0) {
+  if (
+    (values.help || values.version) &&
+    (positionals.length > 1 || (positionals[0] !== undefined && !isCliCommand(positionals[0])))
+  ) {
     throw new CliUsageError(`Unexpected arguments: ${positionals.join(', ')}`);
   }
   if (values.database && values['data-dir']) {
@@ -160,6 +187,8 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     throw new CliUsageError('--cursor must not be empty');
   }
   const limit = parseLimit(values.limit);
+  const port = parsePort(values.port, '--port');
+  const webPort = parsePort(values['web-port'], '--web-port');
 
   const requestedCommand = values.help
     ? 'help'
@@ -190,6 +219,24 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
   ) {
     throw new CliUsageError('--limit and --cursor are only supported by sessions');
   }
+  if (
+    requestedCommand !== 'serve' &&
+    (values.host !== undefined ||
+      values.port !== undefined ||
+      values['web-port'] !== undefined ||
+      values.open !== undefined)
+  ) {
+    throw new CliUsageError('--host, --port, --web-port, and --open are only supported by serve');
+  }
+  const host = values.host?.trim() || DEFAULT_SERVE_HOST;
+  const servePort = port ?? DEFAULT_SERVE_PORT;
+  const serveWebPort = webPort ?? DEFAULT_WEB_PORT;
+  if (requestedCommand === 'serve' && !LOOPBACK_HOSTS.has(host)) {
+    throw new CliUsageError('--host must be a loopback address');
+  }
+  if (requestedCommand === 'serve' && servePort === serveWebPort) {
+    throw new CliUsageError('--port and --web-port must be different');
+  }
 
   return {
     command: requestedCommand,
@@ -200,6 +247,10 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     limit,
     cursor: values.cursor,
     taskId,
+    host: requestedCommand === 'serve' ? host : undefined,
+    port: requestedCommand === 'serve' ? servePort : undefined,
+    webPort: requestedCommand === 'serve' ? serveWebPort : undefined,
+    openBrowser: values.open === true,
   };
 }
 
@@ -233,6 +284,35 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
       dependencies.cwd,
       dependencies.defaultDatabasePath,
     );
+    if (
+      options.command === 'serve' &&
+      options.host &&
+      options.port !== undefined &&
+      options.webPort !== undefined
+    ) {
+      const report = await dependencies.startServe({
+        databasePath,
+        defaultScanDir: dependencies.defaultScanDir,
+        host: options.host,
+        port: options.port,
+        webPort: options.webPort,
+        openBrowser: options.openBrowser,
+      });
+      writeReport(
+        {
+          schemaVersion: CLI_SCHEMA_VERSION,
+          command: 'serve',
+          ...report,
+          limitations: [
+            'Serve listens on loopback only; non-local access remains outside the current security model.',
+            'The Web process is private and all browser/API traffic uses the reported public origin.',
+          ],
+        },
+        options.json,
+        dependencies,
+      );
+      return 0;
+    }
     if (options.command === 'sources') {
       const report = await sources(databasePath, dependencies);
       writeReport(report, options.json, dependencies);
@@ -444,6 +524,7 @@ function helpReport(): CliHelpReport {
       'doctor',
       'sources',
       'sync',
+      'serve',
       'sessions',
       'stats',
       'profiles',
@@ -464,6 +545,7 @@ function formatReport(report: CliReport): string {
   if (report.command === 'help') return `${report.usage}\n`;
   if (report.command === 'version') return `${report.version}\n`;
   if (report.command === 'sources' || report.command === 'sync') return formatSourcesReport(report);
+  if (report.command === 'serve') return formatServeReport(report);
   if (report.command === 'sessions') return formatSessionsReport(report);
   if (report.command === 'stats') return formatStatsReport(report);
   if (report.command === 'profiles') return formatProfilesReport(report);
@@ -499,6 +581,17 @@ function sourcesReport(status: ImportJobStatusResponse): CliSourcesReport {
 
 function importStatus(status: ImportJobStatusResponse): CliImportStatus {
   return { jobId: status.jobId, active: status.active, operation: status.operation };
+}
+
+function formatServeReport(report: CliServeReport): string {
+  return [
+    'Agent Profile serve',
+    `Web: ${report.url}`,
+    `API: ${report.apiUrl}`,
+    `Database: ${report.databasePath}`,
+    ...report.limitations.map((limitation) => `Note: ${limitation}`),
+    '',
+  ].join('\n');
 }
 
 function formatSessionsReport(report: CliSessionsReport): string {
@@ -556,6 +649,16 @@ function formatTaskProfileReport(report: CliTaskProfileReport): string {
   ].join('\n');
 }
 
+function parsePort(value: string | undefined, option: '--port' | '--web-port'): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new CliUsageError(`${option} must be an integer from 1 to 65535`);
+  }
+  const port = Number(value);
+  if (port > 65_535) throw new CliUsageError(`${option} must be an integer from 1 to 65535`);
+  return port;
+}
+
 function parseLimit(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!/^[1-9]\d*$/.test(value)) {
@@ -593,6 +696,7 @@ function isCliCommand(value: string): value is CliCommand {
     value === 'doctor' ||
     value === 'sources' ||
     value === 'sync' ||
+    value === 'serve' ||
     value === 'sessions' ||
     value === 'stats' ||
     value === 'profiles' ||

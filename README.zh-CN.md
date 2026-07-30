@@ -21,8 +21,9 @@ Task Outcome，而不会把更低的资源消耗误作更好的交付结果。
 
 ## 使用前准备
 
-- 安装 Node.js（建议使用仍受支持的 LTS 版本）
+- 安装 Node.js 22 或更高版本（建议使用仍受支持的 LTS 版本）
 - 安装 pnpm
+- 如需导入 Zed transcript，确保 `zstd` 位于 `PATH`
 - 本机至少存在一种支持的 Agent 数据源；没有某个来源不会阻止应用启动
 
 ## 快速开始
@@ -47,6 +48,18 @@ pnpm start
 根命令会先构建整个 workspace，再同时启动 API 与生产 Web Server。两者默认只绑定
 `127.0.0.1`。
 
+构建当前平台与架构的首个 Node 发行包：
+
+```bash
+pnpm build:release
+tar -xzf dist/releases/agent-profile-0.0.1-<platform>-<arch>.tar.gz
+./agent-profile-0.0.1-<platform>-<arch>/bin/agent-profile.mjs serve --open
+```
+
+归档包含 CLI、Next.js standalone Web Server 和匹配平台/架构的原生
+`better-sqlite3`，目标机器仍需 Node.js 22+ 与 `zstd`。当前只是本地发行构建自动化，
+尚不是已发布 package、签名安装器或跨平台通用归档。
+
 Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web/.next`，因此运行
 `pnpm build` 不会破坏正在运行的开发服务。
 
@@ -62,6 +75,7 @@ Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web
 ./packages/cli/bin/agent-profile.mjs stats --json
 ./packages/cli/bin/agent-profile.mjs profiles --json
 ./packages/cli/bin/agent-profile.mjs task-profile <task-id> --json
+./packages/cli/bin/agent-profile.mjs serve --open
 ```
 
 `doctor` 会创建并关闭与 Server 相同的应用 Runtime，检查选中的 SQLite 数据库和五种
@@ -70,8 +84,12 @@ Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web
 所选数据库，并执行常规增量 migration 和默认定价/模型窗口数据初始化。
 
 CLI Runtime 命令的数据库路径优先级依次为 `--database`、`--data-dir/trace.db`、
-`TRACE_DB_PATH` 和现有的 `apps/server/trace.db` 默认值。成功 exit code 为 `0`，命令用法
-错误为 `2`，Runtime 失败为 `1`。报告、`serve` 和正式发行制品不在这个初始 CLI 基础范围内。
+`TRACE_DB_PATH` 和平台应用数据目录默认值。成功 exit code 为 `0`，命令用法错误为 `2`，
+Runtime 失败为 `1`。
+
+`serve` 启动私有 Next.js 进程，并通过同一个回环 Fastify origin 暴露 Web UI 与 `/api`。
+公开端口默认 `3000`，私有 Web 端口默认 `3001`；只有传入 `--open` 才打开浏览器。
+`--host` 只接受回环地址，`--port` 与 `--web-port` 不能相同。
 
 `sources` 会刷新本地来源可用性并输出已存主链 Session 计数，但不会返回本地路径或
 transcript 标识。`sync` 使用与 API 相同的 Runtime 导入服务，等待所选来源进入终态后输出
@@ -189,9 +207,9 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 | `PORT` | API 端口，默认 `3000` |
 | `HOST` | API 绑定地址，默认 `127.0.0.1` |
 | `WEB_ORIGIN` | API CORS 允许的浏览器来源，多个值用逗号分隔；默认仅允许本机 `3001` Web 来源 |
-| `NEXT_PUBLIC_API` | Web 请求的 API 地址，默认 `http://localhost:3000/api` |
+| `NEXT_PUBLIC_API` | 可选 Web API 覆盖；打包及默认 Web 请求使用同源 `/api` |
 | `AUTO_SCAN_DIR` | 未设置：扫描默认 Claude Code 与 Codex 目录；空字符串：关闭 transcript 自动扫描；路径：只扫描该一个 transcript 目录。 |
-| `TRACE_DB_PATH` | 覆盖 Server SQLite 路径；CLI 未指定路径选项时也供 `doctor` 使用；默认 `apps/server/trace.db` |
+| `TRACE_DB_PATH` | CLI 未指定路径选项时覆盖 Server/CLI SQLite 路径 |
 | `LLM_API_KEY` | 开启可选语义诊断；确定性分析不需要 Key |
 | `LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL` | 可选语义诊断服务配置 |
 
@@ -205,7 +223,12 @@ AUTO_SCAN_DIR="" pnpm dev
 
 - Agent Profile 读取本地来源记录，并把派生的 Session/Span 数据写入 SQLite；默认不会上传
   transcript 数据。
-- 默认数据库位于 `apps/server/trace.db`。如需文件级备份，请先停止 Server 再复制。
+- 默认数据库在 macOS 为 `~/Library/Application Support/agent-profile/trace.db`，Windows
+  为 `%LOCALAPPDATA%\agent-profile\trace.db`，Linux 为
+  `${XDG_DATA_HOME:-~/.local/share}/agent-profile/trace.db`；应用文件与可变数据彼此分离。
+- T103 之前源码 workspace 的 `apps/server/trace.db` 不会自动搬迁。可继续通过
+  `--database apps/server/trace.db` 或 `TRACE_DB_PATH` 使用；也可在所有 Agent Profile
+  进程停止后复制到新默认位置。
 - parser 或指标变化后的常规恢复方式是“强制重建”。危险区清空会删除全部生成的
   Session/Span（包括标签和备注），但保留定价、模型窗口、migration、Task、Outcome、
   Configuration Snapshot、cohort、experiment 和逻辑 Session 关联，随后可从当前可用来源
@@ -213,15 +236,15 @@ AUTO_SCAN_DIR="" pnpm dev
 - 提示词审查是临时计算：提示词文本不会写入数据库，也不会由该功能发送给语义模型服务。
 - 不同来源的数据覆盖度不同。字段缺失表示“未采集”，不表示零、成功或失败。
 
-文件级备份时，先停止 `pnpm dev` 或 `pnpm start`，再复制数据库（如果配置了
-`TRACE_DB_PATH`，则复制对应文件）：
+文件级备份时，先停止 `agent-profile serve`、`pnpm dev` 或 `pnpm start`，再复制选中的
+数据库：
 
 ```bash
-cp apps/server/trace.db apps/server/trace.db.backup-YYYYMMDD
+cp "/selected/data/path/trace.db" "/selected/backup/path/trace.db.backup-YYYYMMDD"
 ```
 
 恢复时保持 Server 停止；如有需要先保留当前数据库，再把选中的备份复制覆盖
-`apps/server/trace.db`，然后重新启动。若数据库本身健康，只需刷新 parser 或指标派生
+当前数据库路径，然后重新启动。若数据库本身健康，只需刷新 parser 或指标派生
 结果，应优先使用页面的**强制重建**。
 
 兼容接口 `POST /api/scan` 继续支持脚本按一个显式 transcript 目录导入，例如发送
@@ -252,10 +275,10 @@ pnpm dev
 
 ## 当前产品边界
 
-- workspace 的 `agent-profile` CLI package 和源码 binary 支持 `help`、`version`、
-  `doctor`、`sources`、`sync` 和有界 `sessions`，但尚未发布正式发行包或桌面应用。详细
-  Session/证据查看与 `serve` 仍在开发中；也可通过 `stats`、`profiles` 和
-  `task-profile <id>` 查看既有报告；`pnpm start` 仍是受支持的非 watch Web 启动入口。
+- CLI 支持 `help`、`version`、`doctor`、`sources`、`sync`、有界 `sessions`、
+  `stats`、`profiles`、`task-profile <id>` 和回环 `serve`。`build:release` 可生成当前
+  平台的未签名 Node 归档；尚无已发布 package、签名安装器、跨平台 CI matrix 或桌面应用。
+  详细 Session/证据 CLI 命令仍是后续工作。
 - Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型。
   自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化

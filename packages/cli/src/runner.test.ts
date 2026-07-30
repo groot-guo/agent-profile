@@ -143,6 +143,13 @@ function createDependencies(): {
       getStatsReport: vi.fn(() => statistics),
       getAgentProfileReport: vi.fn(() => agentProfiles),
       getTaskProfileReport: vi.fn(() => taskProfile),
+      startServe: vi.fn(async (options) => ({
+        url: `http://${options.host}:${options.port}`,
+        apiUrl: `http://${options.host}:${options.port}/api`,
+        databasePath: options.databasePath,
+        host: options.host,
+        port: options.port,
+      })),
       writeStdout: (text) => output.stdout.push(text),
       writeStderr: (text) => output.stderr.push(text),
     },
@@ -186,6 +193,66 @@ describe('CLI runner', () => {
         '/default/trace.db',
       ),
     ).toBe('/workspace/environment.db');
+  });
+
+  it('parses loopback serve options and rejects unsafe or conflicting ports', () => {
+    expect(parseCliArguments(['serve', '--help'])).toMatchObject({
+      command: 'help',
+    });
+    expect(
+      parseCliArguments([
+        'serve',
+        '--host',
+        'localhost',
+        '--port',
+        '4100',
+        '--web-port',
+        '4101',
+        '--open',
+      ]),
+    ).toMatchObject({
+      command: 'serve',
+      host: 'localhost',
+      port: 4100,
+      webPort: 4101,
+      openBrowser: true,
+    });
+    expect(() => parseCliArguments(['serve', '--host', '0.0.0.0'])).toThrow(
+      '--host must be a loopback address',
+    );
+    expect(() => parseCliArguments(['serve', '--port', '4100', '--web-port', '4100'])).toThrow(
+      '--port and --web-port must be different',
+    );
+    expect(() => parseCliArguments(['doctor', '--port', '4100'])).toThrow(
+      '--host, --port, --web-port, and --open are only supported by serve',
+    );
+  });
+
+  it('starts serve with the selected database and writes readiness output', async () => {
+    const { dependencies, output, runtimeOptions } = createDependencies();
+
+    const exitCode = await runCli(
+      ['serve', '--data-dir', 'state', '--port', '4100', '--web-port', '4101', '--json'],
+      dependencies,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(runtimeOptions).toEqual([]);
+    expect(dependencies.startServe).toHaveBeenCalledWith({
+      databasePath: '/workspace/state/trace.db',
+      defaultScanDir: '~/.claude/projects',
+      host: '127.0.0.1',
+      port: 4100,
+      webPort: 4101,
+      openBrowser: false,
+    });
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      schemaVersion: 'agent-profile-cli/v1',
+      command: 'serve',
+      url: 'http://127.0.0.1:4100',
+      apiUrl: 'http://127.0.0.1:4100/api',
+      databasePath: '/workspace/state/trace.db',
+    });
   });
 
   it('rejects conflicting database options before creating a Runtime', async () => {

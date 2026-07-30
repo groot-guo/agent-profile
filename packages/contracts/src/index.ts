@@ -8,6 +8,7 @@ export {
   type CliImportStatus,
   type CliProfilesReport,
   type CliReport,
+  type CliServeReport,
   type CliSessionDiscoveryPage,
   type CliSessionSummary,
   type CliSessionsReport,

@@ -5139,7 +5139,9 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 
 ### T103 CLI `serve` command and distributable local application
 
-- status: planned
+- status: completed
+- started_at: 2026-07-30
+- completed_at: 2026-07-30
 - estimated size/risk: extra-large / high; production assets, native SQLite,
   zstd availability, data paths, ports, and shutdown must work per platform
 - purpose:
@@ -5171,6 +5173,99 @@ See `diagnosis.md`. Requires model/key decision (deferred).
 - documentation:
   - add installation, launcher, data location, backup/restore, platform support,
     and release limitations after the artifact exists
+- implementation plan:
+  1. inventory the CLI, Runtime/Fastify composition, current source-executed
+     package entry points, mutable database defaults, Web routing, and native
+     dependency boundaries
+  2. define tested `serve` arguments and lifecycle contracts for loopback host,
+     public/API ports, health readiness, optional browser opening, startup
+     failure cleanup, signals, and stable per-user data paths with explicit
+     overrides
+  3. compare a content-equivalent static export against Next standalone using
+     the current dynamic Session routes; select the smallest approach that keeps
+     all implemented Web routes working and record why the rejected approach is
+     insufficient
+  4. emit runnable Server/CLI JavaScript without `tsx`, package Web assets and
+     required native/runtime dependencies, then add a reproducible Node-based
+     release artifact and local smoke harness
+  5. verify clean install/start/health/UI/sync/stop/data-retention behavior and
+     document supported platform/architecture limits, backup/restore, and
+     remaining archive automation work
+- expected components/files:
+  - CLI contracts, runner, launcher, build/package scripts, and tests under
+    `packages/contracts/` and `packages/cli/`
+  - reusable Fastify/server startup and stable data-path helpers under
+    `apps/server/src/`
+  - `apps/web/next.config.js` and build/runtime configuration required by the
+    selected packaging approach
+  - root release scripts plus `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+    `docs/zh/OVERVIEW.md`, and this roadmap
+- dependencies/assumptions/risks:
+  - the default remains loopback-only; non-local authentication and directory
+    authorization stay owned by conditional T88
+  - native `better-sqlite3` and external `zstd` availability must be checked in
+    the produced artifact rather than hidden by source-checkout dependencies
+  - application files and mutable data must be separated so replacing a release
+    cannot delete the selected database; explicit `--database`, `--data-dir`,
+    and `TRACE_DB_PATH` behavior remains available
+  - Web packaging must preserve arbitrary `/session/:id` navigation and all
+    current client/API behavior; a static export is unacceptable if it cannot
+    represent those routes without a separate fallback contract
+- implementation:
+  - added `agent-profile serve` with loopback-only host validation, distinct
+    public/private ports, optional browser opening, versioned text/JSON startup
+    reports, Fastify health readiness, and SIGINT/SIGTERM cleanup
+  - extracted reusable Server HTTP startup and Runtime database-path helpers;
+    Fastify serves `/api` and proxies Web GET/HEAD requests to a private Next.js
+    process behind one public origin
+  - selected Next standalone instead of static export because the implemented
+    `/session/[id]` route must resolve arbitrary stored IDs; Web API calls now
+    default to same-origin `/api`
+  - moved the Runtime default database outside application files to the native
+    macOS, Windows, or XDG application-data directory while retaining
+    `--database`, `--data-dir`, and `TRACE_DB_PATH` precedence; legacy
+    `apps/server/trace.db` files remain explicitly selectable and are not copied
+    implicitly
+  - bundled the CLI and Server dependencies into runnable Node 22 ESM without
+    `tsx` or TypeScript source execution, then packaged it with Next standalone
+    assets and the current platform's native `better-sqlite3` dependency in a
+    reproducible tar.gz
+  - fixed the release-smoke finding that `<command> --help` was rejected; it now
+    returns the unified help without starting the Runtime
+- verification:
+  - `pnpm test` passed after final formatting: Core 30 files / 206 tests, Server
+    20 files / 83 tests, Web 5 files / 19 tests, and CLI 4 files / 28 tests
+  - `pnpm build` passed for Contracts, Core, Server, Web, and CLI; the Web build
+    retained `/session/[id]` as a dynamic SSR route
+  - `pnpm lint` completed successfully with 18 existing warnings and 2 infos
+    outside T103-modified files; `git diff --check` and the current-state
+    stale-claim search passed
+  - `pnpm build:release` produced
+    `agent-profile-0.0.1-darwin-arm64.tar.gz`; a clean temporary extraction
+    verified Node 24, external zstd discovery, CLI help, native SQLite loading,
+    API health, the proxied Home title, arbitrary Session-route rendering,
+    separate data-directory persistence, port release/reuse, restart with the
+    same database, SIGINT, and SIGTERM
+- changed files:
+  - CLI/Contracts: `packages/contracts/src/cli.ts`,
+    `packages/contracts/src/index.ts`, `packages/cli/package.json`,
+    `packages/cli/scripts/build.mjs`, and CLI main/runner/serve/browser/Web
+    server modules with their tests
+  - Server/Web: `apps/server/package.json`, `apps/server/src/app.ts`,
+    `apps/server/src/runtime.ts`, `apps/server/src/data-path.ts`,
+    `apps/server/src/http-server.ts`, focused Server tests,
+    `apps/web/app/config.ts`, and `apps/web/next.config.js`
+  - release/config/docs: root `package.json`, `pnpm-lock.yaml`,
+    `scripts/build-release.mjs`, `README.md`, `README.zh-CN.md`,
+    `ARCHITECTURE.md`, `docs/zh/OVERVIEW.md`, and this roadmap
+- remaining limitations:
+  - the archive build currently emits only the host platform/architecture;
+    darwin-arm64 is the first smoke-tested target, and cross-platform CI,
+    signing, published packages, and installers remain future release work
+  - target machines still need Node.js 22+ and `zstd`; a single-file executable
+    is not implemented
+  - `--open` is explicit and best effort; a browser-launch failure is reported
+    as a warning while the local service remains available
 
 ## Execution Order
 

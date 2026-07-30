@@ -1,6 +1,5 @@
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Pricing } from '@agent-profile/core';
+import { defaultDatabasePathFor, ensureDatabaseDirectory } from './data-path';
 import type { DatabaseConnection } from './database';
 import { createDatabase, lookupPricing } from './database';
 import { getModelContextForDb, seedModelContextDefaults, seedPricingDefaults } from './db';
@@ -32,8 +31,7 @@ export interface ProductionRuntimeOptions extends Omit<RuntimeOptions, 'database
   databasePath?: string;
 }
 
-const serverDir = dirname(fileURLToPath(import.meta.url));
-export const defaultDatabasePath = resolve(serverDir, '..', 'trace.db');
+export const defaultDatabasePath = defaultDatabasePathFor();
 
 export function createRuntime(options: RuntimeOptions): AppRuntime {
   const { database } = options;
@@ -71,8 +69,8 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
 }
 
 export function createProductionRuntime(options: ProductionRuntimeOptions): AppRuntime {
-  const database = createDatabase(
-    options.databasePath || process.env.TRACE_DB_PATH || defaultDatabasePath,
-  );
+  const databasePath = options.databasePath || process.env.TRACE_DB_PATH || defaultDatabasePath;
+  ensureDatabaseDirectory(databasePath);
+  const database = createDatabase(databasePath);
   return createRuntime({ ...options, database });
 }

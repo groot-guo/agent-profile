@@ -6,7 +6,8 @@
     "./imports": "./src/ingestion/import-service.ts",
     "./reports": "./src/reports-service.ts",
     "./sessions": "./src/session-discovery-service.ts",
-    "./runtime": "./src/runtime.ts"
+    "./runtime": "./src/runtime.ts",
+    "./http-server": "./src/http-server.ts"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",

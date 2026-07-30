@@ -52,8 +52,9 @@ OpenCode SQLite ────┘                      分析 + 会话仓储
 定价/模型窗口解析器、每 Runtime 独立的导入服务与任务管理器、时钟和幂等关闭操作。
 Fastify 只适配显式传入的 Runtime；路由不再创建生产数据库或导入单例。当前
 `@agent-profile/cli` package 的 `doctor` 会直接创建并关闭同一个 Runtime，只刷新来源
-可用性，不启动导入或 HTTP。源码 workspace 已提供 `agent-profile` binary，但尚未发布
-正式发行包；日常 Web 入口仍是 `pnpm dev`/`pnpm start`。
+可用性，不启动导入或 HTTP。`agent-profile serve` 启动私有回环 Next.js standalone
+进程，再以公开回环 Fastify origin 同时承载 Web 与 `/api`；SIGINT/SIGTERM 会依次关闭
+Fastify、Runtime/SQLite 与 Next.js。
 `sources` 通过共享 import service 刷新可用性与已存主链 Session 计数；`sync` 复用同一
 Runtime 导入服务，等待所选来源完成并输出终态结果。两者不启动 HTTP，状态不暴露来源路径或
 transcript 标识。
@@ -107,6 +108,9 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 通过 `agent-profile stats`、`agent-profile profiles` 和 `agent-profile task-profile <id>`
   读取现有统计、Agent Process Profile 与显式 Task Profile；它们是过程证据，不能单独证明
   交付质量或配置优劣。
+- 通过 `agent-profile serve [--open]` 启动单一回环 Web/API origin；`build:release` 把
+  无 TypeScript/tsx 运行依赖的 CLI bundle、Next standalone 与当前平台原生 SQLite
+  打入 tar.gz。首个 smoke 目标为 darwin-arm64，目标机仍需 Node.js 22+ 与 `zstd`。
 - 分别保留 input、cache creation、cache read、output 四类 token。
 - 首次使用时以独立数据准备页展示可用来源、导入和失败状态；已有数据在后台同步期间仍可
   浏览，并通过侧栏紧凑、可展开的来源级状态显示当前操作和完成数，同步完成后只刷新一次。
@@ -202,9 +206,9 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 能提供无持久化的提示词结构审查和带护栏的下一步实验假设；
 - 能持久化 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment，并生成
   `task-profile/v1`；缺失 Outcome 与失败严格区分。
-- 能从源码 workspace 运行 `agent-profile help/version/doctor/sources/sync/sessions`；详细
-  Session/证据查询与 `serve` 仍在开发中；可通过 `stats`、`profiles` 与
-  `task-profile <id>` 读取既有报告，正式发行制品仍在开发中。
+- 能运行 `agent-profile help/version/doctor/sources/sync/sessions/stats/profiles/serve`
+  与 `task-profile <id>`；详细 Session/证据 CLI 查询仍未实现。当前可在本机生成未签名、
+  仅限同平台/架构的 Node 发行归档，尚无公开 package、签名安装器或跨平台 CI matrix。
 - 自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback 尚未实现。
 
 未来方案：
@@ -229,12 +233,16 @@ Task 标记为 `completed`。
 ## 端口与配置
 
 - `packages/cli/bin/agent-profile.mjs doctor` 按 `--database`、
-  `--data-dir/trace.db`、`TRACE_DB_PATH`、现有 Runtime 默认值的顺序选择数据库；
+  `--data-dir/trace.db`、`TRACE_DB_PATH`、平台应用数据目录默认值的顺序选择数据库；
   `--json` 输出版本化报告。命令用法错误 exit code 为 `2`，Runtime 失败为 `1`。
 - 根目录 `pnpm dev` 会并行启动 server 与 web，server 源码变化后会自动重启，不再需要
   分别打开两个终端。
 - 根目录 `pnpm start` 会先构建 workspace，再以非 watch 模式并行启动生产 Web 与 API，
   作为日常本地运行入口。
+- `agent-profile serve` 默认用 `3000` 作为公开 Web/API 端口、`3001` 作为私有 Web
+  进程端口，只接受回环 host。macOS、Windows、Linux 默认数据库分别位于各自应用数据目录；
+  应用文件替换不会删除数据库。旧 `apps/server/trace.db` 不自动搬迁，可显式选择或在停服
+  后复制。
 - server 默认 `3000`，可通过 `PORT` 修改。
 - web 默认 `3001`，可通过 `NEXT_PUBLIC_API` 修改 API 地址。
 - Server 与 Web 默认只绑定 `127.0.0.1`；API CORS 默认只接受本机 `3001` 来源。

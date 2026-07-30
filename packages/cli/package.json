@@ -2,24 +2,29 @@
   "name": "@agent-profile/cli",
   "version": "0.0.1",
   "type": "module",
-  "main": "./src/main.ts",
-  "types": "./src/main.ts",
+  "main": "./dist/agent-profile.mjs",
   "bin": {
-    "agent-profile": "./bin/agent-profile.mjs"
+    "agent-profile": "./dist/agent-profile.mjs"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --noEmit && node scripts/build.mjs",
     "dev": "tsx src/bin.ts",
     "test": "vitest run"
   },
   "dependencies": {
-    "@agent-profile/contracts": "workspace:*",
-    "trace-server": "workspace:*",
-    "tsx": "^4.0.0"
+    "better-sqlite3": "^11.10.0"
   },
   "devDependencies": {
+    "@agent-profile/contracts": "workspace:*",
+    "trace-server": "workspace:*",
+    "tsx": "^4.0.0",
     "@types/node": "^22.20.1",
+    "esbuild": "^0.28.1",
     "typescript": "^5.5.0",
     "vitest": "^4.1.10"
-  }
+  },
+  "files": [
+    "dist",
+    "web"
+  ]
 }
