@@ -540,13 +540,12 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
       session.cacheReadTokens +
       session.outputTokens;
     const turns = spans.filter((s) => s.type === 'llm_turn');
-    const tools = spans.filter((s) => s.type === 'tool_call');
 
     const lines = [
       `# Session Report: ${session.name || session.id.slice(0, 8)}`,
       '',
       `- **Agent**: ${session.agent} | **Model**: ${turns[0]?.model || '-'}`,
-      `- **Time**: ${new Date(session.startTime).toISOString()} (${session.endTime ? Math.round((session.endTime - session.startTime) / 60000) + 'min' : 'ongoing'})`,
+      `- **Time**: ${new Date(session.startTime).toISOString()} (${session.endTime ? `${Math.round((session.endTime - session.startTime) / 60000)}min` : 'ongoing'})`,
       `- **Project**: ${session.cwd || '-'} | **Branch**: ${session.gitBranch || '-'}`,
       '',
       '## Token Breakdown',

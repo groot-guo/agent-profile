@@ -166,9 +166,9 @@ describe('diagnoseSessionSync', () => {
     const finding = result.findings.find((f) => f.type === 'repeated_read');
     expect(finding).toBeDefined();
     // 2 later reads wasted: 2000+2000 / 4 = 1000 tokens
-    expect(finding!.wastedTokens).toBeGreaterThan(0);
-    expect(finding!.spanIds).toContain('r2');
-    expect(finding!.spanIds).toContain('r3');
+    expect(finding?.wastedTokens).toBeGreaterThan(0);
+    expect(finding?.spanIds).toContain('r2');
+    expect(finding?.spanIds).toContain('r3');
   });
 
   it('does not flag single read as repeated', () => {
@@ -203,7 +203,7 @@ describe('diagnoseSessionSync', () => {
     const result = diagnoseSessionSync(detail, { pricingLookup });
     const finding = result.findings.find((f) => f.type === 'large_output');
     expect(finding).toBeDefined();
-    expect(finding!.wastedTokens).toBeGreaterThan(0);
+    expect(finding?.wastedTokens).toBeGreaterThan(0);
   });
 
   // ===== low_cache =====
@@ -217,7 +217,7 @@ describe('diagnoseSessionSync', () => {
     const finding = result.findings.find((f) => f.type === 'low_cache');
     expect(finding).toBeDefined();
     // non-cached = 20k input
-    expect(finding!.wastedTokens).toBe(20_000);
+    expect(finding?.wastedTokens).toBe(20_000);
   });
 
   it('does not flag low_cache for small sessions', () => {
@@ -238,7 +238,7 @@ describe('diagnoseSessionSync', () => {
     const result = diagnoseSessionSync(detail, { pricingLookup });
     const finding = result.findings.find((f) => f.type === 'context_bloat');
     expect(finding).toBeDefined();
-    expect(finding!.wastedTokens).toBeGreaterThan(0);
+    expect(finding?.wastedTokens).toBeGreaterThan(0);
   });
 
   it('does not flag context_bloat for small context', () => {
@@ -265,7 +265,7 @@ describe('diagnoseSessionSync', () => {
     const result = diagnoseSessionSync(detail, { pricingLookup });
     const finding = result.findings.find((f) => f.type === 'long_thinking');
     expect(finding).toBeDefined();
-    expect(finding!.wastedTokens).toBeGreaterThan(0);
+    expect(finding?.wastedTokens).toBeGreaterThan(0);
   });
 
   it('aggregates excess long_thinking beyond top 5', () => {
@@ -312,8 +312,8 @@ describe('diagnoseSessionSync', () => {
     const result = diagnoseSessionSync(detail, { pricingLookup });
     const finding = result.findings.find((f) => f.type === 'repeated_failure');
     expect(finding).toBeDefined();
-    expect(finding!.spanIds).toContain('e1');
-    expect(finding!.spanIds).toContain('e3');
+    expect(finding?.spanIds).toContain('e1');
+    expect(finding?.spanIds).toContain('e3');
   });
 
   it('does not flag intermittent failures as repeated', () => {
@@ -344,7 +344,7 @@ describe('diagnoseSessionSync', () => {
     const result = diagnoseSessionSync(detail, { pricingLookup });
     const finding = result.findings.find((f) => f.type === 'read_scope_too_large');
     expect(finding).toBeDefined();
-    expect(finding!.wastedTokens).toBeGreaterThan(0);
+    expect(finding?.wastedTokens).toBeGreaterThan(0);
   });
 
   it('does not flag Read with limit', () => {
@@ -454,7 +454,7 @@ describe('diagnoseSessionSync', () => {
     const result = diagnoseSessionSync(detail, { pricingLookup });
     const finding = result.findings.find((f) => f.type === 'same_param_loop');
     expect(finding).toBeDefined();
-    expect(finding!.spanIds.length).toBe(4);
+    expect(finding?.spanIds.length).toBe(4);
   });
 
   it('does not flag different params as same_param_loop', () => {

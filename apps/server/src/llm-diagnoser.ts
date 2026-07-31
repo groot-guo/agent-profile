@@ -33,7 +33,7 @@ function buildPrompt(ctx: LlmDiagnoseContext): string {
 
   const toolSummary = ctx.toolCallSequence
     .slice(0, 20)
-    .map((t) => `${t.isError ? '❌' : '✓'} ${t.name}${t.input ? ': ' + t.input.slice(0, 200) : ''}`)
+    .map((t) => `${t.isError ? '❌' : '✓'} ${t.name}${t.input ? `: ${t.input.slice(0, 200)}` : ''}`)
     .join('\n');
 
   return `Analyze this AI coding agent session and identify patterns of inefficiency:

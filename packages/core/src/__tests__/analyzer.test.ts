@@ -301,11 +301,13 @@ describe('analyzeEfficiency', () => {
     ];
     const result = analyzeEfficiency(spans);
     expect(result.toolSuccessRates.length).toBe(2);
-    const bash = result.toolSuccessRates.find((t) => t.name === 'Bash')!;
+    const bash = result.toolSuccessRates.find((t) => t.name === 'Bash');
+    if (!bash) throw new Error('expected Bash success rate');
     expect(bash.total).toBe(2);
     expect(bash.errors).toBe(1);
     expect(bash.successRate).toBe(0.5);
-    const read = result.toolSuccessRates.find((t) => t.name === 'Read')!;
+    const read = result.toolSuccessRates.find((t) => t.name === 'Read');
+    if (!read) throw new Error('expected Read success rate');
     expect(read.successRate).toBe(1);
   });
 
@@ -353,7 +355,8 @@ describe('analyzeEfficiency', () => {
     ];
     const result = analyzeEfficiency(spans);
     expect(result.fileOperations.length).toBe(2);
-    const a = result.fileOperations.find((f) => f.path === '/src/a.ts')!;
+    const a = result.fileOperations.find((f) => f.path === '/src/a.ts');
+    if (!a) throw new Error('expected /src/a.ts file operation');
     expect(a.reads).toBe(2);
     expect(a.edits).toBe(1);
     // a.ts was read+edited; b.ts was only written, so it does not count as a Read→Edit conversion.
@@ -495,7 +498,8 @@ describe('analyzePerformance', () => {
     ];
     const result = analyzePerformance(spans);
     expect(result.toolLatencyByName.length).toBe(2);
-    const bash = result.toolLatencyByName.find((t) => t.name === 'Bash')!;
+    const bash = result.toolLatencyByName.find((t) => t.name === 'Bash');
+    if (!bash) throw new Error('expected Bash latency');
     expect(bash.count).toBe(2);
     expect(bash.avg).toBe(3000);
   });

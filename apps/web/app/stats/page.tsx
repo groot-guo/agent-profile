@@ -475,5 +475,5 @@ function modelColor(model: string): string {
     modelColorMap.set(model, MODEL_PALETTE[modelColorIdx % MODEL_PALETTE.length]);
     modelColorIdx++;
   }
-  return modelColorMap.get(model)!;
+  return modelColorMap.get(model) ?? MODEL_PALETTE[0];
 }

@@ -178,7 +178,7 @@ export function diagnoseSessionSync(
     ...detectSameParamLoop(tools, t, costOfTokens),
     ...detectWriteThenRead(tools, t, costOfTokens),
     ...detectContextCompression(turns, t, costOfTokens),
-    ...detectModelDowngrade(turns, t, costOfTokens, pricingLookup),
+    ...detectModelDowngrade(turns, t, pricingLookup),
   ];
 
   // 排序：severity 优先（high>medium>low），同 severity 内 wastedTokens 降序
@@ -653,7 +653,6 @@ function detectContextCompression(
 function detectModelDowngrade(
   turns: Span[],
   t: DiagnosisThresholds,
-  costOfTokens: CostFn,
   pricingLookup: (model?: string) => Pricing | undefined,
 ): DiagnosisFinding[] {
   const findings: DiagnosisFinding[] = [];

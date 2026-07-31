@@ -5450,6 +5450,36 @@ See `diagnosis.md`. Requires model/key decision (deferred).
   - Task-ID/status/link validation, targeted-read smoke checks, documentation
     diff review, and `git diff --check`
 
+### T107 clear repository lint baseline
+
+- status: completed
+- started_at: 2026-07-31
+- completed_at: 2026-07-31
+- purpose:
+  - remove the current Biome lint warnings and infos without changing runtime
+    behavior, so the repository lint check is clean after T105
+- scope:
+  - fix only the files and diagnostics reported by `pnpm lint`
+  - preserve existing tests and public behavior
+- acceptance:
+  - `pnpm lint` exits successfully with zero warnings and zero infos
+  - `pnpm test`, `pnpm build`, and `git diff --check` remain successful
+- verification:
+  - run the lint command and the focused/full checks above
+- documents:
+  - record final files and verification output in this Task
+- completion evidence:
+  - removed the reported template-string and unused-variable diagnostics in
+    `apps/server/src/llm-diagnoser.ts` and `apps/server/src/routes/sessions.ts`
+  - replaced the stats color-map assertion with an explicit fallback and made
+    test lookup assertions type-safe in `apps/web/app/stats/page.tsx`,
+    `packages/core/src/__tests__/analyzer.test.ts`, and
+    `packages/core/src/__tests__/diagnosis.test.ts`
+  - removed the unused `detectModelDowngrade` cost parameter in
+    `packages/core/src/diagnosis.ts`
+  - `pnpm lint` now reports zero warnings and zero infos; `pnpm test`,
+    `pnpm build`, and `git diff --check` also pass
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded
