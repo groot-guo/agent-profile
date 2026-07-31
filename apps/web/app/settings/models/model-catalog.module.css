@@ -1,0 +1,412 @@
+.page {
+  min-height: calc(100dvh - var(--header-h));
+  padding: 24px;
+  background: var(--c-bg);
+}
+
+.shell {
+  width: min(1380px, 100%);
+  margin: 0 auto;
+}
+
+.heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  color: var(--c-link);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.heading h1 {
+  margin: 3px 0 0;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.heading p {
+  max-width: 720px;
+  margin: 7px 0 0;
+  color: var(--c-sub);
+}
+
+.topActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.sidebar,
+.panel,
+.editor,
+.recalculation {
+  border: 1px solid var(--c-borderSoft);
+  border-radius: 14px;
+  background: var(--c-card);
+  box-shadow: var(--shadow-card);
+}
+
+.sidebar {
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  overflow: hidden;
+}
+
+.sidebarHead {
+  padding: 14px;
+  border-bottom: 1px solid var(--c-borderSoft);
+}
+
+.sidebarHead label,
+.field label,
+.fieldLabel {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--c-sub);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sidebarHead input,
+.field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--c-border);
+  border-radius: 9px;
+  outline: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.sidebarHead input:focus,
+.field input:focus {
+  border-color: var(--c-link);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-link) 12%, transparent);
+}
+
+.modelList {
+  max-height: calc(100dvh - 210px);
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.modelButton {
+  display: block;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--c-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.modelButton:hover {
+  background: color-mix(in srgb, var(--c-link) 7%, transparent);
+}
+
+.modelButton[aria-current="true"] {
+  background: color-mix(in srgb, var(--c-link) 12%, var(--c-card));
+  box-shadow: inset 3px 0 0 var(--c-link);
+}
+
+.modelName {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.modelMeta,
+.chipRow,
+.summaryGrid,
+.editorGrid,
+.priceGrid,
+.actionRow,
+.coverageGrid {
+  display: flex;
+  gap: 8px;
+}
+
+.modelMeta {
+  justify-content: space-between;
+  margin-top: 5px;
+  color: var(--c-mute);
+  font-size: 10px;
+}
+
+.content {
+  min-width: 0;
+}
+
+.panel {
+  padding: 20px;
+}
+
+.modelHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--c-borderSoft);
+}
+
+.modelHeader h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 20px;
+}
+
+.modelHeader p,
+.helper,
+.empty {
+  margin: 6px 0 0;
+  color: var(--c-sub);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.chipRow {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 16px 0;
+}
+
+.summaryItem,
+.coverageItem {
+  padding: 11px 12px;
+  border: 1px solid var(--c-borderSoft);
+  border-radius: 10px;
+  background: var(--c-bg);
+}
+
+.summaryItem span,
+.coverageItem span {
+  display: block;
+  color: var(--c-mute);
+  font-size: 10px;
+}
+
+.summaryItem strong,
+.coverageItem strong {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.editorGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(250px, 0.65fr);
+  align-items: start;
+  margin-top: 16px;
+}
+
+.editor,
+.recalculation {
+  padding: 16px;
+  box-shadow: none;
+}
+
+.editor h3,
+.recalculation h3,
+.history h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.priceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.field {
+  min-width: 0;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.fieldError {
+  margin-top: 8px;
+  color: var(--c-high);
+  font-size: 11px;
+}
+
+.actionRow {
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.button,
+.primaryButton {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--c-border);
+  border-radius: 9px;
+  background: var(--c-card);
+  color: var(--c-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.primaryButton {
+  border-color: var(--c-link);
+  background: var(--c-link);
+  color: var(--c-on-link);
+}
+
+.button:disabled,
+.primaryButton:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.recalculation {
+  margin-top: 16px;
+}
+
+.coverageGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.confirmation {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  color: var(--c-sub);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.confirmation input {
+  width: 18px;
+  height: 18px;
+}
+
+.history {
+  margin-top: 18px;
+}
+
+.historyTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.historyTable th,
+.historyTable td {
+  padding: 8px 7px;
+  border-bottom: 1px solid var(--c-borderSoft);
+  text-align: left;
+  vertical-align: top;
+}
+
+.historyTable th {
+  color: var(--c-mute);
+  font-weight: 600;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .page {
+    padding: 16px;
+  }
+  .workspace {
+    grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  }
+  .summaryGrid,
+  .coverageGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .editorGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 12px;
+  }
+  .heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .topActions {
+    justify-content: flex-start;
+  }
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    position: static;
+  }
+  .modelList {
+    max-height: 300px;
+  }
+  .modelHeader {
+    flex-direction: column;
+  }
+  .chipRow {
+    justify-content: flex-start;
+  }
+  .priceGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fieldWide {
+    grid-column: auto;
+  }
+  .history {
+    overflow-x: auto;
+  }
+  .historyTable {
+    min-width: 680px;
+  }
+}

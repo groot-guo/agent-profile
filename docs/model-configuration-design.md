@@ -281,7 +281,8 @@ over the same service rather than separate SQL implementations.
 
 ## Web workspace
 
-The proposed `/settings/models` workspace includes:
+The implemented `/settings/models` workspace consumes only the public
+`model-catalog/v1` contract and includes:
 
 - observed unpriced models first;
 - model identity, source coverage, and latest observation;
@@ -291,6 +292,12 @@ The proposed `/settings/models` workspace includes:
 - recalculation preview, explicit confirmation, progress/result, and recovery
   guidance;
 - unsupported-pricing and unknown-data explanations.
+
+The selected exact raw-model identity is deep-linked in the URL. Saving a price
+or context record reports success but never starts recalculation implicitly.
+Preview is read-only; execute remains disabled until explicit confirmation and
+is rejected when the pricing revision changes. Versioned JSON export/import is
+local and content-free.
 
 The workspace must not call an edit a historical provider invoice. It manages
 the local calculator's reference data.

@@ -108,6 +108,16 @@ Agent Profile Web 端统一视觉与交互约束。改 UI 前必读;新增页面
 
 ## 9. 文案
 
+### Model Catalog 工作区
+
+- `/settings/models` 在桌面使用 observed 模型侧栏 + 配置内容区，`680px` 以下按列表、详情
+  顺序堆叠；模型选择保存在 URL，未定价/不支持/缺上下文状态必须用文字标识。
+- 四类价格和上下文输入必须有可见 label、字段级错误和 pending 状态。保存配置只反馈新
+  revision，不得自动触发历史重算。
+- 重算先展示 Span/Session 与 known/unknown coverage，用户明确勾选确认后才能 execute；
+  pricing revision 变化必须清除旧 preview 并要求重新生成。
+- 配置导入导出使用版本化本地 JSON，不展示为远端同步，也不得包含 Session 或 prompt 内容。
+
 - 界面语言:中文为主,技术术语保留英文(token、cache、input/output)。
 - 按钮写动作结果(「同步数据」不是「Submit」);同一动作全流程同名。
 - 提示文案说「是什么 + 怎么办」,不道歉、不含糊(如「包含未知模型,成本无法计算」)。

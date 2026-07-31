@@ -520,7 +520,11 @@ The current server/UI support:
   context/cost, tools/chain, and normalized-evidence views;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - versioned Model Catalog inventory/configuration APIs, editable pricing/context
-  data, explicit pricing-equivalent aliases, and previewed cost recomputation.
+  data, explicit pricing-equivalent aliases, and previewed cost recomputation;
+- a `/settings/models` Web workspace that consumes only those public APIs,
+  prioritizes observed unknown/unsupported identities, preserves price history,
+  and gates scoped recalculation behind a fixed-revision preview and explicit
+  confirmation.
 
 Mutable pricing and model-context requests have runtime JSON-schema validation.
 New user pricing defaults to its write time; callers may supply an explicit

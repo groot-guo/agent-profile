@@ -227,6 +227,10 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 - `/api/pricing` 保存四类 Token 单价和可选的 `effectiveFrom`。导入和重算会按每个 LLM
   Span 的发生时间选择已生效价格；缺少定价仍保持 unknown。`POST /api/recompute-cost`
   是显式的历史成本重算操作。
+- `/api/model-catalog/*` 提供 `model-catalog/v1` observed raw-model inventory、价格
+  历史/来源、精确上下文配置、版本化本地 JSON 导入导出，以及只读 preview + 固定 revision
+  execute 的范围化重算。`/settings/models` 是对应 Web 工作区：优先显示未定价/不支持模型，
+  配置保存后不会自动重算，必须先预览并明确确认；导出内容不含 Session 或 prompt。
 - 确定性诊断阈值是 Core 内置策略常量，不是可由用户编辑的 Runtime 配置；诊断里的
   `wastedCost` 是以当前分析时点 input 价格计算的 planning 上限估算，不是历史账单证据。
 - Task Configuration Snapshot 只记录 Task 明确提供的 Agent/model/version 标识和 source

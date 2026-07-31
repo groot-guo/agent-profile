@@ -186,46 +186,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update Profile model, Runtime proposal, architecture, README,
   and roadmap to distinguish post-run feedback from future live Runtime hints
 
-### T100 Model Catalog configuration workspace
-
-- status: planned
-- estimated size/risk: large / medium-high; the UI mutates calculator reference
-  data and triggers bounded historical recalculation, so impact disclosure,
-  accessibility, and stale-revision handling are central
-- purpose:
-  - make observed model pricing and context configuration safely usable from the
-    local Web application instead of exposing API-only mutable configuration
-- dependencies:
-  - T99 Server module and versioned contracts
-- scope:
-  1. add a `/settings/models` feature workspace backed only by the public Model
-     Catalog contract
-  2. prioritize observed unpriced/unsupported models and show exact identity,
-     source coverage, latest observation, price history, context specification,
-     provenance, and user-override state
-  3. add four-token-class price and context editors with validation, effective
-     UTC time, source/audit metadata, and non-destructive historical revision
-     behavior
-  4. provide recalculation preview, explicit confirmation, affected
-     Session/Span and unknown-coverage summary, execute progress/result, stale
-     preview recovery, and no automatic mutation after an edit
-  5. add versioned local configuration import/export and navigation entry
-- acceptance:
-  - a user can configure an exact observed raw model, understand the applicable
-    price/context source, preview impact, explicitly recalculate, and see the
-    resulting known/unknown coverage without reading API documentation
-  - unsupported schemes, provider-only identities, stale revisions, and failed
-    execution cannot be presented as successfully priced
-  - existing Session, Stats, import, reset, Task, and Profile workflows retain
-    their current behavior
-- verification:
-  - feature/view-model and interaction tests; compatibility API mocks; desktop
-    and narrow browser checks; keyboard/screen-reader semantics; stale/error
-    recovery; root tests/build/lint and `git diff --check`
-- documentation:
-  - update READMEs, architecture, Chinese overview, UI guidance, configuration
-    design, and this Task with the final workflow and limitations
-
 ## Terminal Task Index
 
 | Task | Title | Status |
@@ -296,6 +256,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T97](roadmap-archive/2026-q3.md#t97) | modular architecture and model-configuration design baseline | completed |
 | [T98](roadmap-archive/2026-q3.md#t98) | module contracts and reusable Runtime/HTTP composition | completed |
 | [T99](roadmap-archive/2026-q3.md#t99) | Model Catalog and pricing-schedule Server module | completed |
+| [T100](roadmap-archive/2026-q3.md#t100) | Model Catalog configuration workspace | completed |
 | [T101](roadmap-archive/2026-q3.md#t101) | CLI foundation and local Runtime entry point | completed |
 | [T102](roadmap-archive/2026-q3.md#t102) | CLI synchronization, Session queries, and reports | completed |
 | [T103](roadmap-archive/2026-q3.md#t103) | CLI `serve` command and distributable local application | completed |

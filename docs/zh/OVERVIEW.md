@@ -153,7 +153,8 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   约束、上下文和验证结构，并可选择结合 Agent 画像提出待验证的调整假设。
 - 在“任务”工作区关联多个 Session 与版本/Hash 配置快照，记录显式 Outcome，并生成
   带 Session/Outcome/成本覆盖度和限制的 `task-profile/v1`。
-- 维护模型定价与上下文窗口，并在定价变化后重新计算历史成本。
+- 在 `/settings/models` 按 observed raw-model 身份维护四类 Token 定价与上下文窗口；
+  未定价/不支持模型优先，配置保存不自动改写历史，成本重算必须先 preview 再明确确认。
 - 导出 Session 数据和分析报告。
 
 ## 数据模型
@@ -174,6 +175,7 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 alias 值；默认值及供应商文档入口记录在 `apps/server/src/model-catalog/defaults.ts`。
 `model-catalog/v1` 提供 observed-model inventory、价格历史/来源、无 Session 或 prompt
 内容的配置导入导出，以及只读 preview + 固定 revision execute 的范围化成本重算。
+Web 工作区只消费该 public contract，并保留精确模型深链、来源/override 状态和执行覆盖度。
 导入和历史成本重算按 LLM Span 发生时间选择 `pricing`；只有显式选价等价 alias 可回退，
 缺少定价或不支持的 scheme 保持 unknown。确定性诊断阈值是 Core 策略常量，
 诊断 `wastedCost` 只表示当前分析时点的 input-price 上限估算；Task Configuration

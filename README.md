@@ -298,6 +298,12 @@ Model, context, and diagnosis configuration has separate scopes:
   scoped preview/execute recalculation. Preview does not mutate data; execute
   requires the preview's pricing revision and records its result transactionally.
   Unsupported pricing schemes remain unknown.
+- `/settings/models` is the local Web workspace over that public contract. It
+  prioritizes observed unpriced/unsupported identities, edits four-token prices
+  and exact context limits with provenance, keeps history non-destructive, and
+  requires preview plus explicit confirmation before scoped recalculation.
+  Versioned configuration import/export stays local and excludes Session/prompt
+  content.
 - Deterministic diagnosis thresholds are Core-owned policy constants, not a
   user-editable Runtime setting. Their `wastedCost` values are current analysis-time
   input-price upper-bound estimates for planning, not historical billing evidence.
