@@ -103,6 +103,7 @@ describe('database migrations', () => {
       { version: 6, name: 'bounded_session_discovery' },
       { version: 7, name: 'bounded_session_evidence' },
       { version: 8, name: 'model_catalog_provenance' },
+      { version: 9, name: 'model_catalog_span_provenance_recovery' },
     ]);
 
     const legacySession = database
@@ -139,7 +140,26 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(8);
+    expect(count.count).toBe(9);
+    database.close();
+  });
+
+  it('recovers span provenance when an early migration v8 was already recorded', () => {
+    const database = createDatabase(':memory:');
+    database.exec(`
+      ALTER TABLE spans DROP COLUMN pricing_model;
+      ALTER TABLE spans DROP COLUMN pricing_revision;
+    `);
+    database.prepare('DELETE FROM schema_migrations WHERE version = ?').run(9);
+
+    applyMigrations(database);
+
+    expect(columnsOf(database, 'spans')).toEqual(
+      expect.arrayContaining(['pricing_model', 'pricing_revision']),
+    );
+    expect(database.prepare('SELECT name FROM schema_migrations WHERE version = ?').get(9)).toEqual(
+      { name: 'model_catalog_span_provenance_recovery' },
+    );
     database.close();
   });
 

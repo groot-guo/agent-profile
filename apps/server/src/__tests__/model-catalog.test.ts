@@ -60,6 +60,83 @@ describe('ModelCatalogService', () => {
     await runtime.close();
   });
 
+  it('recovers repeated bundled NULL residues beside an existing epoch-zero row', async () => {
+    const database = createDatabase(':memory:');
+    const insert = database.prepare(
+      `INSERT INTO pricing (
+        model, input_price, cache_creation_price, cache_read_price, output_price,
+        effective_from, source_kind, revision, status, created_at
+      ) VALUES (?, ?, 1, 0.1, 2, ?, ?, 1, 'active', 1)`,
+    );
+    insert.run('gpt-4o', 99, 0, 'manual');
+    insert.run('gpt-4o', 17.5, null, 'bundled');
+    insert.run('gpt-4o', 17.5, null, 'bundled');
+
+    const runtime = createRuntime({
+      database,
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+      clock: () => 1000,
+    });
+
+    expect(runtime.modelCatalog.lookupPricing('gpt-4o', 1000)).toMatchObject({
+      inputPrice: 99,
+      sourceKind: 'manual',
+    });
+    expect(runtime.modelCatalog.listPricing('gpt-4o')).toHaveLength(1);
+    expect(
+      database
+        .prepare(
+          `SELECT status, COUNT(*) as count FROM pricing
+           WHERE model = 'gpt-4o' AND effective_from IS NULL`,
+        )
+        .get(),
+    ).toEqual({ status: 'superseded', count: 2 });
+
+    const pricingCount = database.prepare('SELECT COUNT(*) as count FROM pricing').get();
+    const historyCount = database.prepare('SELECT COUNT(*) as count FROM pricing_history').get();
+    runtime.modelCatalog.seedDefaults();
+    expect(database.prepare('SELECT COUNT(*) as count FROM pricing').get()).toEqual(pricingCount);
+    expect(database.prepare('SELECT COUNT(*) as count FROM pricing_history').get()).toEqual(
+      historyCount,
+    );
+    await runtime.close();
+  });
+
+  it('normalizes one repeated bundled NULL residue when no epoch-zero row exists', async () => {
+    const database = createDatabase(':memory:');
+    const insert = database.prepare(
+      `INSERT INTO pricing (
+        model, input_price, cache_creation_price, cache_read_price, output_price,
+        effective_from, source_kind, revision, status, created_at
+      ) VALUES ('residue-only-model', 1, 1, 0.1, 2, NULL, 'bundled', 1, 'active', 1)`,
+    );
+    insert.run();
+    insert.run();
+
+    const runtime = createRuntime({
+      database,
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+      clock: () => 1000,
+    });
+
+    expect(runtime.modelCatalog.listPricing('residue-only-model')).toHaveLength(1);
+    expect(
+      database
+        .prepare(
+          `SELECT status, effective_from as effectiveFrom, COUNT(*) as count
+           FROM pricing WHERE model = 'residue-only-model'
+           GROUP BY status, effective_from ORDER BY status`,
+        )
+        .all(),
+    ).toEqual([
+      { status: 'active', effectiveFrom: 0, count: 1 },
+      { status: 'superseded', effectiveFrom: null, count: 1 },
+    ]);
+    await runtime.close();
+  });
+
   it('revises one applicability key and retains superseded history', async () => {
     const runtime = createRuntime({
       database: createDatabase(':memory:'),

@@ -46,8 +46,34 @@ export function seedPricingDefaults(database: DatabaseConnection): void {
   `);
   database
     .prepare(
+      `UPDATE pricing AS residue
+       SET status = 'superseded',
+         superseded_at = COALESCE(superseded_at, created_at)
+       WHERE source_kind = 'bundled'
+         AND effective_from IS NULL
+         AND status <> 'superseded'
+         AND (
+           EXISTS (
+             SELECT 1 FROM pricing AS current
+             WHERE current.model = residue.model
+               AND current.effective_from = 0
+           )
+           OR residue.rowid <> (
+             SELECT MIN(candidate.rowid) FROM pricing AS candidate
+             WHERE candidate.model = residue.model
+               AND candidate.source_kind = 'bundled'
+               AND candidate.effective_from IS NULL
+               AND candidate.status <> 'superseded'
+           )
+         )`,
+    )
+    .run();
+  database
+    .prepare(
       `UPDATE pricing SET effective_from = 0
-       WHERE source_kind = 'bundled' AND effective_from IS NULL`,
+       WHERE source_kind = 'bundled'
+         AND effective_from IS NULL
+         AND status <> 'superseded'`,
     )
     .run();
   database.exec(`

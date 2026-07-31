@@ -302,6 +302,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T104](roadmap-archive/2026-q3.md#t104) | collapse Session-detail navigation history | completed |
 | [T105](roadmap-archive/2026-q3.md#t105) | active Session observation and live refresh | completed |
 | [T107](roadmap-archive/2026-q3.md#t107) | clear repository lint baseline | completed |
+| [T108](roadmap-archive/2026-q3.md#t108) | Model Catalog bundled-seed startup recovery | completed |
 | [T106](roadmap-archive/2026-q3.md#t106) | bounded roadmap register and completed-task archive | completed |
 | [T71](roadmap-archive/2026-q3.md#t71) | model-context and analysis configuration audit | completed |
 

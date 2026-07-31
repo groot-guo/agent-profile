@@ -118,7 +118,8 @@ export class ModelCatalogService {
           source_kind as sourceKind, source_reference as sourceReference,
           pricing_scheme as pricingScheme, revision, status,
           created_at as createdAt, superseded_at as supersededAt
-         FROM pricing ${model ? 'WHERE model = ?' : ''}
+         FROM pricing
+         WHERE status IN ('active', 'unsupported')${model ? ' AND model = ?' : ''}
          ORDER BY model, COALESCE(effective_from, 0), revision`,
       )
       .all(...(model ? [model] : [])) as PricingRecord[];

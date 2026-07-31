@@ -381,7 +381,10 @@ stale provider-labelled rows once; no generated-data reset is required.
   fields, selected pricing model/revision, timing, parent/sidechain links, tool
   input/output metadata, and truncation-safe content.
 - `pricing` — current per-model CNY schedules for the four token classes, with
-  effective time, scheme, status, revision, and source provenance.
+  effective time, scheme, status, revision, and source provenance. Startup
+  seeding preserves an existing epoch-zero applicability row; any bundled
+  `NULL` residue from an interrupted older seed is retained as superseded and
+  omitted from current pricing/configuration responses.
 - `pricing_history` — immutable pricing revisions, including superseded rows.
 - `pricing_aliases` — explicit audited raw-model-to-pricing-model equivalence;
   presentation aliases never populate this table.

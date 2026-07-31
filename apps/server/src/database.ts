@@ -303,6 +303,14 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    name: 'model_catalog_span_provenance_recovery',
+    up(database) {
+      addColumn(database, 'spans', 'pricing_model', 'TEXT');
+      addColumn(database, 'spans', 'pricing_revision', 'INTEGER');
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
