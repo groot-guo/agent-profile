@@ -2,9 +2,9 @@
 
 import type {
   SessionSummary,
+  TaskProfileOutcome,
   TaskProfileReport,
   TaskStatus,
-  VerificationStatus,
 } from '@agent-profile/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API } from '../config';
@@ -14,15 +14,11 @@ import {
   type ExperimentEvidenceStatus,
 } from '../experiment-guardrail';
 import { sessionDisplayTitle } from '../session-navigation';
-import {
-  emptyOutcomeDraft,
-  OUTCOME_VERIFICATION_STATUSES,
-  type OutcomeDraft,
-  outcomeDraftFromRecord,
-  outcomePayload,
-} from '../task-outcome';
 import { C, FS, fmtTokens, R, SP } from '../theme';
 import { Card, Chip, Empty, Notice, SoftButton, StatCard } from '../ui';
+import { OutcomeEditor } from './outcome-editor';
+import { outcomeToDraft } from './outcome-model';
+import styles from './tasks.module.css';
 
 interface TaskRecord {
   id: string;
@@ -72,20 +68,7 @@ interface TaskDetail {
     agent: string | null;
     name: string | null;
   }>;
-  outcome: {
-    buildStatus: VerificationStatus | null;
-    testStatus: VerificationStatus | null;
-    lintStatus: VerificationStatus | null;
-    gitCommit: string | null;
-    humanRating: number | null;
-    reworkReason: string | null;
-    completedAt: number | null;
-    evidence: Array<{
-      kind: string;
-      status?: VerificationStatus;
-      reference?: string;
-    }>;
-  } | null;
+  outcome: TaskProfileOutcome | null;
 }
 
 const fieldStyle: React.CSSProperties = {
@@ -119,7 +102,8 @@ export default function TasksPage() {
   const [agent, setAgent] = useState('codex');
   const [model, setModel] = useState('');
   const [sourceHash, setSourceHash] = useState('');
-  const [outcome, setOutcome] = useState<OutcomeDraft>(emptyOutcomeDraft);
+  const [outcome, setOutcome] = useState(() => outcomeToDraft(null));
+  const [outcomeSaving, setOutcomeSaving] = useState(false);
   const [cohortTitle, setCohortTitle] = useState('');
   const [cohortProject, setCohortProject] = useState('');
   const [cohortType, setCohortType] = useState('');
@@ -165,7 +149,7 @@ export default function TasksPage() {
     const nextDetail = (await detailResponse.json()) as TaskDetail;
     setDetail(nextDetail);
     setProfile((await profileResponse.json()) as TaskProfileReport);
-    setOutcome(outcomeDraftFromRecord(nextDetail.outcome));
+    setOutcome(outcomeToDraft(nextDetail.outcome));
   }, []);
 
   useEffect(() => {
@@ -226,22 +210,18 @@ export default function TasksPage() {
     setNotice({ kind: 'ok', text: 'Session 已关联' });
   }
 
-  async function saveOutcome() {
-    if (!selectedId) return;
-    let payload: ReturnType<typeof outcomePayload>;
+  async function saveOutcome(payload: TaskProfileOutcome): Promise<boolean> {
+    if (!selectedId) return false;
+    setOutcomeSaving(true);
     try {
-      payload = outcomePayload(outcome);
-    } catch (reason: unknown) {
-      setNotice({
-        kind: 'err',
-        text: `Outcome 无法保存：${reason instanceof Error ? reason.message : '字段无效'}`,
-      });
-      return;
+      const response = await send(`/tasks/${selectedId}/outcome`, 'PUT', payload);
+      if (!response) return false;
+      await loadDetail(selectedId);
+      setNotice({ kind: 'ok', text: 'Outcome 已保存' });
+      return true;
+    } finally {
+      setOutcomeSaving(false);
     }
-    const response = await send(`/tasks/${selectedId}/outcome`, 'PUT', payload);
-    if (!response) return;
-    await loadDetail(selectedId);
-    setNotice({ kind: 'ok', text: 'Outcome 已保存' });
   }
 
   async function saveCohort() {
@@ -356,7 +336,7 @@ export default function TasksPage() {
   }
 
   return (
-    <main style={{ maxWidth: 1320, margin: '0 auto', padding: 24 }}>
+    <main className={styles.page}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: 20, color: C.text }}>任务验证</h1>
         <span className="tnum" style={{ color: C.mute, fontSize: FS.cap }}>
@@ -370,14 +350,7 @@ export default function TasksPage() {
           </Notice>
         </div>
       )}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '320px minmax(0, 1fr)',
-          gap: 20,
-          alignItems: 'start',
-        }}
-      >
+      <div className={styles.workspace}>
         <div>
           <Card title="新建任务">
             <div style={{ display: 'grid', gap: 8 }}>
@@ -466,14 +439,7 @@ export default function TasksPage() {
                 ))}
               </div>
             </Card>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                gap: 10,
-                marginBottom: 20,
-              }}
-            >
+            <div className={styles.summaryGrid}>
               <StatCard
                 value={`${profile.profile.availableSessions}/${profile.profile.linkedSessions}`}
                 label="Session 覆盖"
@@ -486,19 +452,13 @@ export default function TasksPage() {
               />
               <StatCard
                 value={profile.coverage.outcome.status}
-                label="Outcome 覆盖"
+                label={`Outcome 覆盖 · ${profile.coverage.outcome.observedFields}/${profile.coverage.outcome.totalFields}`}
                 warn={profile.coverage.outcome.status !== 'verified'}
               />
             </div>
 
             <Card title="Session 与配置" meta={`${detail.sessions.length} linked`}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) 130px auto',
-                  gap: 8,
-                }}
-              >
+              <div className={styles.sessionAttachGrid}>
                 <select
                   style={fieldStyle}
                   value={sessionId}
@@ -558,13 +518,7 @@ export default function TasksPage() {
               </div>
             </Card>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-                gap: 16,
-              }}
-            >
+            <div className={styles.twoColumn}>
               <Card title="配置快照">
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -595,156 +549,17 @@ export default function TasksPage() {
                   </SoftButton>
                 </div>
               </Card>
-              <Card title="Outcome">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                  {(['buildStatus', 'testStatus', 'lintStatus'] as const).map((field) => (
-                    <div
-                      key={field}
-                      style={{ display: 'grid', gap: 4, color: C.sub, fontSize: FS.cap }}
-                    >
-                      <span>{field.replace('Status', '')}</span>
-                      <VerificationSelect
-                        value={outcome[field]}
-                        onChange={(value) =>
-                          setOutcome((current) => ({ ...current, [field]: value }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-                <input
-                  style={{ ...fieldStyle, marginTop: 8 }}
-                  value={outcome.gitCommit}
-                  onChange={(event) =>
-                    setOutcome((current) => ({ ...current, gitCommit: event.target.value }))
-                  }
-                  placeholder="Git commit"
+              <Card
+                title="Outcome"
+                meta={`${profile.coverage.outcome.status} · ${profile.coverage.outcome.observedFields}/${profile.coverage.outcome.totalFields}`}
+              >
+                <OutcomeEditor
+                  draft={outcome}
+                  coverage={profile.coverage.outcome}
+                  saving={outcomeSaving}
+                  onChange={setOutcome}
+                  onSave={saveOutcome}
                 />
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '130px minmax(0, 1fr)',
-                    gap: 8,
-                    marginTop: 8,
-                  }}
-                >
-                  <label style={{ display: 'grid', gap: 4, color: C.sub, fontSize: FS.cap }}>
-                    人工评分
-                    <select
-                      style={fieldStyle}
-                      value={outcome.humanRating}
-                      onChange={(event) =>
-                        setOutcome((current) => ({ ...current, humanRating: event.target.value }))
-                      }
-                    >
-                      <option value="">未采集</option>
-                      {[1, 2, 3, 4, 5].map((value) => (
-                        <option key={value} value={value}>
-                          {value} / 5
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={{ display: 'grid', gap: 4, color: C.sub, fontSize: FS.cap }}>
-                    完成时间
-                    <input
-                      type="datetime-local"
-                      style={fieldStyle}
-                      value={outcome.completedAt}
-                      onChange={(event) =>
-                        setOutcome((current) => ({ ...current, completedAt: event.target.value }))
-                      }
-                    />
-                  </label>
-                </div>
-                <label
-                  style={{ display: 'grid', gap: 4, marginTop: 8, color: C.sub, fontSize: FS.cap }}
-                >
-                  返工原因（可选，仅存本机）
-                  <textarea
-                    style={{ ...fieldStyle, height: 72, padding: 10, resize: 'vertical' }}
-                    value={outcome.reworkReason}
-                    onChange={(event) =>
-                      setOutcome((current) => ({ ...current, reworkReason: event.target.value }))
-                    }
-                  />
-                </label>
-                <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                    }}
-                  >
-                    <span style={{ color: C.sub, fontSize: FS.cap }}>
-                      结构化验证证据（请勿输入 Prompt 或规则正文）
-                    </span>
-                    <SoftButton
-                      onClick={() =>
-                        setOutcome((current) => ({
-                          ...current,
-                          evidence: [
-                            ...current.evidence,
-                            { id: crypto.randomUUID(), kind: '', status: '', reference: '' },
-                          ],
-                        }))
-                      }
-                    >
-                      添加证据
-                    </SoftButton>
-                  </div>
-                  {outcome.evidence.map((item, index) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1fr) 130px minmax(0, 1fr) auto',
-                        gap: 8,
-                      }}
-                    >
-                      <input
-                        style={fieldStyle}
-                        value={item.kind}
-                        onChange={(event) =>
-                          updateEvidence(setOutcome, index, { kind: event.target.value })
-                        }
-                        placeholder="类型，例如 test"
-                      />
-                      <VerificationSelect
-                        value={item.status}
-                        onChange={(status) => updateEvidence(setOutcome, index, { status })}
-                      />
-                      <input
-                        style={fieldStyle}
-                        value={item.reference}
-                        onChange={(event) =>
-                          updateEvidence(setOutcome, index, { reference: event.target.value })
-                        }
-                        placeholder="本地命令或引用"
-                      />
-                      <SoftButton
-                        onClick={() =>
-                          setOutcome((current) => ({
-                            ...current,
-                            evidence: current.evidence.filter(
-                              (_, itemIndex) => itemIndex !== index,
-                            ),
-                          }))
-                        }
-                      >
-                        删除
-                      </SoftButton>
-                    </div>
-                  ))}
-                </div>
-                <SoftButton
-                  variant="primary"
-                  onClick={saveOutcome}
-                  style={{ marginTop: 8, width: '100%' }}
-                >
-                  保存 Outcome
-                </SoftButton>
               </Card>
             </div>
             <Card title="Task Profile" meta={profile.schemaVersion}>
@@ -989,36 +804,4 @@ export default function TasksPage() {
       </div>
     </main>
   );
-}
-
-function VerificationSelect({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <select style={fieldStyle} value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">未采集</option>
-      {OUTCOME_VERIFICATION_STATUSES.map((status) => (
-        <option key={status} value={status}>
-          {status}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function updateEvidence(
-  setOutcome: React.Dispatch<React.SetStateAction<OutcomeDraft>>,
-  index: number,
-  change: Partial<OutcomeDraft['evidence'][number]>,
-): void {
-  setOutcome((current) => ({
-    ...current,
-    evidence: current.evidence.map((item, itemIndex) =>
-      itemIndex === index ? { ...item, ...change } : item,
-    ),
-  }));
 }

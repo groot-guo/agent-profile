@@ -96,20 +96,61 @@ describe('Task/Outcome foundations', () => {
     expect(repository.buildProfile(task.id).coverage.sessions.ratio).toBe(0);
   });
 
-  it('rejects unsupported evidence status and invalid completion time', () => {
+  it('persists every Outcome field and rejects malformed structured evidence', async () => {
     const database = createDatabase(':memory:');
     databases.push(database);
     const repository = new TaskRepository(database);
-    const task = repository.createTask({ title: 'Outcome validation', type: 'feature' });
+    const task = repository.createTask({ title: 'Complete Outcome', type: 'feature' });
+    const completedAt = 1_785_496_245_123;
 
-    expect(() =>
-      repository.upsertOutcome(task.id, {
-        evidence: [{ kind: 'test', status: 'unknown' as never }],
-      }),
-    ).toThrowError('invalid_outcome_evidence');
+    repository.upsertOutcome(task.id, {
+      buildStatus: 'passed',
+      testStatus: 'failed',
+      lintStatus: 'skipped',
+      gitCommit: 'abc123',
+      humanRating: 4,
+      reworkReason: 'A test needs follow-up',
+      completedAt,
+      evidence: [{ kind: 'ci', status: 'failed', reference: 'local://run/1' }],
+    });
+
+    expect(repository.getOutcome(task.id)).toEqual({
+      buildStatus: 'passed',
+      testStatus: 'failed',
+      lintStatus: 'skipped',
+      gitCommit: 'abc123',
+      humanRating: 4,
+      reworkReason: 'A test needs follow-up',
+      completedAt,
+      evidence: [{ kind: 'ci', status: 'failed', reference: 'local://run/1' }],
+    });
+    expect(repository.buildProfile(task.id).coverage.outcome).toEqual({
+      status: 'verified',
+      observedFields: 5,
+      totalFields: 5,
+    });
+
+    const app = Fastify();
+    registerTaskRoutes(app, { database });
+    for (const payload of [
+      { evidence: {} },
+      { evidence: [{ kind: 7 }] },
+      { evidence: [{ kind: 'ci', status: 'unknown' }] },
+      { evidence: [{ kind: 'ci', status: { toString: null } }] },
+      { completedAt: 'not-a-timestamp' },
+      { evidence: Array.from({ length: 51 }, () => ({ kind: 'ci' })) },
+    ]) {
+      const response = await app.inject({
+        method: 'PUT',
+        url: `/api/tasks/${task.id}/outcome`,
+        payload,
+      });
+      expect(response.statusCode).toBe(400);
+    }
     expect(() => repository.upsertOutcome(task.id, { completedAt: Number.NaN })).toThrowError(
       'invalid_completed_at',
     );
+    await app.close();
   });
 
   it('exposes bounded APIs and prevents an evidence-free causal experiment decision', async () => {

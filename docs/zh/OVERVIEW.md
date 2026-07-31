@@ -152,8 +152,9 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 生成 `prompt-review/v1` 和 `iteration-hints/v1`：确定性检查目标、范围、验收、
   约束、上下文和验证结构，并可选择结合 Agent 画像提出待验证的调整假设。
 - 在“任务”工作区关联多个 Session 与版本/Hash 配置快照，记录 build/test/lint/Git、
-  人工评分、返工原因、本地完成时间和有界结构化证据，并生成带 Session/Outcome/成本
-  覆盖度和限制的 `task-profile/v1`；空字段保持未采集，不完整证据不会被静默保存。
+  人工评分、返工原因、完成时间和最多 50 条结构化证据，并生成带
+  Session/Outcome/成本覆盖度和限制的 `task-profile/v1`；页面显示的五项 Outcome
+  coverage 与报告合同一致，缺失值不会被当作失败。
 - 在 `/settings/models` 按 observed raw-model 身份维护四类 Token 定价与上下文窗口；
   未定价/不支持模型优先，配置保存不自动改写历史，成本重算必须先 preview 再明确确认。
 - 导出 Session 数据和分析报告。

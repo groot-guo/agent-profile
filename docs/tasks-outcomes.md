@@ -15,8 +15,11 @@ automatically establish causality.
   mode. Storing them requires the explicit `local_text` mode.
 - Configuration Snapshots store Agent/model identifiers, version labels, and a
   source hash. They do not copy rule bodies, prompt templates, or raw prompts.
-- Outcome evidence is a bounded structured list of kind, optional verification
-  status, and optional reference. Missing verification fields remain `null`.
+- Outcome evidence is a structured list of at most 50 entries. Each entry has a
+  required kind of at most 80 characters, an optional verification status, and
+  an optional reference of at most 500 characters. Missing verification fields
+  remain `null`; malformed arrays, entries, statuses, and timestamps are
+  rejected instead of being stored or silently converted into a result.
 
 ## Storage and reset behavior
 
@@ -43,14 +46,13 @@ Outcome coverage has three states:
 
 An explicit `failed` value is evidence. A missing field is not failure.
 
-The current Task workspace records build, test, lint, Git commit, human rating,
-rework reason, local completion time, and bounded structured evidence. Each
-evidence item has a required kind plus optional supported verification status
-and bounded reference; a partially filled item is rejected rather than silently
-removed. The displayed coverage is the canonical `task-profile/v1` response,
-so `not_collected`, `partial`, and `verified` retain their server-defined
-meaning. Neither a UI `partial` state nor an explicit failed check proves a
-general delivery-quality verdict.
+The Task workspace records all supported fields: build, test, and lint status;
+Git commit; 1–5 human rating; rework reason; completion time; and structured
+evidence. It shows the exact `observedFields/totalFields` coverage returned by
+`task-profile/v1`. Rework reason, completion time, and structured evidence are
+supplemental and do not increase the five-field coverage denominator. A
+`partial` state is therefore a coverage statement, not a runtime failure or
+proof that a Task was unsuccessful.
 
 ## Experiment guardrail
 

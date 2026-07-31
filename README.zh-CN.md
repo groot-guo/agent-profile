@@ -162,11 +162,12 @@ cursor 分页的 `session-evidence-page/v1`，兼容全量详情接口与 `/api/
 来自有界 `home-statistics/v1`；完整 `/api/stats` 仍保留，并改为 SQLite set-based 聚合。
 
 **任务**页面在 Session 过程分析之上补充本地交付证据。一个 Task 可关联多个 Session、
-绑定只保存版本/Hash 的 Configuration Snapshot，并在页面记录 build/test/lint/Git Outcome、
-人工评分、返工原因、本地完成时间和有界结构化验证证据。空字段明确保持“未采集”，不完整
-证据行会被拒绝而不会静默丢弃。`task-profile/v1` 只聚合当前可用的关联 Session，并展示覆盖度
-与限制。任务工作区可定义 Cohort 范围、Experiment 的控制/候选配置、主要指标和 guardrails，
-但不会自动计算因果赢家。
+绑定只保存版本/Hash 的 Configuration Snapshot，并记录 build/test/lint/Git 状态、1–5 分
+人工评分、返工原因、完成时间，以及最多 50 条结构化证据。每条证据要求 kind，并可带验证
+状态和本地引用；非法证据会被拒绝，不会被静默转成结果。缺失 Outcome 会明确保持“未采集”，
+不会变成失败。`task-profile/v1` 只聚合当前可用的关联 Session，并展示覆盖度与限制；其中
+verified 覆盖严格由 build、test、lint、Git commit 和人工评分五项组成。Cohort 和
+Experiment API 可保存比较定义与证据状态，但目前不会自动计算因果赢家。
 
 ## 如何理解 Profile
 

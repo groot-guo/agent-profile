@@ -643,8 +643,15 @@ Agent identities, token totals, known-cost coverage, duration, peak context,
 cache behavior, tool-error evidence, attached Configuration Snapshots, explicit
 Outcome fields, matching cohort definitions, and limitations.
 
-Its Outcome coverage is `not_collected`, `partial`, or `verified`; a missing
-field never becomes a failure. The report does not compute cross-Task cohort
+Its Outcome coverage is `not_collected`, `partial`, or `verified`; the tracked
+five fields are build, test, lint, Git commit, and human rating. Rework reason,
+completion time, and structured evidence remain visible supplemental evidence
+but do not change that denominator. The Task workspace edits every Outcome
+field and reports the same observed/total count as `task-profile/v1`. Structured
+evidence is limited to 50 entries with required kind and optional verification
+status/reference; malformed arrays or entries are rejected with a model error
+instead of being stored or converted into success/failure. A missing field
+never becomes a failure. The report does not compute cross-Task cohort
 distributions, configuration winners, regression decisions, or causal effects.
 
 ### Prompt review and iteration-hint contract

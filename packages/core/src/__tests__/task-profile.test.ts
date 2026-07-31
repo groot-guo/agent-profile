@@ -99,4 +99,29 @@ describe('Task Profile', () => {
     expect(report.comparison.status).toBe('definition_only');
     expect(report.comparison.interpretation).toContain('No configuration is labelled better');
   });
+
+  it('counts only the five verification fields toward verified Outcome coverage', () => {
+    const supplementalOnly = buildTaskProfile({
+      task,
+      configurations: [],
+      sessions: [],
+      generatedAt: 1,
+      outcome: {
+        buildStatus: null,
+        testStatus: null,
+        lintStatus: null,
+        gitCommit: null,
+        humanRating: null,
+        reworkReason: 'Needs another pass',
+        completedAt: 100,
+        evidence: [{ kind: 'review', status: 'failed' }],
+      },
+    });
+
+    expect(supplementalOnly.coverage.outcome).toEqual({
+      status: 'not_collected',
+      observedFields: 0,
+      totalFields: 5,
+    });
+  });
 });

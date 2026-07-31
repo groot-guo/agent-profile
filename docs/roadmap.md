@@ -206,9 +206,11 @@ The immediate sequence authorized on 2026-07-31 completed T105 using bounded
 source observation and the existing atomic replacement path without waiting for
 T85's parser optimization, followed by the documentation-only T106
 roadmap-register/archive work and the T71 configuration audit. T99 then
-completed the Model Catalog Server contract, and T100 completed its public Web
-configuration surface. T70 subsequently completed the independent Session
-detail transition repair. The next normal implementation candidate is T80; the
+completed the Model Catalog Server contract, T100 exposed its Web workspace,
+and T80 completed the Task Outcome evidence workflow. T70 subsequently completed
+the independent Session detail transition repair, followed by T81's guarded
+Cohort/Experiment definition workspace and T87's source-native relationship work;
+the next normal implementation candidate remains the CLI-first sequence below.
 longer-term dependency order remains:
 
 1. T101 CLI foundation, then coordinate T83 bounded discovery and T84 bounded
@@ -217,11 +219,11 @@ longer-term dependency order remains:
 2. T103 `serve` and distribution after the terminal workflow is useful; retain
    the current Web until the production packaging comparison selects Next
    standalone or a static SPA.
-3. T99 Model Catalog Runtime extraction/data contracts and T100's optional Web
-   configuration workspace are complete.
-4. T80 Task Outcome evidence work follows the completed Runtime/CLI foundation; T81
-   Cohort/Experiment workflow remains deferred until Task/Outcome usage is
-   established and must not drive the initial CLI architecture.
+3. T99 Model Catalog Runtime extraction/data contracts are complete; T100 is
+   the optional Web configuration workspace over that public contract.
+4. T80 Task Outcome evidence, T81 guarded Cohort/Experiment definitions, and T87
+   source-native relationship evidence are complete; none imply calculated
+   winners or combined resource attribution.
 5. T87 source-native parent/child evidence before T86 project-level aggregation,
    so Project Profile accounting is designed against proven relationship
    coverage rather than the temporary primary-only boundary.

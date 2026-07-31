@@ -14,12 +14,6 @@ import type { DatabaseConnection } from './database';
 
 type TaskRole = TaskProfileSessionSample['role'];
 type TaskContentMode = 'structured' | 'local_text';
-const VERIFICATION_STATUSES = new Set<VerificationStatus>([
-  'passed',
-  'failed',
-  'skipped',
-  'not_run',
-]);
 
 export class TaskModelError extends Error {
   constructor(
@@ -302,8 +296,17 @@ export class TaskRepository {
       evidence: TaskOutcomeEvidence[];
     }>,
   ): TaskProfileOutcome {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new TaskModelError('invalid_task_outcome');
+    }
     this.requireTask(taskId);
     const current = this.getOutcome(taskId);
+    if (input.gitCommit != null && typeof input.gitCommit !== 'string') {
+      throw new TaskModelError('invalid_git_commit');
+    }
+    if (input.reworkReason != null && typeof input.reworkReason !== 'string') {
+      throw new TaskModelError('invalid_rework_reason');
+    }
     const next: TaskProfileOutcome = {
       buildStatus:
         input.buildStatus === undefined ? (current?.buildStatus ?? null) : input.buildStatus,
@@ -323,15 +326,22 @@ export class TaskRepository {
         input.completedAt === undefined
           ? (current?.completedAt ?? null)
           : optionalTimestamp(input.completedAt),
-      evidence: input.evidence
-        ? input.evidence.map(validateOutcomeEvidence)
-        : (current?.evidence ?? []),
+      evidence:
+        input.evidence === undefined
+          ? (current?.evidence ?? [])
+          : validateOutcomeEvidenceList(input.evidence),
     };
     if (
       next.humanRating != null &&
       (!Number.isInteger(next.humanRating) || next.humanRating < 1 || next.humanRating > 5)
     ) {
       throw new TaskModelError('invalid_human_rating');
+    }
+    if (
+      next.completedAt != null &&
+      (!Number.isSafeInteger(next.completedAt) || next.completedAt < 0)
+    ) {
+      throw new TaskModelError('invalid_completed_at');
     }
     this.database
       .prepare(
@@ -798,15 +808,33 @@ function optionalText(value: string | null | undefined, max: number): string | n
   return text;
 }
 
-function validateOutcomeEvidence(value: TaskOutcomeEvidence): TaskOutcomeEvidence {
-  if (!value || typeof value !== 'object') throw new TaskModelError('invalid_outcome_evidence');
-  if (value.status !== undefined && !VERIFICATION_STATUSES.has(value.status)) {
+function validateOutcomeEvidenceList(value: unknown): TaskOutcomeEvidence[] {
+  if (!Array.isArray(value) || value.length > 50) {
+    throw new TaskModelError('invalid_outcome_evidence');
+  }
+  return value.map(validateOutcomeEvidence);
+}
+
+function validateOutcomeEvidence(value: unknown): TaskOutcomeEvidence {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TaskModelError('invalid_outcome_evidence');
+  }
+  const evidence = value as Record<string, unknown>;
+  if (typeof evidence.kind !== 'string') throw new TaskModelError('invalid_outcome_evidence');
+  if (
+    evidence.status !== undefined &&
+    (typeof evidence.status !== 'string' ||
+      !['passed', 'failed', 'skipped', 'not_run'].includes(evidence.status))
+  ) {
+    throw new TaskModelError('invalid_outcome_evidence');
+  }
+  if (evidence.reference != null && typeof evidence.reference !== 'string') {
     throw new TaskModelError('invalid_outcome_evidence');
   }
   return {
-    kind: requiredText(value.kind, 'invalid_outcome_evidence', 80),
-    status: value.status,
-    reference: optionalText(value.reference, 500) ?? undefined,
+    kind: requiredText(evidence.kind, 'invalid_outcome_evidence', 80),
+    status: evidence.status as VerificationStatus | undefined,
+    reference: optionalText(evidence.reference as string | null | undefined, 500) ?? undefined,
   };
 }
 
