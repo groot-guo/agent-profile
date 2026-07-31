@@ -18,7 +18,9 @@ Keep the boundaries clear:
 - `ARCHITECTURE.md` is the detailed source of truth for current implementation.
 - `docs/profile-model.md` defines the canonical product positioning and Profile
   terminology for current-state documentation and implementation discussions.
-- `docs/roadmap.md` is the source of truth for Task status and verification.
+- `docs/roadmap.md` is the source of truth for current Task status and execution
+  order. Terminal Task bodies and verification evidence live in the linked
+  files under `docs/roadmap-archive/`.
 - `docs/agent-runtime-profile-design.md` is a future proposal, not current
   behavior.
 
@@ -168,7 +170,8 @@ belong to an explicit Task. Do not hide unrelated work inside another Task.
 | `README.md` | Current user-facing positioning, implemented capabilities, setup, and document entry points |
 | `ARCHITECTURE.md` | Current implemented architecture, data flow, storage, APIs, limitations, and operational behavior |
 | `docs/profile-model.md` | Canonical current-state product positioning, Profile taxonomy, evidence layers, and documentation terminology |
-| `docs/roadmap.md` | Task definitions, lifecycle status, acceptance criteria, and completion evidence |
+| `docs/roadmap.md` | Current Task definitions, lifecycle status, compact terminal index, and execution order |
+| `docs/roadmap-archive/` | Terminal Task bodies, acceptance criteria, and completion evidence linked from the current register |
 | `docs/agent-runtime-profile-design.md` | Proposed target model and future Agent Runtime Profile design; it must not present unimplemented behavior as current |
 | `docs/diagnosis.md`, `docs/multi-agent.md`, `docs/stats.md` | Focused current designs and implementation notes that must agree with the architecture |
 | `docs/performance.md` | Reproducible content-free scale fixture, desktop regression budgets, and measurement limits |
@@ -177,6 +180,11 @@ belong to an explicit Task. Do not hide unrelated work inside another Task.
 When code and documentation disagree, inspect implementation and tests, then
 correct the current-state documents. Future design belongs in a clearly labelled
 proposal, not in current-state claims.
+
+For routine Task work, locate the Task in `docs/roadmap.md`, read that body and
+its direct dependencies, and do not load terminal archives unless historical
+acceptance or verification evidence is needed. Run `pnpm check:roadmap` after
+changing the register or an archive.
 
 ## Required documentation update after implementation
 

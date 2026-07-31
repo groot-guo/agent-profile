@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "check:boundaries": "node scripts/check-module-boundaries.mjs",
+    "check:roadmap": "node scripts/check-roadmap.mjs",
     "benchmark:scale": "pnpm --filter trace-server benchmark:scale",
     "benchmark:scale:ci": "pnpm --filter trace-server benchmark:scale:ci",
     "lint": "biome check .",
