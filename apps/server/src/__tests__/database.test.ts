@@ -102,6 +102,7 @@ describe('database migrations', () => {
       { version: 5, name: 'task_outcome_experiments' },
       { version: 6, name: 'bounded_session_discovery' },
       { version: 7, name: 'bounded_session_evidence' },
+      { version: 8, name: 'model_catalog_provenance' },
     ]);
 
     const legacySession = database
@@ -130,13 +131,15 @@ describe('database migrations', () => {
       currency: 'CNY',
       unit: 'per_million_tokens',
       effectiveFrom: 0,
+      sourceKind: 'legacy',
+      revision: 1,
     });
 
     applyMigrations(database);
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(7);
+    expect(count.count).toBe(8);
     database.close();
   });
 
@@ -183,6 +186,9 @@ describe('database migrations', () => {
       'spans',
       'pricing',
       'model_context',
+      'pricing_aliases',
+      'pricing_history',
+      'cost_recalculation_runs',
       'tasks',
       'config_snapshots',
       'task_sessions',
@@ -195,6 +201,28 @@ describe('database migrations', () => {
 
     fresh.close();
     migrated.close();
+  });
+
+  it('backfills legacy pricing into revision history without changing its values', () => {
+    const database = createLegacyDatabase();
+    applyMigrations(database);
+
+    const history = database
+      .prepare(
+        `SELECT model, input_price as inputPrice, effective_from as effectiveFrom,
+          source_kind as sourceKind, revision, status
+         FROM pricing_history WHERE model = 'legacy-model'`,
+      )
+      .get();
+    expect(history).toEqual({
+      model: 'legacy-model',
+      inputPrice: 1,
+      effectiveFrom: 0,
+      sourceKind: 'legacy',
+      revision: 1,
+      status: 'active',
+    });
+    database.close();
   });
 
   it('selects the price effective at the requested event time', () => {
@@ -214,6 +242,22 @@ describe('database migrations', () => {
       inputPrice: 5,
       effectiveFrom: 2000,
     });
+    database.close();
+  });
+
+  it('does not fall back to an older flat price after an unsupported schedule applies', () => {
+    const database = createDatabase(':memory:');
+    const insert = database.prepare(
+      `INSERT INTO pricing (
+        model, input_price, cache_creation_price, cache_read_price, output_price,
+        currency, unit, effective_from, pricing_scheme, status
+      ) VALUES (?, 1, 1, 1, 1, 'CNY', 'per_million_tokens', ?, ?, ?)`,
+    );
+    insert.run('tiered-model', 1000, 'flat_four_token_classes', 'active');
+    insert.run('tiered-model', 2000, 'long_context_tiered', 'unsupported');
+
+    expect(lookupPricing(database, 'tiered-model', 1500)).toBeDefined();
+    expect(lookupPricing(database, 'tiered-model', 2500)).toBeUndefined();
     database.close();
   });
 });

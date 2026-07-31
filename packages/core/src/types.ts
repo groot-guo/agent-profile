@@ -100,6 +100,8 @@ export interface Span {
   costUnknown: boolean; // 模型无定价
   costCurrency?: PricingCurrency;
   pricingEffectiveFrom?: number;
+  pricingModel?: string;
+  pricingRevision?: number;
   costCalculatedAt?: number;
   costCalculatorVersion?: string;
   stopReason?: string | null;
@@ -175,6 +177,14 @@ export interface Pricing {
   currency: PricingCurrency;
   unit: PricingUnit;
   effectiveFrom?: number;
+  pricingModel?: string;
+  sourceKind?: string;
+  sourceReference?: string;
+  pricingScheme?: string;
+  revision?: number;
+  status?: string;
+  createdAt?: number;
+  supersededAt?: number;
 }
 
 // ===== scan 结果 =====

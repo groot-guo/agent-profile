@@ -10,8 +10,14 @@ export function calcCost(span: Span, pricing?: Pricing): { cost: number; unknown
   // 非 llm_turn（thinking/tool_call/answer）不消耗 LLM token，cost=0
   if (span.type !== 'llm_turn') return { cost: 0, unknown: false };
 
-  // 模型无定价 → 不估算假装有值，标 unknown
-  if (!pricing) return { cost: 0, unknown: true };
+  // 模型无定价或定价结构不受支持 → 不估算假装有值，标 unknown
+  if (
+    !pricing ||
+    (pricing.status !== undefined && pricing.status !== 'active') ||
+    (pricing.pricingScheme !== undefined && pricing.pricingScheme !== 'flat_four_token_classes')
+  ) {
+    return { cost: 0, unknown: true };
+  }
 
   const cost =
     (span.inputTokens * pricing.inputPrice +

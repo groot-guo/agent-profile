@@ -29,6 +29,8 @@ describe('application factory', () => {
       '/api/health',
       '/api/pricing',
       '/api/model-context',
+      '/api/model-catalog/models',
+      '/api/model-catalog/configuration',
       '/api/sessions',
       '/api/stats',
       '/api/imports/status',

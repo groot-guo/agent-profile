@@ -38,6 +38,21 @@ export {
   type HomeStatisticsResponse,
 } from './home-statistics';
 export {
+  MODEL_CATALOG_CALCULATOR_VERSION,
+  MODEL_CATALOG_SCHEMA_VERSION,
+  type ModelCatalogAliasRecord,
+  type ModelCatalogConfiguration,
+  type ModelCatalogContextRecord,
+  type ModelCatalogInventoryItem,
+  type ModelCatalogPricingRecord,
+  type ModelCatalogPricingStatus,
+  type ModelCatalogRecalculationCoverage,
+  type ModelCatalogRecalculationPreview,
+  type ModelCatalogRecalculationResult,
+  type ModelCatalogRecalculationScope,
+  type ModelCatalogSourceKind,
+} from './model-catalog';
+export {
   SESSION_ACTIVITY_RECENT_WINDOW_MS,
   SESSION_ACTIVITY_UPDATING_WINDOW_MS,
   SESSION_DISCOVERY_SCHEMA_VERSION,

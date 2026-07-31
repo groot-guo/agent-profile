@@ -221,6 +221,88 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 8,
+    name: 'model_catalog_provenance',
+    up(database) {
+      addColumn(database, 'pricing', 'source_kind', "TEXT NOT NULL DEFAULT 'legacy'");
+      addColumn(database, 'pricing', 'source_reference', 'TEXT');
+      addColumn(
+        database,
+        'pricing',
+        'pricing_scheme',
+        "TEXT NOT NULL DEFAULT 'flat_four_token_classes'",
+      );
+      addColumn(database, 'pricing', 'revision', 'INTEGER NOT NULL DEFAULT 1');
+      addColumn(database, 'pricing', 'status', "TEXT NOT NULL DEFAULT 'active'");
+      addColumn(database, 'pricing', 'created_at', 'INTEGER NOT NULL DEFAULT 0');
+      addColumn(database, 'pricing', 'superseded_at', 'INTEGER');
+      addColumn(database, 'model_context', 'source_kind', "TEXT NOT NULL DEFAULT 'legacy'");
+      addColumn(database, 'model_context', 'source_reference', 'TEXT');
+      addColumn(database, 'model_context', 'audited_at', 'INTEGER');
+      addColumn(database, 'model_context', 'revision', 'INTEGER NOT NULL DEFAULT 1');
+      addColumn(database, 'model_context', 'user_override', 'INTEGER NOT NULL DEFAULT 0');
+      addColumn(database, 'spans', 'pricing_model', 'TEXT');
+      addColumn(database, 'spans', 'pricing_revision', 'INTEGER');
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS pricing_history (
+          id                 TEXT PRIMARY KEY,
+          model              TEXT NOT NULL,
+          input_price        REAL NOT NULL,
+          cache_creation_price REAL NOT NULL,
+          cache_read_price   REAL NOT NULL,
+          output_price       REAL NOT NULL,
+          currency           TEXT NOT NULL,
+          unit               TEXT NOT NULL,
+          effective_from     INTEGER NOT NULL,
+          source_kind        TEXT NOT NULL,
+          source_reference   TEXT,
+          pricing_scheme     TEXT NOT NULL,
+          revision           INTEGER NOT NULL,
+          status             TEXT NOT NULL,
+          created_at         INTEGER NOT NULL,
+          superseded_at      INTEGER
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_pricing_history_key
+          ON pricing_history(model, effective_from, revision);
+        INSERT OR IGNORE INTO pricing_history (
+          id, model, input_price, cache_creation_price, cache_read_price,
+          output_price, currency, unit, effective_from, source_kind,
+          source_reference, pricing_scheme, revision, status, created_at
+        )
+        SELECT lower(hex(randomblob(16))), model, input_price,
+          cache_creation_price, cache_read_price, output_price, currency, unit,
+          COALESCE(effective_from, 0), source_kind, source_reference,
+          pricing_scheme, revision, status, created_at
+        FROM pricing;
+        CREATE TABLE IF NOT EXISTS cost_recalculation_runs (
+          id                 TEXT PRIMARY KEY,
+          scope_json         TEXT NOT NULL CHECK (json_valid(scope_json)),
+          pricing_revision   TEXT NOT NULL,
+          calculator_version TEXT NOT NULL,
+          previewed_at       INTEGER NOT NULL,
+          executed_at        INTEGER,
+          updated_spans      INTEGER NOT NULL DEFAULT 0,
+          updated_sessions   INTEGER NOT NULL DEFAULT 0,
+          unknown_before     INTEGER NOT NULL DEFAULT 0,
+          unknown_after      INTEGER NOT NULL DEFAULT 0,
+          status             TEXT NOT NULL CHECK (status IN ('previewed', 'completed', 'failed')),
+          error_code         TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_cost_recalculation_runs_created
+          ON cost_recalculation_runs(previewed_at DESC);
+        CREATE TABLE IF NOT EXISTS pricing_aliases (
+          raw_model          TEXT PRIMARY KEY,
+          pricing_model      TEXT NOT NULL,
+          pricing_equivalent INTEGER NOT NULL CHECK (pricing_equivalent = 1),
+          source_kind        TEXT NOT NULL,
+          source_reference   TEXT,
+          audited_at         INTEGER,
+          revision           INTEGER NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -279,6 +361,8 @@ function createBaseSchema(database: DatabaseConnection): void {
       cost_unknown            INTEGER DEFAULT 0,
       cost_currency           TEXT NOT NULL DEFAULT 'CNY',
       pricing_effective_from  INTEGER,
+      pricing_model           TEXT,
+      pricing_revision        INTEGER,
       cost_calculated_at      INTEGER,
       cost_calculator_version TEXT NOT NULL DEFAULT 'legacy',
       stop_reason             TEXT,
@@ -302,13 +386,73 @@ function createBaseSchema(database: DatabaseConnection): void {
       currency               TEXT NOT NULL DEFAULT 'CNY',
       unit                   TEXT NOT NULL DEFAULT 'per_million_tokens',
       effective_from        INTEGER,
+      source_kind            TEXT NOT NULL DEFAULT 'legacy',
+      source_reference       TEXT,
+      pricing_scheme         TEXT NOT NULL DEFAULT 'flat_four_token_classes',
+      revision               INTEGER NOT NULL DEFAULT 1,
+      status                 TEXT NOT NULL DEFAULT 'active',
+      created_at             INTEGER NOT NULL DEFAULT 0,
+      superseded_at          INTEGER,
       PRIMARY KEY (model, effective_from)
     );
 
     CREATE TABLE IF NOT EXISTS model_context (
       model                  TEXT PRIMARY KEY,
-      context_window         INTEGER NOT NULL
+      context_window         INTEGER NOT NULL,
+      source_kind            TEXT NOT NULL DEFAULT 'legacy',
+      source_reference       TEXT,
+      audited_at             INTEGER,
+      revision               INTEGER NOT NULL DEFAULT 1,
+      user_override          INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS pricing_aliases (
+      raw_model          TEXT PRIMARY KEY,
+      pricing_model      TEXT NOT NULL,
+      pricing_equivalent INTEGER NOT NULL CHECK (pricing_equivalent = 1),
+      source_kind        TEXT NOT NULL,
+      source_reference   TEXT,
+      audited_at         INTEGER,
+      revision           INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cost_recalculation_runs (
+      id                 TEXT PRIMARY KEY,
+      scope_json         TEXT NOT NULL CHECK (json_valid(scope_json)),
+      pricing_revision   TEXT NOT NULL,
+      calculator_version TEXT NOT NULL,
+      previewed_at       INTEGER NOT NULL,
+      executed_at        INTEGER,
+      updated_spans      INTEGER NOT NULL DEFAULT 0,
+      updated_sessions   INTEGER NOT NULL DEFAULT 0,
+      unknown_before     INTEGER NOT NULL DEFAULT 0,
+      unknown_after      INTEGER NOT NULL DEFAULT 0,
+      status             TEXT NOT NULL CHECK (status IN ('previewed', 'completed', 'failed')),
+      error_code         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_cost_recalculation_runs_created
+      ON cost_recalculation_runs(previewed_at DESC);
+
+    CREATE TABLE IF NOT EXISTS pricing_history (
+      id                   TEXT PRIMARY KEY,
+      model                TEXT NOT NULL,
+      input_price          REAL NOT NULL,
+      cache_creation_price REAL NOT NULL,
+      cache_read_price     REAL NOT NULL,
+      output_price         REAL NOT NULL,
+      currency             TEXT NOT NULL,
+      unit                 TEXT NOT NULL,
+      effective_from       INTEGER NOT NULL,
+      source_kind          TEXT NOT NULL,
+      source_reference     TEXT,
+      pricing_scheme       TEXT NOT NULL,
+      revision             INTEGER NOT NULL,
+      status               TEXT NOT NULL,
+      created_at           INTEGER NOT NULL,
+      superseded_at        INTEGER
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pricing_history_key
+      ON pricing_history(model, effective_from, revision);
 
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version                INTEGER PRIMARY KEY,
@@ -354,14 +498,52 @@ export function lookupPricing(
   at = Date.now(),
 ): Pricing | undefined {
   if (!model) return undefined;
-  return database
+  const exact = database
     .prepare(
       `SELECT model, input_price as inputPrice, cache_creation_price as cacheCreationPrice,
               cache_read_price as cacheReadPrice, output_price as outputPrice,
-              currency, unit, COALESCE(effective_from, 0) as effectiveFrom
+              currency, unit, COALESCE(effective_from, 0) as effectiveFrom,
+              source_kind as sourceKind, source_reference as sourceReference,
+              pricing_scheme as pricingScheme, revision, status,
+              created_at as createdAt, superseded_at as supersededAt
        FROM pricing
        WHERE model = ? AND COALESCE(effective_from, 0) <= ?
-       ORDER BY COALESCE(effective_from, 0) DESC LIMIT 1`,
+         AND COALESCE(status, 'active') IN ('active', 'unsupported')
+       ORDER BY COALESCE(effective_from, 0) DESC, revision DESC LIMIT 1`,
     )
     .get(model, at) as Pricing | undefined;
+  if (exact) {
+    return isSupportedPricing(exact) ? { ...exact, pricingModel: exact.model } : undefined;
+  }
+  const alias = database
+    .prepare(
+      `SELECT pricing_model as pricingModel FROM pricing_aliases
+       WHERE raw_model = ? AND pricing_equivalent = 1`,
+    )
+    .get(model) as { pricingModel: string } | undefined;
+  if (!alias) return undefined;
+  const selected = database
+    .prepare(
+      `SELECT model, input_price as inputPrice, cache_creation_price as cacheCreationPrice,
+              cache_read_price as cacheReadPrice, output_price as outputPrice,
+              currency, unit, COALESCE(effective_from, 0) as effectiveFrom,
+              source_kind as sourceKind, source_reference as sourceReference,
+              pricing_scheme as pricingScheme, revision, status,
+              created_at as createdAt, superseded_at as supersededAt
+       FROM pricing
+       WHERE model = ? AND COALESCE(effective_from, 0) <= ?
+         AND COALESCE(status, 'active') IN ('active', 'unsupported')
+       ORDER BY COALESCE(effective_from, 0) DESC, revision DESC LIMIT 1`,
+    )
+    .get(alias.pricingModel, at) as Pricing | undefined;
+  return selected && isSupportedPricing(selected)
+    ? { ...selected, pricingModel: selected.model }
+    : undefined;
+}
+
+function isSupportedPricing(pricing: Pricing): boolean {
+  return (
+    (pricing.status ?? 'active') === 'active' &&
+    (pricing.pricingScheme ?? 'flat_four_token_classes') === 'flat_four_token_classes'
+  );
 }

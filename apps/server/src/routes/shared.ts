@@ -15,7 +15,8 @@ export const SPAN_COLS = `id, session_id as sessionId, parent_id as parentId, ty
   cache_creation_tokens as cacheCreationTokens, cache_read_tokens as cacheReadTokens,
   output_tokens as outputTokens, context_tokens as contextTokens, output_bytes as outputBytes,
   model, cost, cost_unknown as costUnknown, cost_currency as costCurrency,
-  pricing_effective_from as pricingEffectiveFrom, cost_calculated_at as costCalculatedAt,
+  pricing_effective_from as pricingEffectiveFrom, pricing_model as pricingModel,
+  pricing_revision as pricingRevision, cost_calculated_at as costCalculatedAt,
   cost_calculator_version as costCalculatorVersion, stop_reason as stopReason,
   is_error as isError, is_sidechain as isSidechain, metadata`;
 

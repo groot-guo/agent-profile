@@ -98,7 +98,7 @@ the selected SQLite database and the availability of all five local sources,
 and writes human-readable output by default or `agent-profile-cli/v1` with
 `--json`. It does not start HTTP or import source data. Opening the Runtime can
 create the selected database and applies ordinary additive migrations and
-default pricing/model-context seeding.
+default Model Catalog pricing/model-context seeding.
 
 For CLI Runtime commands, the database path is selected from `--database`, then
 `--data-dir/trace.db`, then `TRACE_DB_PATH`, then the platform application-data
@@ -287,11 +287,17 @@ Model, context, and diagnosis configuration has separate scopes:
 - `/api/model-context` edits the exact raw model's context-window reference used
   for utilization and context-bloat analysis. Unknown model IDs stay unconfigured
   and do not inherit a provider or alias value. Seed references and vendor entry
-  points are documented beside the defaults in `apps/server/src/db.ts`.
+  points are recorded in `apps/server/src/model-catalog/defaults.ts`.
 - `/api/pricing` stores four token-class prices and an optional `effectiveFrom`.
   Imported and recomputed Session costs use the price effective at each LLM Span's
   start time; missing pricing remains unknown. `POST /api/recompute-cost` is the
-  explicit historical recalculation operation.
+  compatibility full historical recalculation operation.
+- `/api/model-catalog/*` exposes `model-catalog/v1`: observed raw-model inventory,
+  pricing history/provenance, exact context configuration, explicit audited
+  `pricingEquivalent` aliases, content-free configuration import/export, and
+  scoped preview/execute recalculation. Preview does not mutate data; execute
+  requires the preview's pricing revision and records its result transactionally.
+  Unsupported pricing schemes remain unknown.
 - Deterministic diagnosis thresholds are Core-owned policy constants, not a
   user-editable Runtime setting. Their `wastedCost` values are current analysis-time
   input-price upper-bound estimates for planning, not historical billing evidence.
@@ -319,7 +325,8 @@ AUTO_SCAN_DIR="" pnpm dev
   process is stopped.
 - A forced rebuild is the normal recovery path after parser or metric changes.
   The danger-zone reset deletes every generated Session/Span, including tags
-  and notes, but retains pricing, model-context configuration, migration,
+  and notes, but retains Model Catalog pricing/history/aliases/context,
+  recalculation audit, migration,
   Tasks, Outcomes, Configuration Snapshots, cohorts, experiments, and their
   logical Session links so runtime evidence can be synchronized again.
 - Prompt review is ephemeral: prompt text is not written to the database and is

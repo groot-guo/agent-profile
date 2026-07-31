@@ -46,6 +46,16 @@ describe('calcCost', () => {
     expect(result).toEqual({ cost: 0, unknown: true });
   });
 
+  it('returns costUnknown for an unsupported pricing scheme', () => {
+    const span = makeTurn({ inputTokens: 1_000_000 });
+    const result = calcCost(span, {
+      ...DEEPSEEK_FLASH,
+      pricingScheme: 'long_context_tiered',
+      status: 'unsupported',
+    });
+    expect(result).toEqual({ cost: 0, unknown: true });
+  });
+
   it('calculates cost correctly with all four token types', () => {
     const span = makeTurn({
       inputTokens: 1_000_000,

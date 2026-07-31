@@ -1,8 +1,8 @@
 # Model Configuration Design
 
-> Status: Proposal. This document defines the target Model Catalog, pricing,
-> context-specification, and cost-recalculation contracts. Current implemented
-> behavior remains documented in `../ARCHITECTURE.md`.
+> Status: Server contract implemented; Web workspace proposed. T99 implements
+> the Model Catalog, pricing/context, alias, import/export, and recalculation
+> contracts below. T100 owns the proposed Web workspace.
 
 ## Current foundation
 
@@ -245,8 +245,7 @@ status
 ```
 
 The existing `/api/recompute-cost` endpoint remains a compatibility operation
-until a versioned preview/execute API replaces its implementation. Existing
-callers must not break during extraction.
+and delegates to the same transactional service as versioned preview/execute.
 
 ## Diagnosis semantics
 
@@ -259,7 +258,7 @@ Estimated diagnosis waste must declare one of two policies:
 The policy and applicable price time must be explicit in the report. T71 owns
 the audit and decision; implementation must not silently mix the two semantics.
 
-## API direction
+## Implemented Server API
 
 The versioned module contract should support:
 
@@ -269,13 +268,16 @@ GET  /api/model-catalog/models/:key/pricing
 POST /api/model-catalog/models/:key/pricing
 GET  /api/model-catalog/models/:key/context
 PUT  /api/model-catalog/models/:key/context
+PUT  /api/model-catalog/models/:key/pricing-alias
 POST /api/model-catalog/recalculation/preview
 POST /api/model-catalog/recalculation/execute
+GET  /api/model-catalog/configuration
+POST /api/model-catalog/configuration
 ```
 
-Exact paths and version placement are implementation decisions. The existing
-pricing, model-context, and recomputation endpoints remain compatibility
-adapters and should call the same service rather than retaining separate SQL.
+Responses and configuration files carry `model-catalog/v1`. The existing
+pricing, model-context, and recomputation endpoints are compatibility adapters
+over the same service rather than separate SQL implementations.
 
 ## Web workspace
 
@@ -297,7 +299,9 @@ the local calculator's reference data.
 
 - Model Catalog configuration can be exported/imported as a versioned local JSON
   document without Session or prompt content.
-- Imported records are validated before mutation and identify conflicts.
+- The entire imported payload is validated before mutation. Applicability-key
+  conflicts create an imported pricing revision and retain the superseded
+  history; they do not overwrite history in place.
 - generated-data reset continues preserving pricing, context configuration,
   migration history, and recalculation audit records unless a future Task
   deliberately changes that contract;

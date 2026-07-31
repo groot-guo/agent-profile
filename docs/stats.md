@@ -24,8 +24,11 @@ The overview contains:
 
 Each stored session cost also carries `costCurrency`, `costCalculatedAt`, and
 `costCalculatorVersion`. Span rows additionally carry the price's
-`pricingEffectiveFrom`. Pre-T39 values are labelled `legacy`; importing again or
-calling `/api/recompute-cost` recalculates them with calculator `v1`.
+`pricingEffectiveFrom`, `pricingModel`, and `pricingRevision`. Pre-T39 values are
+labelled `legacy`; importing again or calling `/api/recompute-cost` recalculates
+them with calculator `v1`. The versioned Model Catalog API additionally supports
+a read-only scoped preview followed by a fixed-revision transactional execute.
+Unsupported pricing schemes remain unknown in both operations.
 
 ## Grouped statistics
 

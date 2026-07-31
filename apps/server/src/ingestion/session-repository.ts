@@ -90,13 +90,15 @@ export class SessionRepository {
         id, session_id, parent_id, type, name, start_time, end_time,
         input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens,
         context_tokens, output_bytes, model, cost, cost_unknown, cost_currency,
-        pricing_effective_from, cost_calculated_at, cost_calculator_version,
+        pricing_effective_from, pricing_model, pricing_revision,
+        cost_calculated_at, cost_calculator_version,
         stop_reason, is_error, is_sidechain, metadata
       ) VALUES (
         @id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
         @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens,
         @contextTokens, @outputBytes, @model, @cost, @costUnknown, @costCurrency,
-        @pricingEffectiveFrom, @costCalculatedAt, @costCalculatorVersion,
+        @pricingEffectiveFrom, @pricingModel, @pricingRevision,
+        @costCalculatedAt, @costCalculatorVersion,
         @stopReason, @isError, @isSidechain, @metadata
       )
     `);
@@ -238,6 +240,8 @@ function toSpanRow(span: Span) {
     costUnknown: span.costUnknown ? 1 : 0,
     costCurrency: span.costCurrency,
     pricingEffectiveFrom: span.pricingEffectiveFrom ?? null,
+    pricingModel: span.pricingModel ?? null,
+    pricingRevision: span.pricingRevision ?? null,
     costCalculatedAt: span.costCalculatedAt ?? null,
     costCalculatorVersion: span.costCalculatorVersion,
     stopReason: span.stopReason ?? null,

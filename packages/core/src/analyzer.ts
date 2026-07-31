@@ -49,6 +49,8 @@ export function analyzeSession(
       span.costUnknown = unknown;
       span.costCurrency = COST_CURRENCY;
       span.pricingEffectiveFrom = pricing?.effectiveFrom ?? 0;
+      span.pricingModel = pricing?.pricingModel ?? pricing?.model;
+      span.pricingRevision = pricing?.revision;
       span.costCalculatedAt = calculatedAt;
       span.costCalculatorVersion = COST_CALCULATOR_VERSION;
       if (unknown) costUnknownCount++;

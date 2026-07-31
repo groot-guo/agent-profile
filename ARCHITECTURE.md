@@ -54,8 +54,9 @@ Production entry → App Runtime ───────────────�
 ```
 
 `AppRuntime` is the current application composition boundary. Production creates
-one selected SQLite connection, then constructs pricing and model-context
-resolvers, one per-Runtime import service/job manager, a clock, and one
+one selected SQLite connection, then constructs one Model Catalog service,
+pricing and model-context resolvers backed by that service, one per-Runtime
+import service/job manager, a clock, and one
 idempotent close operation around that connection. `createApp(runtime, options)`
 only adapts the supplied Runtime to Fastify; route registrars receive explicit
 Runtime capabilities and do not create a production database or import manager.
@@ -118,7 +119,8 @@ the prior normalized Session intact, annotations survive successful
 replacement, and unavailable sources are not deleted. Full generated-data
 reset is deliberately separate: it requires an exact confirmation phrase,
 cannot run during an import job, deletes `spans` and `sessions` in one
-transaction, and retains `pricing`, `model_context`, and `schema_migrations`.
+transaction, and retains `pricing`, `pricing_history`, `pricing_aliases`,
+`model_context`, `cost_recalculation_runs`, and `schema_migrations`.
 Task, Outcome, Configuration Snapshot, cohort, experiment, and logical
 Task-Session records are also retained so imported runtime evidence can be
 restored later without losing delivery context.
@@ -369,21 +371,26 @@ stale provider-labelled rows once; no generated-data reset is required.
 
 ## Persistence model
 
-`apps/server/src/database.ts` owns eleven current internal tables:
+`apps/server/src/database.ts` owns fourteen current internal tables:
 
 - `sessions` — source identity and revision metadata (`source_kind`,
   `source_updated_at`, `source_fingerprint`); agent/model fields plus the
   migration-backed analytical `project_key`; four
   token totals; context, cache, cost, duration, annotation tags, and notes.
 - `spans` — normalized `llm_turn` and `tool_call` evidence, token/context/cost
-  fields, timing, parent/sidechain links, tool input/output metadata, and
-  truncation-safe content.
-- `pricing` — per-model CNY prices for the four token classes, with unit and
-  effective time.
+  fields, selected pricing model/revision, timing, parent/sidechain links, tool
+  input/output metadata, and truncation-safe content.
+- `pricing` — current per-model CNY schedules for the four token classes, with
+  effective time, scheme, status, revision, and source provenance.
+- `pricing_history` — immutable pricing revisions, including superseded rows.
+- `pricing_aliases` — explicit audited raw-model-to-pricing-model equivalence;
+  presentation aliases never populate this table.
 - `model_context` — per-model context-window limits. Built-in rows are
   conservative vendor-specification seeds, audited against vendor catalog entry
   points on 2026-07-27 (T58); they are not transcript-observed values and user
   edits take precedence because startup uses `INSERT OR IGNORE`.
+- `cost_recalculation_runs` — scope, fixed pricing revision, before/after
+  unknown coverage, calculator version, and completed execution audit.
 - `schema_migrations` — ordered, idempotent schema changes and their application
   time.
 - `tasks` — local delivery identity, project/type/status/complexity, and an
@@ -442,9 +449,10 @@ from available source histories when recovery is necessary.
   behavior that the source did not capture.
 - Span cost uses all four token classes and the model price effective at the
   span's `startTime`. The current contract is `CNY` per million tokens.
-  `costCurrency`, `pricingEffectiveFrom`, `costCalculatedAt`, and
-  `costCalculatorVersion` make the derived value reproducible. Unknown pricing
-  is surfaced as unknown rather than silently estimated as a known bill.
+  `costCurrency`, `pricingEffectiveFrom`, `pricingModel`, `pricingRevision`,
+  `costCalculatedAt`, and `costCalculatorVersion` expose the selected schedule
+  and calculation provenance. Unknown or unsupported pricing is surfaced as
+  unknown rather than silently estimated as a known bill.
 - Statistics may derive a presentation-only canonical model group for explicit
   aliases while retaining raw source labels. Captured Codex model IDs
   `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and
@@ -468,8 +476,8 @@ scopes:
 
 | Surface | Owner and storage | Effective scope | Unknown/provenance behavior |
 | --- | --- | --- | --- |
-| `model_context` | Server seed and `/api/model-context` route; one exact raw model row in SQLite | Context-window utilization and context-bloat diagnosis for Sessions using that raw model | No alias or provider fallback; an unlisted model resolves to `undefined`/`null`. Seed source entry points are recorded beside the defaults in `apps/server/src/db.ts`; these are reference values, not transcript evidence. |
-| `pricing` | Server pricing route and pricing resolver; four token-class prices with `effectiveFrom` | Stored Span/Session cost calculation and explicit historical recomputation | Import and recomputation select the row effective at the LLM Span `startTime`; missing rows remain unknown. User writes default to the write clock unless they provide `effectiveFrom`. |
+| `model_context` | Model Catalog seed/service and compatibility `/api/model-context` route; one exact raw model row in SQLite | Context-window utilization and context-bloat diagnosis for Sessions using that raw model | No alias or provider fallback; an unlisted model resolves to `undefined`/`null`. Bundled source entry points live in `apps/server/src/model-catalog/defaults.ts`; these are reference values, not transcript evidence. |
+| `pricing` | Model Catalog schedules, history, explicit pricing-equivalent aliases, and compatibility `/api/pricing` route | Stored Span/Session cost calculation and explicit scoped historical recomputation | Exact active raw-model schedule wins; only an explicit `pricingEquivalent=true` alias may select another pricing key. Selection uses the LLM Span `startTime`; missing and unsupported schemes remain unknown. |
 | Diagnosis thresholds | `DEFAULT_THRESHOLDS` in `packages/core/src/diagnosis.ts` | Deterministic heuristic finding boundaries for one analysis request | They are code-owned policy, not a user-editable Runtime or Task setting. The diagnostic `wastedCost` is an estimate only: it uses the current analysis-time input price as an upper bound and does not rewrite stored cost. |
 | Configuration Snapshot | Task repository `config_snapshots` row | Explicit Task-linked Agent/model/version evidence | It records the supplied identifiers and source hash; it does not silently snapshot pricing, context limits, prompts, or rules. |
 
@@ -508,13 +516,19 @@ The current server/UI support:
   token fingerprint, and primary KPIs followed by separate overview,
   context/cost, tools/chain, and normalized-evidence views;
 - Git commit evidence, JSON/CSV export, and generated session reports;
-- editable pricing/model-context data and total-cost recomputation.
+- versioned Model Catalog inventory/configuration APIs, editable pricing/context
+  data, explicit pricing-equivalent aliases, and previewed cost recomputation.
 
 Mutable pricing and model-context requests have runtime JSON-schema validation.
 New user pricing defaults to its write time; callers may supply an explicit
-`effectiveFrom`. Recompute selects pricing independently for each historical
-LLM span and records calculator version `v1`. Pre-T39 stored costs retain
-`legacy` provenance until they are imported again or recomputed.
+`effectiveFrom`. `model-catalog/v1` adds observed-model inventory, price history,
+provenance, versioned content-free configuration import/export, and a two-step
+recalculation contract. Preview is read-only; execute rejects a stale pricing
+revision, recalculates the normalized model/time scope transactionally, rebuilds
+affected Session totals, and records the run. Recompute selects pricing
+independently for each historical LLM Span and records calculator version `v1`.
+Pre-T39 stored costs retain `legacy` provenance until they are imported again or
+recomputed.
 
 LLM diagnosis is optional. Without its API configuration, deterministic
 analysis remains available and the service continues to function.
@@ -688,6 +702,13 @@ page exposes the same contract and privacy boundaries.
 | `GET/PUT` | `/api/pricing` | Model pricing |
 | `GET/PUT` | `/api/model-context` | Model context-window configuration |
 | `POST` | `/api/recompute-cost` | Recalculate stored costs by span-time pricing and refresh provenance |
+| `GET` | `/api/model-catalog/models` | Versioned observed raw-model inventory with pricing/context coverage |
+| `GET/POST` | `/api/model-catalog/models/:key/pricing` | Read price history or create a manual schedule revision |
+| `GET/PUT` | `/api/model-catalog/models/:key/context` | Read or update exact model context specification |
+| `PUT` | `/api/model-catalog/models/:key/pricing-alias` | Record explicit audited pricing equivalence |
+| `POST` | `/api/model-catalog/recalculation/preview` | Preview model/time impact without mutation |
+| `POST` | `/api/model-catalog/recalculation/execute` | Execute the same scope against a fixed pricing revision |
+| `GET/POST` | `/api/model-catalog/configuration` | Export or atomically import `model-catalog/v1` local configuration |
 
 ## Operation and configuration
 

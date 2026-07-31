@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { AppRuntime } from '../runtime';
 import { registerDiagnosisRoutes } from './diagnosis';
 import { registerHealthRoutes } from './health';
+import { registerModelCatalogRoutes } from './model-catalog';
 import { registerPricingRoutes } from './pricing';
 import { registerProfileRoutes } from './profiles';
 import { registerPromptReviewRoutes } from './prompt-review';
@@ -19,6 +20,7 @@ export function registerRoutes(app: FastifyInstance, runtime: AppRuntime): void 
   registerSessionRoutes(app, runtime);
   registerDiagnosisRoutes(app, runtime);
   registerPricingRoutes(app, runtime);
+  registerModelCatalogRoutes(app, runtime);
   registerProfileRoutes(app, runtime);
   registerPromptReviewRoutes(app, runtime);
   registerHealthRoutes(app);

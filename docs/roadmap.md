@@ -186,54 +186,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update Profile model, Runtime proposal, architecture, README,
   and roadmap to distinguish post-run feedback from future live Runtime hints
 
-### T99 Model Catalog and pricing-schedule Server module
-
-- status: planned
-- estimated size/risk: extra-large / high; historical pricing, migration,
-  provenance, alias safety, compatibility APIs, and stored-cost reproducibility
-  must remain consistent
-- purpose:
-  - extract the existing pricing/model-context/recomputation foundations into an
-    independently owned Model Catalog module and add implementation-ready
-    history, provenance, coverage, and safe recalculation contracts
-- dependencies:
-  - T98 module/application foundation and T71's decision on historical versus
-    current diagnosis-price semantics
-- scope:
-  1. add ordered additive migrations for Model Catalog provenance/revisions and
-     recalculation audit while preserving existing pricing/model-context rows
-  2. move bundled defaults out of Server startup code and distinguish bundled,
-     manual, and imported records without overwriting user configuration
-  3. implement exact raw-model pricing first; permit alias pricing only through
-     an explicit, audited `pricingEquivalent` contract, never through provider
-     or presentation inference
-  4. add observed-model inventory and versioned recalculation preview/execute
-     services with model/time scope, unknown-before/after coverage, fixed
-     pricing revision, and transactional Session-total rebuild
-  5. keep `/api/pricing`, `/api/model-context`, and `/api/recompute-cost`
-     compatible by adapting them to the same module service
-  6. support versioned local configuration import/export without Session or
-     prompt content
-- acceptance:
-  - all four token classes and effective-time lookup remain correct; unsupported
-    pricing schemes stay explicitly unknown rather than being flattened
-  - existing local rows, generated costs, reset preservation, and old endpoint
-    behavior survive upgrade without source re-import or database deletion
-  - every selected price exposes currency/unit, applicability, source, revision,
-    calculation time, and calculator version sufficient for its documented
-    reproducibility level
-  - preview performs no mutation and execute uses the same scope/revision
-    transactionally with a recorded result
-- verification:
-  - Core resolver/calculator tests; migration, repository, history, provenance,
-    compatibility, import/export, reset, preview/execute, and rollback tests;
-    full build/lint/tests; local configuration and recomputation smoke;
-    `git diff --check`
-- documentation:
-  - update architecture, statistics/cost semantics, configuration guidance,
-    Model Catalog design deviations, and this Task with the shipped schema/API
-    and limitations
-
 ### T100 Model Catalog configuration workspace
 
 - status: planned
@@ -343,6 +295,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T96](roadmap-archive/2026-q3.md#t96) | Explicit Server Node type dependency | completed |
 | [T97](roadmap-archive/2026-q3.md#t97) | modular architecture and model-configuration design baseline | completed |
 | [T98](roadmap-archive/2026-q3.md#t98) | module contracts and reusable Runtime/HTTP composition | completed |
+| [T99](roadmap-archive/2026-q3.md#t99) | Model Catalog and pricing-schedule Server module | completed |
 | [T101](roadmap-archive/2026-q3.md#t101) | CLI foundation and local Runtime entry point | completed |
 | [T102](roadmap-archive/2026-q3.md#t102) | CLI synchronization, Session queries, and reports | completed |
 | [T103](roadmap-archive/2026-q3.md#t103) | CLI `serve` command and distributable local application | completed |
@@ -366,9 +319,10 @@ CLI-first implementation order is:
 The immediate sequence authorized on 2026-07-31 completed T105 using bounded
 source observation and the existing atomic replacement path without waiting for
 T85's parser optimization, followed by the documentation-only T106
-roadmap-register/archive work and the T71 configuration audit. The next
-implementation candidate is T99's Model Catalog module; the longer-term
-dependency order remains:
+roadmap-register/archive work and the T71 configuration audit. T99 then
+completed the Model Catalog Server contract. The next dependent implementation
+candidate is T100's Web configuration workspace; the longer-term dependency
+order remains:
 
 1. T101 CLI foundation, then coordinate T83 bounded discovery and T84 bounded
    detail/evidence retrieval with T102 CLI synchronization/query/report work so
@@ -376,8 +330,8 @@ dependency order remains:
 2. T103 `serve` and distribution after the terminal workflow is useful; retain
    the current Web until the production packaging comparison selects Next
    standalone or a static SPA.
-3. T99 Model Catalog Runtime extraction/data contracts, then CLI operations;
-   T100 remains the later optional Web configuration workspace.
+3. T99 Model Catalog Runtime extraction/data contracts are complete; T100 is
+   the optional Web configuration workspace over that public contract.
 4. T80 Task Outcome evidence work after the Runtime/CLI foundation; T81
    Cohort/Experiment workflow remains deferred until Task/Outcome usage is
    established and must not drive the initial CLI architecture.

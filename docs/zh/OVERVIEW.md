@@ -158,18 +158,24 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 
 ## 数据模型
 
-当前 SQLite 由 `apps/server/src/database.ts` 管理十一张内部表：
+当前 SQLite 由 `apps/server/src/database.ts` 管理十四张内部表：
 
 - `sessions`：来源类型、更新时间与版本指纹、Agent/模型、持久化分析项目 key、四类 token 聚合、
   上下文、缓存、成本、耗时、标签和备注。
-- `spans`：`llm_turn` 与 `tool_call` 的 token、上下文、成本、耗时、父子链、
+- `spans`：`llm_turn` 与 `tool_call` 的 token、上下文、成本、选价模型/revision、耗时、父子链、
   sidechain 和工具输入输出证据。
-- `pricing`：模型四类 token 的人民币/百万 token 单价、单位与生效时间。
+- `pricing`：模型四类 token 的当前价格表、生效时间、scheme、revision 与来源。
+- `pricing_history`：含 superseded 记录的价格 revision 历史。
+- `pricing_aliases`：仅保存显式 `pricingEquivalent=true` 的选价等价关系。
 - `model_context`：模型上下文窗口。
+- `cost_recalculation_runs`：固定价格 revision、范围、unknown 覆盖度和执行结果审计。
 
 配置边界保持分离：`model_context` 按精确 raw model 查找，未知模型不继承 provider 或
-alias 值；默认值及供应商文档入口记录在 `apps/server/src/db.ts`。导入和历史成本重算按
-LLM Span 发生时间选择 `pricing`，缺少定价保持 unknown。确定性诊断阈值是 Core 策略常量，
+alias 值；默认值及供应商文档入口记录在 `apps/server/src/model-catalog/defaults.ts`。
+`model-catalog/v1` 提供 observed-model inventory、价格历史/来源、无 Session 或 prompt
+内容的配置导入导出，以及只读 preview + 固定 revision execute 的范围化成本重算。
+导入和历史成本重算按 LLM Span 发生时间选择 `pricing`；只有显式选价等价 alias 可回退，
+缺少定价或不支持的 scheme 保持 unknown。确定性诊断阈值是 Core 策略常量，
 诊断 `wastedCost` 只表示当前分析时点的 input-price 上限估算；Task Configuration
 Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自动保存这些运行时配置。
 - `schema_migrations`：按版本记录已执行的增量 schema 迁移。
