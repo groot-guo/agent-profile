@@ -23,6 +23,8 @@ export async function diagnoseDetail(
   runtime: DiagnosisRuntime,
 ): Promise<DiagnosisResult> {
   const options = {
+    // Diagnosis estimates are planning-time input-price upper bounds; the
+    // analyzer/import path separately persists span-time cost provenance.
     pricingLookup: runtime.pricingResolver,
     contextWindowLookup: runtime.contextWindowResolver,
   };

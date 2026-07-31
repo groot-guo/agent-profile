@@ -47,12 +47,18 @@ export function seedPricingDefaults(database: DatabaseConnection): void {
 export function seedModelContextDefaults(database: DatabaseConnection): void {
   database.exec(`
   INSERT OR IGNORE INTO model_context (model, context_window) VALUES
-    -- Audited 2026-07-27. Vendor specification entry points:
+    -- Audited 2026-07-27. These are conservative reference defaults keyed by
+    -- exact raw model identity, not observed transcript fields. Vendor
+    -- specification entry points (recheck before changing a row):
     -- DeepSeek: https://api-docs.deepseek.com/quick_start/pricing
     -- Anthropic: https://docs.anthropic.com/en/docs/about-claude/models
     -- Google: https://ai.google.dev/gemini-api/docs/models
     -- OpenAI: https://platform.openai.com/docs/models
     -- Alibaba Qwen: https://help.aliyun.com/zh/model-studio/models
+    -- GLM: https://open.bigmodel.cn/dev/howuse/model
+    -- Moonshot: https://platform.moonshot.cn/docs/intro
+    -- Doubao: https://www.volcengine.com/docs/82379/1099320
+    -- MiMo: https://platform.xiaomimimo.com/#/docs
     ('deepseek-v4-flash', 131072),
     ('deepseek-v4-pro', 131072),
     ('DeepSeek-V4-Flash', 131072),

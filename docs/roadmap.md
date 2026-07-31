@@ -22,27 +22,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   browser checks, focused lint, full build, and task-specific documentation
 - documentation plan: update `ARCHITECTURE.md`, UI guidance, and this Task
 
-### T71 model-context and analysis configuration audit
-
-- status: planned
-- purpose: audit user-adjustable analysis configuration, including built-in
-  model context windows, and make each setting's scope/provenance clear before
-  changing values
-- dependencies: T97 configuration taxonomy and pricing-semantics design
-- scope: inventory current configuration surfaces and seeds; verify model-window
-  values against authoritative vendor documentation where applicable; distinguish
-  user configuration from source-observed runtime evidence; decide whether
-  diagnostic wasted-cost estimates use historical Span-time pricing or current
-  planning-time pricing, and keep model reference data, analysis policy, and
-  Task Configuration Snapshots separate
-- acceptance: every exposed setting has a clear owner/effect; corrected context
-  limits cite their source; cost-estimate time semantics are explicit; unknown
-  models remain unconfigured rather than guessed
-- verification plan: configuration tests, seed/migration checks, focused UI
-  check, and documentation update
-- documentation plan: update `ARCHITECTURE.md`, README/configuration guidance,
-  and this Task
-
 ### T80 Task Outcome evidence workspace completion
 
 - status: planned
@@ -371,6 +350,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T105](roadmap-archive/2026-q3.md#t105) | active Session observation and live refresh | completed |
 | [T107](roadmap-archive/2026-q3.md#t107) | clear repository lint baseline | completed |
 | [T106](roadmap-archive/2026-q3.md#t106) | bounded roadmap register and completed-task archive | completed |
+| [T71](roadmap-archive/2026-q3.md#t71) | model-context and analysis configuration audit | completed |
 
 ## Execution Order
 
@@ -386,9 +366,9 @@ CLI-first implementation order is:
 The immediate sequence authorized on 2026-07-31 completed T105 using bounded
 source observation and the existing atomic replacement path without waiting for
 T85's parser optimization, followed by the documentation-only T106
-roadmap-register/archive work. The next implementation candidate is T71's
-model-context and analysis-configuration audit, followed by T99's Model Catalog
-module; the longer-term dependency order remains:
+roadmap-register/archive work and the T71 configuration audit. The next
+implementation candidate is T99's Model Catalog module; the longer-term
+dependency order remains:
 
 1. T101 CLI foundation, then coordinate T83 bounded discovery and T84 bounded
    detail/evidence retrieval with T102 CLI synchronization/query/report work so
@@ -396,9 +376,8 @@ module; the longer-term dependency order remains:
 2. T103 `serve` and distribution after the terminal workflow is useful; retain
    the current Web until the production packaging comparison selects Next
    standalone or a static SPA.
-3. T71 model-context and analysis-configuration audit, followed by T99 Model
-   Catalog Runtime extraction/data contracts, then CLI operations; T100 remains
-   the later optional Web configuration workspace.
+3. T99 Model Catalog Runtime extraction/data contracts, then CLI operations;
+   T100 remains the later optional Web configuration workspace.
 4. T80 Task Outcome evidence work after the Runtime/CLI foundation; T81
    Cohort/Experiment workflow remains deferred until Task/Outcome usage is
    established and must not drive the initial CLI architecture.

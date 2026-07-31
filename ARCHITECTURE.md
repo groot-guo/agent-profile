@@ -381,9 +381,9 @@ stale provider-labelled rows once; no generated-data reset is required.
 - `pricing` — per-model CNY prices for the four token classes, with unit and
   effective time.
 - `model_context` — per-model context-window limits. Built-in rows are
-  conservative vendor-specification seeds, audited on 2026-07-27; they are not
-  transcript-observed values and user edits take precedence because startup uses
-  `INSERT OR IGNORE`.
+  conservative vendor-specification seeds, audited against vendor catalog entry
+  points on 2026-07-27 (T58); they are not transcript-observed values and user
+  edits take precedence because startup uses `INSERT OR IGNORE`.
 - `schema_migrations` — ordered, idempotent schema changes and their application
   time.
 - `tasks` — local delivery identity, project/type/status/complexity, and an
@@ -460,6 +460,24 @@ from available source histories when recovery is necessary.
   in the detail view.
 - Tool categorization groups observed calls for analysis; it does not define
   the runtime's structural call graph.
+
+### Configuration ownership and time semantics
+
+The current configuration surfaces have deliberately different owners and
+scopes:
+
+| Surface | Owner and storage | Effective scope | Unknown/provenance behavior |
+| --- | --- | --- | --- |
+| `model_context` | Server seed and `/api/model-context` route; one exact raw model row in SQLite | Context-window utilization and context-bloat diagnosis for Sessions using that raw model | No alias or provider fallback; an unlisted model resolves to `undefined`/`null`. Seed source entry points are recorded beside the defaults in `apps/server/src/db.ts`; these are reference values, not transcript evidence. |
+| `pricing` | Server pricing route and pricing resolver; four token-class prices with `effectiveFrom` | Stored Span/Session cost calculation and explicit historical recomputation | Import and recomputation select the row effective at the LLM Span `startTime`; missing rows remain unknown. User writes default to the write clock unless they provide `effectiveFrom`. |
+| Diagnosis thresholds | `DEFAULT_THRESHOLDS` in `packages/core/src/diagnosis.ts` | Deterministic heuristic finding boundaries for one analysis request | They are code-owned policy, not a user-editable Runtime or Task setting. The diagnostic `wastedCost` is an estimate only: it uses the current analysis-time input price as an upper bound and does not rewrite stored cost. |
+| Configuration Snapshot | Task repository `config_snapshots` row | Explicit Task-linked Agent/model/version evidence | It records the supplied identifiers and source hash; it does not silently snapshot pricing, context limits, prompts, or rules. |
+
+This distinction keeps planning-time diagnosis estimates separate from the
+historical, span-time cost provenance used for stored billing-like metrics. A
+configuration edit therefore changes future analysis and any explicitly
+requested recomputation, but does not retroactively change source-observed
+model identity or imply a configuration effect on delivery quality.
 
 Efficiency, diagnosis, and scoring describe execution behavior. A recorded Task
 and Outcome add delivery evidence for that Task, but neither one Task nor an

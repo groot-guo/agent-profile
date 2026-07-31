@@ -77,6 +77,11 @@ describe('application factory', () => {
     });
   });
 
+  it('does not guess context windows for unknown raw model identities', () => {
+    expect(runtime.contextWindowResolver('claude-sonnet-5')).toBe(200_000);
+    expect(runtime.contextWindowResolver('gpt-5.6-sol')).toBeUndefined();
+  });
+
   it('keeps API routes local and proxies unmatched Web routes to the private upstream', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')

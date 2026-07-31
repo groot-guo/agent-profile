@@ -166,6 +166,12 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   sidechain 和工具输入输出证据。
 - `pricing`：模型四类 token 的人民币/百万 token 单价、单位与生效时间。
 - `model_context`：模型上下文窗口。
+
+配置边界保持分离：`model_context` 按精确 raw model 查找，未知模型不继承 provider 或
+alias 值；默认值及供应商文档入口记录在 `apps/server/src/db.ts`。导入和历史成本重算按
+LLM Span 发生时间选择 `pricing`，缺少定价保持 unknown。确定性诊断阈值是 Core 策略常量，
+诊断 `wastedCost` 只表示当前分析时点的 input-price 上限估算；Task Configuration
+Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自动保存这些运行时配置。
 - `schema_migrations`：按版本记录已执行的增量 schema 迁移。
 - `tasks`：本地任务身份、项目、类型、状态、复杂度与内容保存模式。
 - `config_snapshots`：Agent/模型、规则/工具/模板版本与来源 Hash，不复制规则或 prompt 原文。

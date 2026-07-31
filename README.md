@@ -282,6 +282,23 @@ source database's aggregate cost is not treated as portable billing evidence.
 | `LLM_API_KEY` | Enables optional semantic diagnosis; no key is required for deterministic analysis |
 | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Optional semantic-diagnosis provider settings |
 
+Model, context, and diagnosis configuration has separate scopes:
+
+- `/api/model-context` edits the exact raw model's context-window reference used
+  for utilization and context-bloat analysis. Unknown model IDs stay unconfigured
+  and do not inherit a provider or alias value. Seed references and vendor entry
+  points are documented beside the defaults in `apps/server/src/db.ts`.
+- `/api/pricing` stores four token-class prices and an optional `effectiveFrom`.
+  Imported and recomputed Session costs use the price effective at each LLM Span's
+  start time; missing pricing remains unknown. `POST /api/recompute-cost` is the
+  explicit historical recalculation operation.
+- Deterministic diagnosis thresholds are Core-owned policy constants, not a
+  user-editable Runtime setting. Their `wastedCost` values are current analysis-time
+  input-price upper-bound estimates for planning, not historical billing evidence.
+- A Task Configuration Snapshot records only the explicit Agent/model/version
+  identifiers and source hash supplied by the Task; it does not silently capture
+  pricing, context limits, prompts, or rules.
+
 Example: start without transcript auto-scan.
 
 ```bash

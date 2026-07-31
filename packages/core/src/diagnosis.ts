@@ -76,6 +76,8 @@ export const DEFAULT_THRESHOLDS: DiagnosisThresholds = {
 };
 
 export interface DiagnoseOptions {
+  // Diagnostic wasted-cost estimates intentionally use the current analysis-
+  // time pricing returned by this lookup. Stored Span cost remains span-time.
   pricingLookup?: (model?: string) => Pricing | undefined;
   contextWindowLookup?: (model?: string) => number | undefined;
   thresholds?: Partial<DiagnosisThresholds>;

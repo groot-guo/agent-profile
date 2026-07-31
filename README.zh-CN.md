@@ -219,6 +219,19 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 | `LLM_API_KEY` | 开启可选语义诊断；确定性分析不需要 Key |
 | `LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL` | 可选语义诊断服务配置 |
 
+模型、上下文和诊断配置分别属于不同范围：
+
+- `/api/model-context` 只编辑精确 raw model 的上下文窗口参考值，用于窗口利用率和上下文
+  堆积分析。未知 model ID 不会继承 provider 或 alias 的值；默认值及供应商文档入口记录在
+  `apps/server/src/db.ts` 的 seed 注释中。
+- `/api/pricing` 保存四类 Token 单价和可选的 `effectiveFrom`。导入和重算会按每个 LLM
+  Span 的发生时间选择已生效价格；缺少定价仍保持 unknown。`POST /api/recompute-cost`
+  是显式的历史成本重算操作。
+- 确定性诊断阈值是 Core 内置策略常量，不是可由用户编辑的 Runtime 配置；诊断里的
+  `wastedCost` 是以当前分析时点 input 价格计算的 planning 上限估算，不是历史账单证据。
+- Task Configuration Snapshot 只记录 Task 明确提供的 Agent/model/version 标识和 source
+  hash，不会静默快照定价、上下文限制、prompt 或 rules。
+
 例如，不在启动时扫描 transcript：
 
 ```bash
