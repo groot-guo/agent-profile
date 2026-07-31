@@ -38,10 +38,15 @@ export {
   type HomeStatisticsResponse,
 } from './home-statistics';
 export {
+  SESSION_ACTIVITY_RECENT_WINDOW_MS,
+  SESSION_ACTIVITY_UPDATING_WINDOW_MS,
   SESSION_DISCOVERY_SCHEMA_VERSION,
+  type SessionActivityBasis,
+  type SessionActivityState,
   type SessionDiscoveryItem,
   type SessionDiscoveryPage,
   type SessionDiscoveryQuickView,
   type SessionDiscoverySort,
   type SessionDiscoveryTimeRange,
+  type SessionUpdatesResponse,
 } from './session-discovery';

@@ -7,6 +7,7 @@ import { registerProfileRoutes } from './profiles';
 import { registerPromptReviewRoutes } from './prompt-review';
 import { registerScanRoutes } from './scan';
 import { registerSessionEvidenceRoutes } from './session-evidence';
+import { registerSessionUpdateRoutes } from './session-updates';
 import { registerSessionRoutes } from './sessions';
 import { registerStatsRoutes } from './stats';
 import { registerTaskRoutes } from './tasks';
@@ -14,6 +15,7 @@ import { registerTaskRoutes } from './tasks';
 export function registerRoutes(app: FastifyInstance, runtime: AppRuntime): void {
   registerScanRoutes(app, runtime);
   registerSessionEvidenceRoutes(app, runtime);
+  registerSessionUpdateRoutes(app, runtime);
   registerSessionRoutes(app, runtime);
   registerDiagnosisRoutes(app, runtime);
   registerPricingRoutes(app, runtime);

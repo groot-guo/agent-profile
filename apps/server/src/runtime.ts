@@ -50,6 +50,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     defaultScanDir: options.defaultScanDir,
     sourceDefinitions: options.sourceDefinitions,
     onError: options.onImportError,
+    clock,
   });
   let isClosed = false;
 
@@ -62,7 +63,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     close: async () => {
       if (isClosed) return;
       isClosed = true;
-      await imports.waitForIdle();
+      await imports.close();
       database.close();
     },
   };

@@ -8,15 +8,20 @@ import type {
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { API, type DataManagementSummary, type ImportJobStatus } from './config';
 import { DashboardView } from './dashboard';
-import { loadHomeStatistics, loadImportStatus, loadSessionDiscovery } from './home-data';
+import {
+  loadHomeStatistics,
+  loadImportStatus,
+  loadSessionDiscovery,
+  waitForSessionUpdates,
+} from './home-data';
 import { AgentMark } from './icons';
 import { ImportProgressPanel } from './import-progress';
 import { canResetData, summarizeImport, summarizeReset } from './import-state';
 import { projectLabel } from './project-label';
 import { ProjectPicker } from './project-picker';
+import { activityLabel, activityStateAt, groupSessionsWithActivity } from './session-activity';
 import {
   DEFAULT_SESSION_NAVIGATION,
-  groupSessionsForDisplay,
   parseSessionNavigation,
   projectPickerOptionsFromFacets,
   type SessionQuickView,
@@ -55,10 +60,12 @@ export default function HomePage() {
   const [dataSummary, setDataSummary] = useState<DataManagementSummary | null>(null);
   const [resetConfirmation, setResetConfirmation] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [activityNow, setActivityNow] = useState(() => Date.now());
   const sessionListRef = useRef<HTMLElement | null>(null);
   const actionMenuRef = useRef<HTMLDetailsElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const discoveryRequestRef = useRef(0);
+  const sessionUpdateVersionRef = useRef(0);
   const deferredSearch = useDeferredValue(search);
   selectedIdRef.current = selectedId;
 
@@ -74,10 +81,10 @@ export default function HomePage() {
   }, []);
 
   const refreshSessionDiscovery = useCallback(
-    async (cursor?: string, append = false) => {
+    async (cursor?: string, append = false, silent = false) => {
       const requestId = ++discoveryRequestRef.current;
       if (append) setLoadingMore(true);
-      else {
+      else if (!silent) {
         setLoading(true);
         setDiscovery(null);
       }
@@ -205,6 +212,38 @@ export default function HomePage() {
     if (!navigationReady) return;
     void refreshSessionDiscovery();
   }, [navigationReady, refreshSessionDiscovery]);
+
+  useEffect(() => {
+    if (!navigationReady) return;
+    const controller = new AbortController();
+    let version = sessionUpdateVersionRef.current;
+    const observe = async () => {
+      while (!controller.signal.aborted) {
+        try {
+          const update = await waitForSessionUpdates(API, version, controller.signal);
+          if (controller.signal.aborted) return;
+          const changed = update.version > version;
+          version = update.version;
+          sessionUpdateVersionRef.current = version;
+          setActivityNow(update.observedAt);
+          if (changed) {
+            await Promise.all([
+              fetchHomeStatistics(),
+              refreshSessionDiscovery(undefined, false, true),
+            ]);
+          }
+        } catch (reason: unknown) {
+          if (controller.signal.aborted) return;
+          setError(
+            `实时更新已暂停：${reason instanceof Error ? reason.message : '更新通道不可用'}`,
+          );
+          return;
+        }
+      }
+    };
+    void observe();
+    return () => controller.abort();
+  }, [fetchHomeStatistics, navigationReady, refreshSessionDiscovery]);
 
   useEffect(() => {
     const closeMenu = (event: MouseEvent) => {
@@ -378,7 +417,7 @@ export default function HomePage() {
     () => projectPickerOptionsFromFacets(discovery?.facets.projects ?? []),
     [discovery?.facets.projects],
   );
-  const timeGroups = groupSessionsForDisplay(sessions, sortBy);
+  const timeGroups = groupSessionsWithActivity(sessions, sortBy, activityNow);
 
   const agentCounts = new Map<string, number>();
   agentCounts.set('all', discovery?.counts.total ?? 0);
@@ -685,6 +724,7 @@ export default function HomePage() {
                       project={sessionProject(session)}
                       selected={selectedId === session.id}
                       anomaly={session.isAnomaly}
+                      activityState={activityStateAt(session, activityNow)}
                       onSelect={selectSession}
                     />
                   ))}
@@ -1000,15 +1040,18 @@ function SessionRow({
   project,
   selected,
   anomaly,
+  activityState,
   onSelect,
 }: {
   s: SessionDiscoveryItem;
   project: string;
   selected: boolean;
   anomaly: boolean;
+  activityState: SessionDiscoveryItem['activityState'];
   onSelect: (id: string) => void;
 }) {
   const name = sessionDisplayTitle(s);
+  const activity = activityLabel(activityState);
   return (
     <button
       type="button"
@@ -1047,6 +1090,15 @@ function SessionRow({
           out={s.outputTokens}
           tipMode="native"
         />
+        {activity && (
+          <Chip
+            color={activityState === 'updating' ? C.cr : C.link}
+            tipMode="native"
+            tip="基于本地来源 revision 的最近变化推断；不表示来源进程已确认结束"
+          >
+            {activity}
+          </Chip>
+        )}
         {anomaly && (
           <Chip color={C.high} tipMode="native" tip="成本超过该项目 3× 中位数,建议查看诊断">
             异常

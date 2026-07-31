@@ -1,4 +1,8 @@
-import type { HomeStatisticsResponse, SessionDiscoveryPage } from '@agent-profile/contracts';
+import type {
+  HomeStatisticsResponse,
+  SessionDiscoveryPage,
+  SessionUpdatesResponse,
+} from '@agent-profile/contracts';
 import type { ImportJobStatus } from './config';
 import type { SessionNavigationState } from './session-navigation';
 
@@ -8,7 +12,7 @@ interface JsonResponse {
   json: () => Promise<unknown>;
 }
 
-type FetchJson = (url: string) => Promise<JsonResponse>;
+type FetchJson = (url: string, init?: RequestInit) => Promise<JsonResponse>;
 
 export const HOME_SESSION_PAGE_LIMIT = 120;
 
@@ -49,4 +53,16 @@ export async function loadImportStatus(
   const response = await request(`${api}/imports/status`);
   if (!response.ok) throw new Error(`Import status HTTP ${response.status}`);
   return (await response.json()) as ImportJobStatus;
+}
+
+export async function waitForSessionUpdates(
+  api: string,
+  after: number,
+  signal: AbortSignal,
+  request: FetchJson = fetch,
+): Promise<SessionUpdatesResponse> {
+  const params = new URLSearchParams({ after: String(after), wait: '25000' });
+  const response = await request(`${api}/session-updates?${params}`, { signal });
+  if (!response.ok) throw new Error(`Session updates HTTP ${response.status}`);
+  return (await response.json()) as SessionUpdatesResponse;
 }

@@ -114,10 +114,14 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 分别保留 input、cache creation、cache read、output 四类 token。
 - 首次使用时以独立数据准备页展示可用来源、导入和失败状态；已有数据在后台同步期间仍可
   浏览，并通过侧栏紧凑、可展开的来源级状态显示当前操作和完成数，同步完成后只刷新一次。
+- Server 在启动后观察已配置的 transcript 目录和 SQLite DB/WAL 变化，去抖后复用同一来源
+  任务和原子替换路径；Web 通过 content-free update cursor 只在证据变化后更新列表与详情。
+  30 秒内变化为“正在更新”，五分钟内变化为“最近活跃”；这是 revision 新鲜度，不是进程
+  存活或 Session 完成证明。
 - 在按时间边界组织的扁平最近列表中浏览 Session；可搜索的分组项目选择器区分会话记录、
   最近使用和其他项目，并展示短名称、父路径与数量。它可和不限时间/最近 1/7/30/90 天、
   渐进展开的 Agent/结果视图、项目/Agent/Session ID 搜索，以及时间/成本/Token/缓存/耗时
-  排序组合。`session-discovery/v1` 在 Server 端执行筛选与排序，返回匹配数、总数、facets
+  排序组合。`session-discovery/v2` 在 Server 端执行筛选与排序，返回匹配数、总数、facets
   和与查询绑定的 keyset cursor；筛选与选中状态保存在 URL，浏览器返回可恢复列表，首页
   按 120 条一批增量加载。
 - 项目分类优先使用来源捕获的 `cwd`；没有该证据的 Codex Session 在列表和统计中统一显示

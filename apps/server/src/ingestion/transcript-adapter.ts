@@ -18,12 +18,19 @@ export class TranscriptSourceAdapter implements SourceAdapter {
   constructor(
     private readonly directory: string,
     private readonly agentOverride?: string,
+    private readonly selectedFiles?: string[],
   ) {}
 
   async discover(): Promise<SourceItem[]> {
-    const files = await findTranscriptFiles(this.directory);
-    return files.map((file) => {
-      const stat = statSync(file);
+    const files = this.selectedFiles ?? (await findTranscriptFiles(this.directory));
+    const items: SourceItem[] = [];
+    for (const file of files) {
+      let stat: ReturnType<typeof statSync>;
+      try {
+        stat = statSync(file);
+      } catch {
+        continue;
+      }
       const agent = this.agentOverride || detectAgent(file);
       const revision = {
         kind: agent,
@@ -34,7 +41,7 @@ export class TranscriptSourceAdapter implements SourceAdapter {
             : `file:${stat.mtimeMs}:${stat.size}`,
       };
 
-      return {
+      items.push({
         key: file,
         revision,
         load: async () => {
@@ -65,7 +72,8 @@ export class TranscriptSourceAdapter implements SourceAdapter {
             },
           };
         },
-      };
-    });
+      });
+    }
+    return items;
   }
 }

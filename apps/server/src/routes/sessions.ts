@@ -32,7 +32,8 @@ import {
 import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
-type SessionRuntime = Pick<AppRuntime, 'database' | 'pricingResolver' | 'contextWindowResolver'>;
+type SessionRuntime = Pick<AppRuntime, 'database' | 'pricingResolver' | 'contextWindowResolver'> &
+  Partial<Pick<AppRuntime, 'imports' | 'clock'>>;
 
 interface GitCommit {
   hash: string;
@@ -230,6 +231,15 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
         sort: req.query.sort as SessionDiscoverySort | undefined,
         quickView: req.query.view as SessionDiscoveryQuickView | undefined,
         selectedId: req.query.selected,
+        now: runtime.clock?.() ?? Date.now(),
+        availableSourceKinds: runtime.imports
+          ? new Set(
+              runtime.imports.jobs
+                .snapshot()
+                .sources.filter((source) => source.available)
+                .map((source) => source.id),
+            )
+          : undefined,
       });
     } catch (error) {
       if (error instanceof SessionDiscoveryError) {

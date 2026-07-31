@@ -1,8 +1,19 @@
-export const SESSION_DISCOVERY_SCHEMA_VERSION = 'session-discovery/v1';
+export const SESSION_DISCOVERY_SCHEMA_VERSION = 'session-discovery/v2';
+export const SESSION_ACTIVITY_UPDATING_WINDOW_MS = 30_000;
+export const SESSION_ACTIVITY_RECENT_WINDOW_MS = 5 * 60_000;
 
 export type SessionDiscoverySort = 'time' | 'cost' | 'tokens' | 'cache' | 'duration';
 export type SessionDiscoveryQuickView = 'all' | 'anomaly' | 'unpriced';
 export type SessionDiscoveryTimeRange = 'all' | '1d' | '7d' | '30d' | '90d';
+export type SessionActivityState = 'updating' | 'recent' | 'settled' | 'unknown';
+export type SessionActivityBasis = 'revision_change' | 'source_unavailable' | 'not_observed';
+
+export interface SessionUpdatesResponse {
+  version: number;
+  observedAt: number;
+  reset: boolean;
+  sessionIds: string[];
+}
 
 export interface SessionDiscoveryItem {
   id: string;
@@ -23,6 +34,11 @@ export interface SessionDiscoveryItem {
   messageCount: number;
   importedAt: number;
   isAnomaly: boolean;
+  activityState: SessionActivityState;
+  activityBasis: SessionActivityBasis;
+  lastActivityAt: number | null;
+  activityObservedAt: number;
+  provisional: boolean;
 }
 
 export interface SessionDiscoveryPage {

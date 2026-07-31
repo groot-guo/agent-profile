@@ -5312,6 +5312,144 @@ See `diagnosis.md`. Requires model/key decision (deferred).
     `apps/web/app/session-navigation.test.ts`, `apps/web/app/page.tsx`, and this
     roadmap
 
+### T105 active Session observation and live refresh
+
+- status: completed
+- started_at: 2026-07-31
+- completed_at: 2026-07-31
+- estimated size/risk: large / high; activity is source-observed and
+  provisional, while frequent growing-source imports can create correctness,
+  request-churn, and parser-throughput regressions
+- purpose:
+  - distinguish Sessions whose local source is still changing and keep their
+    stored analysis, Home list, and selected detail current without restoring
+    permanent full-list polling or claiming a universal source completion state
+- expected outcome:
+  - supported sources expose bounded `updating`, `recent`, `settled`, or
+    `unknown` activity evidence based on observed source revisions
+  - changing Sessions are re-imported through the ordinary
+    adapter/coordinator/repository path, and the Web refreshes only after the
+    Server observes a successful relevant change
+- scope:
+  1. define versioned activity fields and semantics, including observation
+     time, last source change, provisional status, and evidence basis
+  2. add a Server-owned, lifecycle-safe observation loop with bounded cadence,
+     source/job deduplication, shutdown cleanup, and no transcript-content
+     response or logging
+  3. reuse current revision fingerprints and atomic replacement; retain the
+     last successful generated Session when a growing source is temporarily
+     malformed, and schedule a later observation when the source changes during
+     import
+  4. expose activity in bounded Session discovery and refresh the Home list and
+     selected detail without clearing stable data or issuing permanent full
+     Session-list requests
+  5. show accessible `正在更新` / `最近活跃` distinctions without relabelling
+     quiet Sessions as definitively completed; label changing metrics as
+     provisional where they are presented
+- non-goals:
+  - append-only parser checkpoints or partial Span insertion, which remain T85
+  - operating-system-specific source daemons, remote event delivery, universal
+    process detection, or automatic Task/Outcome completion
+- acceptance:
+  - a supported source revision change updates only through the current atomic
+    import path and becomes visible in Session discovery without manual sync
+  - unchanged sources do not repeatedly parse or rewrite stored Sessions; an
+    active manual/rebuild job is not raced by the observation loop
+  - `end_time` is not used as proof that a Session is active or completed, and
+    unavailable/unobserved sources remain explicitly unknown
+  - browser observation is lifecycle-safe, bounded, and content-free; list and
+    selected-detail updates preserve filters, selection, scroll, and usable
+    stale data
+- dependencies/assumptions/risks:
+  - current file and SQLite adapters already provide revision fingerprints and
+    source update times, but their discovery cost differs and must be measured
+  - T85 is an optimization rather than a prerequisite; T105 may reparse one
+    changed Session in full with debounce/rate limits, but must not high-frequency
+    scan every historical SQLite row or transcript file
+  - active-state thresholds describe recent observation only and need focused
+    fixtures plus representative local inspection before documentation
+  - active partial metrics can change; stable Profile/Outcome interpretation
+    must not silently present them as final delivery evidence
+- expected components/files:
+  - activity/import orchestration under `apps/server/src/ingestion/` and Runtime
+    lifecycle composition under `apps/server/src/`
+  - Session discovery/import contracts and focused Server tests
+  - Home/detail data ownership, activity presentation, and Web tests under
+    `apps/web/app/`
+  - `ARCHITECTURE.md`, relevant README/Chinese overview text if public behavior
+    changes, and this roadmap
+- verification:
+  - RED/GREEN activity classification and lifecycle tests, adapter/coordinator
+    integration tests for changed/unchanged/in-flight/failure cases, Web request
+    and accessible-state tests, focused builds, full relevant tests, lint, and
+    `git diff --check`
+- completion evidence:
+  - implemented source-observed activity classification and bounded update
+    cursor in `packages/contracts/src/session-discovery.ts`,
+    `apps/server/src/session-update-tracker.ts`, and
+    `apps/server/src/routes/session-updates.ts`
+  - added debounced, cooldown-limited filesystem observation with lifecycle
+    cleanup in `apps/server/src/ingestion/source-change-observer.ts` and
+    `apps/server/src/ingestion/import-runtime.ts`; changed sources continue
+    through the existing adapter/coordinator/atomic replacement path
+  - exposed activity on Session discovery and refreshed Home/selected detail
+    through `apps/web/app/home-data.ts`, `apps/web/app/page.tsx`,
+    `apps/web/app/session/[id]/page.tsx`, and
+    `apps/web/app/session/[id]/evidence-panel.tsx`; added focused Web helpers
+    and tests in `apps/web/app/session-activity.ts` and related test files
+  - updated `ARCHITECTURE.md`, `README.md`, `README.zh-CN.md`, and
+    `docs/zh/OVERVIEW.md` for the public behavior and limitations
+  - verified with `pnpm test` (all workspace tests passed), `pnpm build` (all
+    workspace builds passed), `pnpm lint` (passed with the existing 18 warnings
+    and 2 infos), `pnpm check:boundaries`, and `git diff --check`
+  - browser smoke test with an isolated anonymous fixture confirmed the
+    `活跃会话` group, `正在更新`/`最近活跃` chips, non-time sort behavior, and
+    selected Session detail loading
+- known limits:
+  - activity is best-effort source recency inferred from observed revisions;
+    it is not process liveness or completion proof
+  - OS filesystem watches may be unavailable or lose events and then require a
+    manual sync; SQLite/WAL changes wake the ordinary source import path
+  - one changed JSONL Session may still be reparsed in full; append-only
+    checkpoint optimization remains the separate T85 Task
+
+### T106 bounded roadmap register and completed-task archive
+
+- status: planned
+- estimated size/risk: medium / low; large documentation moves can break Task
+  links or create duplicate sources of truth if performed mechanically
+- purpose:
+  - keep current Task discovery and updates bounded without discarding completed
+    implementation and verification evidence
+- scope:
+  1. retain `docs/roadmap.md` as the compact current register for
+     `in_progress`, `planned`, and `blocked` Tasks plus execution order
+  2. move terminal Task bodies into a linked year- or quarter-based archive and
+     keep a compact completed index without duplicating canonical status
+  3. update repository instructions with a bounded-read procedure: locate the
+     Task, read its body and direct dependencies, and avoid loading terminal
+     archives by default
+  4. add a narrow validation check for unique Task IDs, valid lifecycle states,
+     resolvable archive links, and at most the intended active Task set
+- acceptance:
+  - routine Task startup reads a compact register plus only relevant Task
+    bodies; completed verification remains discoverable by stable links
+  - every Task ID and canonical status exists in exactly one authoritative
+    location, and current documentation links remain valid
+  - the restructuring changes no product Runtime behavior and preserves Git
+    history through an explicitly reviewed documentation-only Task
+- dependencies/assumptions/risks:
+  - T105 proceeds first because targeted roadmap reads already avoid full
+    context loading; T106 must not broaden or delay the active Session work
+  - moving historical documentation requires an explicit file-move review and
+    updates to `AGENTS.md` source-of-truth wording
+- expected files:
+  - `docs/roadmap.md`, a bounded `docs/roadmap-archive/` layout,
+    `AGENTS.md`, and an optional narrow validation script/test
+- verification:
+  - Task-ID/status/link validation, targeted-read smoke checks, documentation
+    diff review, and `git diff --check`
+
 ## Execution Order
 
 T79 completed the documentation/assessment baseline, T92 completed the bounded
@@ -5322,6 +5460,11 @@ sidebar interaction layer. T95 then established one current primary-Session
 scope while retaining child records, and T97 documented the module and Model
 Catalog target without changing runtime behavior. The remaining normal
 CLI-first implementation order is:
+
+The immediate sequence authorized on 2026-07-31 is T105 first, using bounded
+source observation and the existing atomic replacement path without waiting for
+T85's parser optimization, followed by the documentation-only T106 roadmap
+register/archive work. The longer-term dependency order remains:
 
 1. T101 CLI foundation, then coordinate T83 bounded discovery and T84 bounded
    detail/evidence retrieval with T102 CLI synchronization/query/report work so

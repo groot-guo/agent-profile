@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
+import { waitForSessionUpdates } from '../../home-data';
 import { AgentMark } from '../../icons';
 import { sessionDisplayTitle } from '../../session-navigation';
 import {
@@ -121,6 +122,13 @@ async function loadLegacyAnalysis(id: string, signal: AbortSignal): Promise<Sess
       'Legacy Server fallback returned a complete Span response. Restart the API to use bounded analysis.',
     ],
   } as SessionAnalysis;
+}
+
+async function loadSessionAnalysis(id: string, signal: AbortSignal): Promise<SessionAnalysis> {
+  const response = await fetch(`${API}/session/${id}/analysis-summary`, { signal });
+  if (response.ok) return response.json() as Promise<SessionAnalysis>;
+  if (response.status === 404) return loadLegacyAnalysis(id, signal);
+  throw new Error(`HTTP ${response.status}`);
 }
 
 function buildLegacyAnalysisWindows(
@@ -231,43 +239,65 @@ export default function SessionPage() {
   const [activeView, setActiveView] = useState<SessionView>('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [liveError, setLiveError] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
     setActiveView('overview');
     setLoading(true);
     setError('');
-    fetch(`${API}/session/${id}/analysis-summary`, { signal: controller.signal })
-      .then((r) => {
-        if (r.ok) return r.json() as Promise<SessionAnalysis>;
-        // The web app can update before a non-watch server process restarts.
-        // Keep the detail page usable during that short version skew.
-        if (r.status === 404) return loadLegacyAnalysis(id, controller.signal);
-        return Promise.reject(new Error(`HTTP ${r.status}`));
-      })
-      .then((analysis) => {
-        if (controller.signal.aborted) return;
-        setData(analysis.session);
-        setSpanSummary(analysis.spanSummary);
-        setContext(analysis.context);
-        setToolWindow(analysis.toolWindow);
-        setSidechainTurnWindow(analysis.sidechainTurnWindow);
-        setDiag(analysis.diagnosis);
-        setEff(analysis.efficiency);
-        setCostAttr(analysis.costAttribution);
-        setScore(analysis.score);
-        setCommits(analysis.commits);
-        setPerf(analysis.performance);
-        setToolParams(analysis.toolParams);
-      })
-      .catch((reason: unknown) => {
+    setLiveError('');
+
+    const applyAnalysis = (analysis: SessionAnalysis) => {
+      if (controller.signal.aborted) return;
+      setData(analysis.session);
+      setSpanSummary(analysis.spanSummary);
+      setContext(analysis.context);
+      setToolWindow(analysis.toolWindow);
+      setSidechainTurnWindow(analysis.sidechainTurnWindow);
+      setDiag(analysis.diagnosis);
+      setEff(analysis.efficiency);
+      setCostAttr(analysis.costAttribution);
+      setScore(analysis.score);
+      setCommits(analysis.commits);
+      setPerf(analysis.performance);
+      setToolParams(analysis.toolParams);
+    };
+
+    const run = async () => {
+      try {
+        applyAnalysis(await loadSessionAnalysis(id, controller.signal));
+      } catch (reason: unknown) {
         if (controller.signal.aborted) return;
         if (reason instanceof DOMException && reason.name === 'AbortError') return;
         setError(reason instanceof Error ? reason.message : 'failed');
-      })
-      .finally(() => {
+        return;
+      } finally {
         if (!controller.signal.aborted) setLoading(false);
-      });
+      }
+
+      let version = 0;
+      while (!controller.signal.aborted) {
+        try {
+          const update = await waitForSessionUpdates(API, version, controller.signal);
+          if (controller.signal.aborted) return;
+          const changed = update.version > version;
+          version = update.version;
+          if (changed && (update.reset || update.sessionIds.includes(id))) {
+            applyAnalysis(await loadSessionAnalysis(id, controller.signal));
+            setLiveError('');
+          }
+        } catch (reason: unknown) {
+          if (controller.signal.aborted) return;
+          if (reason instanceof DOMException && reason.name === 'AbortError') return;
+          setLiveError(
+            `实时更新已暂停：${reason instanceof Error ? reason.message : '更新通道不可用'}`,
+          );
+          return;
+        }
+      }
+    };
+    void run();
     return () => controller.abort();
   }, [id]);
 
@@ -338,6 +368,7 @@ export default function SessionPage() {
         <ExportLink href={`${API}/session/${id}/export?format=csv`} label="CSV" />
         <ExportLink href={`${API}/session/${id}/report`} label="Report" color={C.cc} />
       </div>
+      {liveError && <Notice kind="info">{liveError}</Notice>}
 
       {/* ===== 指纹条:本会话 4 类 token 构成 ===== */}
       <div
@@ -630,7 +661,7 @@ export default function SessionPage() {
               title="需要核查时，再进入完整 Span"
               description="默认只加载结构化事件和覆盖度；输入、输出、thinking 与 answer 内容仍需主动请求脱敏且有界的预览。"
             />
-            <EvidencePanel sessionId={id} />
+            <EvidencePanel sessionId={id} revision={data.importedAt} />
           </>
         )}
       </section>

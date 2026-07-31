@@ -77,6 +77,14 @@ Claude/Codex directories and available Zed/MiMo/OpenCode databases. It
 deduplicates each source, isolates failures, and exposes per-source state
 without blocking server startup. The compatibility scan API still supports a
 selected transcript directory; the Web uses the shared multi-source job instead.
+After startup, a Server-owned source observer watches configured transcript
+directories and the parent directories of supported SQLite databases. Events
+are debounced and each source has a five-second cooldown. Claude/Codex events
+re-import only the changed JSONL file; database and WAL events wake the ordinary
+revision-based source import. Observation joins the same per-source job manager,
+so it cannot race a manual synchronization or rebuild. A watcher that cannot be
+created does not make an otherwise usable source destructive: manual sync remains
+available and the existing last-good normalized Session stays intact.
 
 The Web derives its import progress only from that public per-source state. If
 an active job starts with zero stored Sessions, Home renders a dedicated
@@ -89,7 +97,9 @@ sidebar data action. Its collapsed state shows the operation and settled/availab
 source count; expansion shows active, completed, unavailable, and failed source
 detail without turning the result into file- or record-level progress.
 It polls the existing job status and refreshes dashboard data once when the job
-becomes terminal; it does not create a second import pipeline or imply
+becomes terminal. Separately, one serialized content-free update cursor waits up
+to 25 seconds and refreshes Home or the selected detail only after a successful
+source revision change. Neither path creates a second import pipeline or implies
 file-/record-level progress.
 
 Home keeps `同步数据` as the single primary data action. `刷新显示` is subordinate
@@ -194,7 +204,7 @@ Profile builders. They return the existing report data with its coverage and
 limitations; they do not add metric formulas, Outcome conclusions, or automatic
 configuration-quality decisions.
 
-The Home page owns the initial `session-discovery/v1`, `home-statistics/v1`, and
+The Home page owns the initial `session-discovery/v2`, `home-statistics/v1`, and
 import-status requests and passes data into the Dashboard. The statistics
 response contains overview totals, recent-tool frequency, and at most ten
 privacy-safe cost/token highlights per list; the browser does not fetch the full
@@ -202,6 +212,15 @@ privacy-safe cost/token highlights per list; the browser does not fetch the full
 interactive during a job. The browser polls only while `active=true`, stops in
 terminal states or on unmount, and refreshes discovery/statistics once after
 completion.
+
+`session-discovery/v2` adds source-observed activity evidence without treating
+`end_time` as a completion signal. A revision updated within 30 seconds is
+`updating`; one updated within five minutes is `recent`; older observed revisions
+are `settled`; unavailable or unobserved sources are `unknown`. These states are
+provisional recency classifications, not process-liveness guarantees. In the
+default chronological view, updating/recent Sessions are grouped first and
+labelled in the row. Other sorts preserve their Server order. The Web advances
+the classification locally as time passes between source changes.
 
 Session discovery uses one flat recent list grouped by today/yesterday/recent
 time boundaries. Project is row metadata and an exact counted selector rather
@@ -266,7 +285,9 @@ The source import coordinator discovers all source items but skips an unchanged
 item before loading/parsing it. When a source revision changes, the complete
 normalized Session is parsed and atomically replaces its stored Spans. This
 preserves revision and annotation guarantees, but transcript append-only parsing
-is not implemented.
+is not implemented. Source observation therefore rate-limits complete parsing of
+one changed Claude/Codex JSONL Session; T85 remains responsible for safe append
+checkpoints and parser-equivalence fallback.
 
 The reproducible T82–T84 benchmark in `docs/performance.md` fixes a content-free
 desktop workload at 500 Sessions, 75,000 Spans, one 3,000-Span detail Session,
@@ -612,6 +633,7 @@ page exposes the same contract and privacy boundaries.
 | `POST` | `/api/data-management/reset` | Confirm and transactionally delete generated Sessions/Spans while retaining pricing, model configuration, migrations, and Task/Outcome/experiment records |
 | `GET` | `/api/sessions` | Compatibility full-array Session list |
 | `GET` | `/api/session-discovery` | Versioned bounded Session page with server-side filters, sort, counts, facets, selected preview, and keyset cursor |
+| `GET` | `/api/session-updates` | Content-free long-poll cursor for bounded changed-Session IDs; waits at most 30 seconds |
 | `PATCH` | `/api/session/:id` | Update session tags/notes |
 | `GET` | `/api/session/:id` | Session with spans |
 | `GET` | `/api/session/:id/analysis` | Aggregated detail analysis |

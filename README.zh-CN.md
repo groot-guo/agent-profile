@@ -117,11 +117,11 @@ Server 启动后会创建一个可观察的后台导入任务。没有已存 Ses
 
 | 来源 | 默认本机位置 | 导入时机 |
 | --- | --- | --- |
-| Claude Code | `~/.claude/projects` | 启动时与“同步数据” |
-| Codex | `~/.codex/sessions` | 启动时与“同步数据” |
-| Zed | 本机 Zed `threads.db` | 数据库存在时启动扫描与“同步数据” |
-| MiMo | 本机 `mimocode.db` | 数据库存在时启动扫描与“同步数据” |
-| OpenCode | `~/.local/share/opencode/opencode.db` | 数据库存在时启动扫描与“同步数据” |
+| Claude Code | `~/.claude/projects` | 启动、“同步数据”与观测到 JSONL 变化时 |
+| Codex | `~/.codex/sessions` | 启动、“同步数据”与观测到 JSONL 变化时 |
+| Zed | 本机 Zed `threads.db` | 数据库存在时启动、“同步数据”与观测到 DB/WAL 变化时 |
+| MiMo | 本机 `mimocode.db` | 数据库存在时启动、“同步数据”与观测到 DB/WAL 变化时 |
+| OpenCode | `~/.local/share/opencode/opencode.db` | 数据库存在时启动、“同步数据”与观测到 DB/WAL 变化时 |
 
 如果列表为空，可使用首次导入面板或点击首页的**同步数据**。它与启动导入共享同一个
 按来源去重的任务，检查五种来源并显示新增、更新、跳过和失败数量。状态接口和页面不会
@@ -139,10 +139,16 @@ Server 启动后会创建一个可观察的后台导入任务。没有已存 Ses
 标签。可搜索、分组的项目选择器将会话记录分类、最近使用项目和其他文件系统项目分开，
 分别显示短项目名、父路径与数量，同时继续用规范项目 key 保存筛选。它可与不限时间/最近
 1/7/30/90 天、折叠的 Agent/结果视图、项目/Agent/Session ID 搜索，以及按时间、成本、
-Token、缓存、耗时排序组合使用。版本化 `session-discovery/v1` 在 SQLite 中执行筛选和排序，
+Token、缓存、耗时排序组合使用。版本化 `session-discovery/v2` 在 SQLite 中执行筛选和排序，
 返回匹配数/总数、Agent/项目 facets，并用与查询绑定的 keyset cursor 翻页。首页每次加载
 120 条匹配 Session，接口上限为 200 条；打开 Session 或浏览器返回时筛选与选中状态由 URL
 保留。
+
+配置的本地来源发生变化后，Server 会去抖事件并复用同一套 revision 判断与原子替换导入；
+content-free 的更新 cursor 只在存储证据实际变化后刷新首页和当前详情。30 秒内变化的行显示
+“正在更新”，五分钟内变化的行显示“最近活跃”，并在时间排序下优先分组。这只是来源 revision
+的新鲜度推断，不证明 Agent 进程仍在运行，也不把暂时安静的 Session 宣称为已完成。来源监听
+不可用时，仍可使用“同步数据”恢复。
 
 有界首页响应不会返回来源 Session 标题、本地路径、transcript 标识、标签/备注，以及
 prompt、reasoning、answer 或工具内容。因此列表只用 Agent、项目和开始时间生成展示标题，

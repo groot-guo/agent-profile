@@ -1,7 +1,11 @@
 import {
   type CliSessionDiscoveryPage,
   type CliSessionSummary,
+  SESSION_ACTIVITY_RECENT_WINDOW_MS,
+  SESSION_ACTIVITY_UPDATING_WINDOW_MS,
   SESSION_DISCOVERY_SCHEMA_VERSION,
+  type SessionActivityBasis,
+  type SessionActivityState,
   type SessionDiscoveryItem,
   type SessionDiscoveryPage,
   type SessionDiscoveryQuickView,
@@ -34,6 +38,7 @@ export interface WebSessionDiscoveryOptions {
   quickView?: SessionDiscoveryQuickView;
   selectedId?: string;
   now?: number;
+  availableSourceKinds?: ReadonlySet<string>;
 }
 
 export type SessionDiscoveryErrorCode =
@@ -74,11 +79,24 @@ interface NormalizedWebDiscoveryOptions {
   quickView: SessionDiscoveryQuickView;
   selectedId: string | null;
   startedAfter: number | null;
+  now: number;
+  availableSourceKinds?: ReadonlySet<string>;
 }
 
-interface DiscoveryRow extends Omit<SessionDiscoveryItem, 'isAnomaly'> {
+interface DiscoveryRow
+  extends Omit<
+    SessionDiscoveryItem,
+    | 'isAnomaly'
+    | 'activityState'
+    | 'activityBasis'
+    | 'lastActivityAt'
+    | 'activityObservedAt'
+    | 'provisional'
+  > {
   isAnomaly: number;
   sortValue: number;
+  sourceKind: string | null;
+  sourceUpdatedAt: number | null;
 }
 
 const DISCOVERY_ERROR_MESSAGES: Record<SessionDiscoveryErrorCode, string> = {
@@ -127,6 +145,8 @@ const WEB_SESSION_COLUMNS = `
   COALESCE(s.cache_hit_rate, 0) AS cacheHitRate,
   COALESCE(s.message_count, 0) AS messageCount,
   s.imported_at AS importedAt,
+  s.source_kind AS sourceKind,
+  s.source_updated_at AS sourceUpdatedAt,
   CASE WHEN anomaly_sessions.id IS NULL THEN 0 ELSE 1 END AS isAnomaly`;
 
 const ANOMALY_CTE = `WITH primary_costs AS (
@@ -259,7 +279,9 @@ export function discoverSessionPage(
     ) as DiscoveryRow[];
   const hasMore = rows.length > normalized.limit;
   const pageRows = rows.slice(0, normalized.limit);
-  const sessions = pageRows.map(toDiscoveryItem);
+  const sessions = pageRows.map((row) =>
+    toDiscoveryItem(row, normalized.now, normalized.availableSourceKinds),
+  );
   const lastRow = pageRows.at(-1);
   const matched = (
     database
@@ -306,7 +328,12 @@ export function discoverSessionPage(
     facets: loadDiscoveryFacets(database),
     sessions,
     selectedSession: normalized.selectedId
-      ? loadSelectedDiscoverySession(database, normalized.selectedId)
+      ? loadSelectedDiscoverySession(
+          database,
+          normalized.selectedId,
+          normalized.now,
+          normalized.availableSourceKinds,
+        )
       : null,
   };
 }
@@ -329,8 +356,8 @@ function normalizeWebOptions(
   const agent = normalizedText(options.agent, 200, 'invalid_query');
   const project = normalizedText(options.project, 2_048, 'invalid_query');
   const selectedId = normalizedText(options.selectedId, 512, 'invalid_query');
-  const startedAfter =
-    cursor?.startedAfter ?? timeRangeCutoff(timeRange, options.now ?? Date.now());
+  const now = options.now ?? Date.now();
+  const startedAfter = cursor?.startedAfter ?? timeRangeCutoff(timeRange, now);
   return {
     limit,
     agent,
@@ -341,6 +368,8 @@ function normalizeWebOptions(
     quickView,
     selectedId,
     startedAfter,
+    now,
+    availableSourceKinds: options.availableSourceKinds,
   };
 }
 
@@ -402,6 +431,8 @@ function loadDiscoveryFacets(database: DatabaseConnection): SessionDiscoveryPage
 function loadSelectedDiscoverySession(
   database: DatabaseConnection,
   selectedId: string,
+  now: number,
+  availableSourceKinds?: ReadonlySet<string>,
 ): SessionDiscoveryItem | null {
   const row = database
     .prepare(
@@ -412,12 +443,65 @@ function loadSelectedDiscoverySession(
        WHERE s.id = ?`,
     )
     .get(selectedId) as DiscoveryRow | undefined;
-  return row ? toDiscoveryItem(row) : null;
+  return row ? toDiscoveryItem(row, now, availableSourceKinds) : null;
 }
 
-function toDiscoveryItem(row: DiscoveryRow): SessionDiscoveryItem {
-  const { sortValue: _sortValue, isAnomaly, ...session } = row;
-  return { ...session, isAnomaly: isAnomaly === 1 };
+function toDiscoveryItem(
+  row: DiscoveryRow,
+  now: number,
+  availableSourceKinds?: ReadonlySet<string>,
+): SessionDiscoveryItem {
+  const { sortValue: _sortValue, isAnomaly, sourceKind, sourceUpdatedAt, ...session } = row;
+  const activity = sessionActivity(sourceKind, sourceUpdatedAt, now, availableSourceKinds);
+  return {
+    ...session,
+    isAnomaly: isAnomaly === 1,
+    ...activity,
+    activityObservedAt: now,
+  };
+}
+
+function sessionActivity(
+  sourceKind: string | null,
+  sourceUpdatedAt: number | null,
+  now: number,
+  availableSourceKinds?: ReadonlySet<string>,
+): {
+  activityState: SessionActivityState;
+  activityBasis: SessionActivityBasis;
+  lastActivityAt: number | null;
+  provisional: boolean;
+} {
+  if (sourceUpdatedAt === null || sourceKind === null) {
+    return {
+      activityState: 'unknown',
+      activityBasis: 'not_observed',
+      lastActivityAt: sourceUpdatedAt,
+      provisional: false,
+    };
+  }
+  if (availableSourceKinds && !availableSourceKinds.has(sourceKind)) {
+    return {
+      activityState: 'unknown',
+      activityBasis: 'source_unavailable',
+      lastActivityAt: sourceUpdatedAt,
+      provisional: false,
+    };
+  }
+
+  const age = Math.max(0, now - sourceUpdatedAt);
+  const activityState: SessionActivityState =
+    age <= SESSION_ACTIVITY_UPDATING_WINDOW_MS
+      ? 'updating'
+      : age <= SESSION_ACTIVITY_RECENT_WINDOW_MS
+        ? 'recent'
+        : 'settled';
+  return {
+    activityState,
+    activityBasis: 'revision_change',
+    lastActivityAt: sourceUpdatedAt,
+    provisional: activityState === 'updating' || activityState === 'recent',
+  };
 }
 
 function webQueryKey(options: NormalizedWebDiscoveryOptions): string {

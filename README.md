@@ -145,11 +145,11 @@ refreshes the displayed local data.
 
 | Source | Default local location | When it is imported |
 | --- | --- | --- |
-| Claude Code | `~/.claude/projects` | startup and “同步数据” |
-| Codex | `~/.codex/sessions` | startup and “同步数据” |
-| Zed | local Zed `threads.db` | startup and “同步数据” when present |
-| MiMo | local `mimocode.db` | startup and “同步数据” when present |
-| OpenCode | `~/.local/share/opencode/opencode.db` | startup and “同步数据” when present |
+| Claude Code | `~/.claude/projects` | startup, “同步数据”, and observed JSONL changes |
+| Codex | `~/.codex/sessions` | startup, “同步数据”, and observed JSONL changes |
+| Zed | local Zed `threads.db` | startup, “同步数据”, and observed DB/WAL changes when present |
+| MiMo | local `mimocode.db` | startup, “同步数据”, and observed DB/WAL changes when present |
+| OpenCode | `~/.local/share/opencode/opencode.db` | startup, “同步数据”, and observed DB/WAL changes when present |
 
 If the list is empty, use the source-aware first-run panel or click
 **同步数据**. The same deduplicated job used at startup checks all five sources
@@ -175,11 +175,20 @@ categories from recently used and other filesystem projects, displaying short
 name, parent path, and count without losing the canonical project key. It composes
 with all/1/7/30/90-day range selection, progressively disclosed Agent and quick
 views, project/Agent/Session-ID search, and time/cost/token/cache/duration sorting.
-The versioned `session-discovery/v1` API applies those filters and sorts in
+The versioned `session-discovery/v2` API applies those filters and sorts in
 SQLite, returns matched/total counts plus Agent/project facets, and uses a
 query-bound keyset cursor. Home loads 120 matching Sessions at a time; the API
 accepts at most 200. Filter and selected-Session state remains in the URL when a
 Session is opened or the browser goes back.
+
+When a configured local source changes, the Server debounces the event and
+reuses the same revision/atomic-replacement import path. A content-free update
+cursor refreshes Home and the selected detail only after stored evidence changes.
+Rows updated within 30 seconds show **正在更新**; those updated within five
+minutes show **最近活跃** and are grouped first in chronological view. These are
+source-revision recency signals, not proof that an Agent process is running or
+that a quiet Session is complete. If source watching is unavailable, manual
+**同步数据** remains the recovery path.
 
 The bounded Home response deliberately omits source Session names, local paths,
 transcript identifiers, annotations, and prompt/reasoning/answer/tool content.

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { loadHomeStatistics, loadImportStatus, loadSessionDiscovery } from './home-data';
+import {
+  loadHomeStatistics,
+  loadImportStatus,
+  loadSessionDiscovery,
+  waitForSessionUpdates,
+} from './home-data';
 
 describe('Home data ownership', () => {
   it('loads one bounded Session window, bounded Home statistics, and import status', async () => {
@@ -48,5 +53,23 @@ describe('Home data ownership', () => {
     ]);
     expect(urls[0]).not.toContain('/sessions?');
     expect(urls.some((url) => url.includes('/tools'))).toBe(false);
+  });
+
+  it('waits on a content-free update cursor instead of polling the Session list', async () => {
+    const controller = new AbortController();
+    const urls: string[] = [];
+    const request = async (url: string) => {
+      urls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ version: 4, observedAt: 100, reset: false, sessionIds: ['a'] }),
+      };
+    };
+
+    const result = await waitForSessionUpdates('http://local/api', 3, controller.signal, request);
+
+    expect(result).toEqual({ version: 4, observedAt: 100, reset: false, sessionIds: ['a'] });
+    expect(urls).toEqual(['http://local/api/session-updates?after=3&wait=25000']);
   });
 });

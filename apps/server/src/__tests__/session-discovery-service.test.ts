@@ -111,7 +111,7 @@ describe('session discovery service', () => {
     });
 
     expect(firstPage).toMatchObject({
-      schemaVersion: 'session-discovery/v1',
+      schemaVersion: 'session-discovery/v2',
       counts: { matched: 3, total: 4 },
       page: { limit: 2, hasMore: true },
       sessions: [{ id: 'alpha-high' }, { id: 'alpha-tie-b' }],
@@ -190,6 +190,91 @@ describe('session discovery service', () => {
       ),
     ).toEqual(['unpriced']);
   });
+
+  it('classifies source-observed activity without treating end time as completion', () => {
+    const now = 1_000_000;
+    insertDiscoverySession(database, {
+      id: 'updating',
+      project: '/workspace/alpha',
+      startTime: 100,
+      totalCost: 1,
+      sourceKind: 'claude-code',
+      sourceUpdatedAt: now - 10_000,
+    });
+    insertDiscoverySession(database, {
+      id: 'recent',
+      project: '/workspace/alpha',
+      startTime: 200,
+      totalCost: 1,
+      sourceKind: 'codex',
+      sourceUpdatedAt: now - 60_000,
+    });
+    insertDiscoverySession(database, {
+      id: 'settled',
+      project: '/workspace/alpha',
+      startTime: 300,
+      totalCost: 1,
+      sourceKind: 'claude-code',
+      sourceUpdatedAt: now - 600_000,
+    });
+    insertDiscoverySession(database, {
+      id: 'unavailable',
+      project: '/workspace/alpha',
+      startTime: 400,
+      totalCost: 1,
+      sourceKind: 'opencode',
+      sourceUpdatedAt: now - 1_000,
+    });
+
+    const result = discoverSessionPage(database, {
+      now,
+      availableSourceKinds: new Set(['claude-code', 'codex']),
+    });
+
+    expect(
+      Object.fromEntries(
+        result.sessions.map((session) => [
+          session.id,
+          {
+            state: session.activityState,
+            basis: session.activityBasis,
+            provisional: session.provisional,
+            lastActivityAt: session.lastActivityAt,
+            observedAt: session.activityObservedAt,
+          },
+        ]),
+      ),
+    ).toEqual({
+      unavailable: {
+        state: 'unknown',
+        basis: 'source_unavailable',
+        provisional: false,
+        lastActivityAt: now - 1_000,
+        observedAt: now,
+      },
+      settled: {
+        state: 'settled',
+        basis: 'revision_change',
+        provisional: false,
+        lastActivityAt: now - 600_000,
+        observedAt: now,
+      },
+      recent: {
+        state: 'recent',
+        basis: 'revision_change',
+        provisional: true,
+        lastActivityAt: now - 60_000,
+        observedAt: now,
+      },
+      updating: {
+        state: 'updating',
+        basis: 'revision_change',
+        provisional: true,
+        lastActivityAt: now - 10_000,
+        observedAt: now,
+      },
+    });
+  });
 });
 
 function insertSession(
@@ -223,14 +308,16 @@ function insertDiscoverySession(
     totalTokens?: number;
     costUnknownCount?: number;
     name?: string;
+    sourceKind?: string;
+    sourceUpdatedAt?: number;
   },
 ): void {
   database
     .prepare(
       `INSERT INTO sessions (
-        id, name, file_path, agent, project_key, start_time, end_time,
-        input_tokens, total_cost, cost_unknown_count, imported_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, name, file_path, agent, project_key, source_kind, source_updated_at,
+        start_time, end_time, input_tokens, total_cost, cost_unknown_count, imported_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.id,
@@ -238,6 +325,8 @@ function insertDiscoverySession(
       `fixture://${input.id}`,
       input.agent ?? 'claude-code',
       input.project,
+      input.sourceKind ?? null,
+      input.sourceUpdatedAt ?? null,
       input.startTime,
       input.startTime + 100,
       input.totalTokens ?? 0,

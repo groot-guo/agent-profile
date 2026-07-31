@@ -65,7 +65,7 @@ describe('Session discovery routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      schemaVersion: 'session-discovery/v1',
+      schemaVersion: 'session-discovery/v2',
       counts: { matched: 1, total: 1 },
       page: { limit: 1, hasMore: false, nextCursor: null },
       sessions: [{ id: 'primary-session' }],

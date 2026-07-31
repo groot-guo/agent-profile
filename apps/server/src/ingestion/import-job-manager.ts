@@ -54,6 +54,10 @@ export class ImportJobManager {
   constructor(
     definitions: ImportSourceDefinition[],
     private readonly onError: (source: ImportSourceDefinition, error: unknown) => void = () => {},
+    private readonly onResult: (
+      source: ImportSourceDefinition,
+      result: ScanResult,
+    ) => void = () => {},
   ) {
     for (const definition of definitions) {
       this.definitions.set(definition.id, definition);
@@ -133,6 +137,24 @@ export class ImportJobManager {
     return this.launch(definition, status, 'sync');
   }
 
+  async runObserved(sourceId: ImportSourceId, run: () => Promise<ScanResult>): Promise<ScanResult> {
+    const definition = this.definitions.get(sourceId);
+    const status = this.statuses.get(sourceId);
+    if (!definition || !status) throw new Error(`Unknown import source: ${sourceId}`);
+    while (true) {
+      if (this.inFlight.size > 0) {
+        await Promise.allSettled([...this.inFlight.values()]);
+        continue;
+      }
+      status.available = await definition.isAvailable();
+      if (!status.available) return structuredClone(EMPTY_RESULT);
+      if (this.inFlight.size > 0) continue;
+      this.jobId = `${Date.now()}-${++this.sequence}`;
+      this.operation = 'sync';
+      return this.launch(definition, status, 'sync', run);
+    }
+  }
+
   async waitForIdle(): Promise<void> {
     while (this.inFlight.size > 0) {
       await Promise.allSettled([...this.inFlight.values()]);
@@ -157,6 +179,7 @@ export class ImportJobManager {
     definition: ImportSourceDefinition,
     status: ImportSourceStatus,
     operation: ImportOperation,
+    run: () => Promise<ScanResult> = () => definition.run(operation),
   ): Promise<ScanResult> {
     const existing = this.inFlight.get(definition.id);
     if (existing) return existing;
@@ -166,12 +189,13 @@ export class ImportJobManager {
     status.error = null;
 
     const promise = Promise.resolve()
-      .then(() => definition.run(operation))
+      .then(run)
       .then((result) => {
         status.state = 'completed';
         const { sessionIds: _sessionIds, ...publicResult } = result;
         status.result = publicResult;
         status.completedAt = Date.now();
+        this.onResult(definition, result);
         return result;
       })
       .catch((error: unknown) => {

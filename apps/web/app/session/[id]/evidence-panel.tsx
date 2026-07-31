@@ -16,7 +16,7 @@ import { C, FS, fmtBytes, fmtDuration, fmtTime, fmtTokens, R, SP } from '../../t
 import { Card, Chip, Empty, Notice } from '../../ui';
 import { type EvidencePageFilters, evidencePageUrl, mergeEvidenceEvents } from './evidence-data';
 
-export function EvidencePanel({ sessionId }: { sessionId: string }) {
+export function EvidencePanel({ sessionId, revision }: { sessionId: string; revision?: number }) {
   const [report, setReport] = useState<SessionEvidencePage | null>(null);
   const [events, setEvents] = useState<SessionEvidenceEvent[]>([]);
   const [error, setError] = useState('');
@@ -63,7 +63,7 @@ export function EvidencePanel({ sessionId }: { sessionId: string }) {
       loadMoreControllerRef.current?.abort();
       loadMoreControllerRef.current = null;
     };
-  }, [contentMode, laneFilter, outcomeFilter, sessionId, typeFilter]);
+  }, [contentMode, laneFilter, outcomeFilter, revision, sessionId, typeFilter]);
 
   async function loadMore(): Promise<void> {
     if (!report?.page.nextCursor || loadingMore) return;

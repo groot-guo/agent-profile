@@ -108,4 +108,36 @@ describe('ImportJobManager', () => {
     expect(run).toHaveBeenCalledWith('rebuild');
     expect(manager.snapshot()).toMatchObject({ active: false, operation: 'rebuild' });
   });
+
+  it('runs an observed refresh after an in-flight source and publishes both results', async () => {
+    let release: (() => void) | undefined;
+    const regularRun = vi.fn(
+      () =>
+        new Promise<ScanResult>((resolve) => {
+          release = () => resolve(result());
+        }),
+    );
+    const observedRun = vi.fn(async () => ({ ...result(), updated: 1, imported: 0 }));
+    const onResult = vi.fn();
+    const manager = new ImportJobManager(
+      [
+        { id: 'zed', label: 'Zed', isAvailable: () => true, run: regularRun },
+        { id: 'codex', label: 'Codex', isAvailable: () => true, run: async () => result() },
+      ],
+      undefined,
+      onResult,
+    );
+
+    await manager.start(['zed']);
+    const observed = manager.runObserved('codex', observedRun);
+    expect(observedRun).not.toHaveBeenCalled();
+
+    release?.();
+    await observed;
+
+    expect(regularRun).toHaveBeenCalledOnce();
+    expect(observedRun).toHaveBeenCalledOnce();
+    expect(onResult).toHaveBeenCalledTimes(2);
+    expect(manager.snapshot()).toMatchObject({ active: false, operation: 'sync' });
+  });
 });
