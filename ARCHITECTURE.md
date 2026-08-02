@@ -506,11 +506,12 @@ from available source histories when recovery is necessary.
   unknown rather than silently estimated as a known bill.
 - Statistics may derive a presentation-only canonical model group for explicit
   aliases while retaining raw source labels. Captured Codex model IDs
-  `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and
-  `codex-auto-review` are recognized as concrete identities; `openai` and
-  `litellm` remain provider-only. Unknown model values remain distinct; this
-  grouping never rewrites stored evidence or changes the raw-model pricing
-  lookup.
+  `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` are concrete identities;
+  `codex-auto-review` is a retained runtime-mode label, not a model. Runtime
+  modes are excluded from model statistics and the Model Catalog and cannot be
+  assigned pricing or context configuration. `openai` and `litellm` remain
+  provider-only. Unknown model values remain distinct; this grouping never
+  rewrites stored evidence or changes raw-model pricing lookup.
 - Cost attribution distributes an LLM turn's cost across tool categories used
   by that turn and shows tool-free turns separately. It is an analytical
   allocation, not a provider invoice.

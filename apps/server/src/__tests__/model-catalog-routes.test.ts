@@ -27,7 +27,9 @@ describe('Model Catalog routes', () => {
           id, session_id, type, name, start_time, model, input_tokens,
           cache_creation_tokens, cache_read_tokens, output_tokens, cost, cost_unknown
         ) VALUES ('catalog-span', 'catalog-session', 'llm_turn', 'turn', 1000,
-          'route-model', 100, 20, 10, 30, 0, 1)`,
+          'route-model', 100, 20, 10, 30, 0, 1),
+          ('catalog-runtime-span', 'catalog-session', 'llm_turn', 'auto-review', 1001,
+          'codex-auto-review', 100, 20, 10, 30, 0, 1)`,
       )
       .run();
     app = createApp(runtime, { logger: false, webOrigins: [] });
@@ -45,6 +47,9 @@ describe('Model Catalog routes', () => {
     expect(inventory.json().models).toMatchObject([
       { model: 'route-model', observedSpans: 1, pricingKnown: false },
     ]);
+    expect(inventory.json().models).not.toContainEqual(
+      expect.objectContaining({ model: 'codex-auto-review' }),
+    );
 
     const pricing = await app.inject({
       method: 'POST',
@@ -78,6 +83,29 @@ describe('Model Catalog routes', () => {
     expect(runtime.pricingResolver('route-alias', 1000)).toMatchObject({
       pricingModel: 'route-model',
     });
+  });
+
+  it('rejects pricing and context configuration for runtime-mode labels', async () => {
+    const pricing = await app.inject({
+      method: 'POST',
+      url: '/api/model-catalog/models/codex-auto-review/pricing',
+      payload: {
+        inputPrice: 1,
+        cacheCreationPrice: 1,
+        cacheReadPrice: 0.1,
+        outputPrice: 2,
+      },
+    });
+    expect(pricing.statusCode).toBe(400);
+    expect(pricing.json()).toMatchObject({ message: 'runtime_mode_not_configurable' });
+
+    const context = await app.inject({
+      method: 'PUT',
+      url: '/api/model-catalog/models/codex-auto-review/context',
+      payload: { contextWindow: 128000 },
+    });
+    expect(context.statusCode).toBe(400);
+    expect(context.json()).toMatchObject({ message: 'runtime_mode_not_configurable' });
   });
 
   it('keeps preview read-only and rejects execute after pricing revision changes', async () => {

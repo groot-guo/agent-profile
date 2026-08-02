@@ -147,7 +147,7 @@ export interface CliStatsData {
   byProject: { cwd: string; sessions: number; totalTokens: number; totalCost: number }[];
   byModel: {
     model: string;
-    kind: 'model' | 'provider_only' | 'unknown';
+    kind: 'model' | 'provider_only' | 'runtime_mode' | 'unknown';
     rawModels: string[];
     sessions: number;
     totalInputTokens: number;
@@ -160,7 +160,7 @@ export interface CliStatsData {
     tokenBins: { bin: string; min: number; max: number | null; count: number }[];
     modelDistribution: {
       model: string;
-      kind: 'model' | 'provider_only' | 'unknown';
+      kind: 'model' | 'provider_only' | 'runtime_mode' | 'unknown';
       rawModels: string[];
       count: number;
       tokens: number;

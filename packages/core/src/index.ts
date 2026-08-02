@@ -38,7 +38,7 @@ export type {
 } from './diagnosis';
 export { DEFAULT_THRESHOLDS, diagnoseSession, diagnoseSessionSync } from './diagnosis';
 export type { ModelIdentity, ModelIdentityKind } from './model-identity';
-export { identifyModel } from './model-identity';
+export { identifyModel, isRuntimeMode } from './model-identity';
 export {
   OUTCOME_EVIDENCE_SCHEMA_VERSION,
   type OutcomeEvidenceAdapterReport,

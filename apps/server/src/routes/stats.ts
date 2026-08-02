@@ -147,6 +147,7 @@ export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
   >();
   for (const row of modelRows) {
     const identity = identifyModel(row.model);
+    if (identity.kind === 'runtime_mode') continue;
     const existing = modelMap.get(identity.key);
     if (existing) {
       existing.count += row.count;

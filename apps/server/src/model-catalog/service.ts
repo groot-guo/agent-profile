@@ -4,6 +4,7 @@ import {
   COST_CURRENCY,
   COST_UNIT,
   calcCost,
+  isRuntimeMode,
   type Pricing,
   type Span,
 } from '@agent-profile/core';
@@ -169,6 +170,7 @@ export class ModelCatalogService {
   }
 
   upsertPricing(input: PricingInput, sourceKind: CatalogSourceKind = 'manual'): PricingRecord {
+    this.assertConfigurableModel(input.model);
     const effectiveFrom = input.effectiveFrom ?? this.clock();
     const previous = this.database
       .prepare(
@@ -289,6 +291,7 @@ export class ModelCatalogService {
   }
 
   upsertContext(input: ContextInput, sourceKind: CatalogSourceKind = 'manual'): ModelContextRecord {
+    this.assertConfigurableModel(input.model);
     const previous = this.database
       .prepare('SELECT COALESCE(revision, 0) as revision FROM model_context WHERE model = ?')
       .get(input.model) as { revision: number } | undefined;
@@ -323,6 +326,8 @@ export class ModelCatalogService {
     if (!input.rawModel || !input.pricingModel || input.rawModel === input.pricingModel) {
       throw new Error('invalid_pricing_alias');
     }
+    this.assertConfigurableModel(input.rawModel);
+    this.assertConfigurableModel(input.pricingModel);
     const previous = this.listAliases(input.rawModel)[0];
     const revision = (previous?.revision ?? 0) + 1;
     this.database
@@ -364,22 +369,31 @@ export class ModelCatalogService {
       observedSessions: number;
       latestObservedAt: number;
     }>;
-    return rows.map((row) => {
-      const pricing = this.applicablePricingRecord(row.model, at);
-      const pricingAlias = this.listAliases(row.model)[0] ?? null;
-      const context = this.listContexts(row.model)[0] ?? null;
-      return {
-        ...row,
-        pricing,
-        pricingAlias,
-        context,
-        pricingKnown:
-          pricing !== null &&
-          pricing.status === 'active' &&
-          pricing.pricingScheme === 'flat_four_token_classes',
-        contextKnown: context !== null,
-      };
-    });
+    return rows
+      .filter((row) => !isRuntimeMode(row.model))
+      .map((row) => {
+        const pricing = this.applicablePricingRecord(row.model, at);
+        const pricingAlias = this.listAliases(row.model)[0] ?? null;
+        const context = this.listContexts(row.model)[0] ?? null;
+        return {
+          ...row,
+          pricing,
+          pricingAlias,
+          context,
+          pricingKnown:
+            pricing !== null &&
+            pricing.status === 'active' &&
+            pricing.pricingScheme === 'flat_four_token_classes',
+          contextKnown: context !== null,
+        };
+      });
+  }
+
+  private assertConfigurableModel(model: string): void {
+    if (!isRuntimeMode(model)) return;
+    const error = new Error('runtime_mode_not_configurable') as Error & { statusCode: number };
+    error.statusCode = 400;
+    throw error;
   }
 
   pricingRevision(): string {

@@ -171,6 +171,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T116](roadmap-archive/2026-q3.md#t116) | Runtime event protocol and local collector foundation | completed |
 | [T113](roadmap-archive/2026-q3.md#t113) | Task discovery and local Outcome-assistance workflow | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
+| [T124](roadmap-archive/2026-q3.md#t124) | runtime-mode model-label classification | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
 | [T6](roadmap-archive/2026-q3.md#t6) | Codex parser | completed |
 | [T7](roadmap-archive/2026-q3.md#t7) | Zed parser | completed |

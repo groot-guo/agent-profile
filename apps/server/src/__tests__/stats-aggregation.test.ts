@@ -46,6 +46,7 @@ describe('dashboard span aggregation', () => {
     const rows = [
       { model: 'DeepSeek-V4-Flash', count: 2, inputTokens: 10, outputTokens: 2, cost: 1 },
       { model: 'deepseek-v4-flash', count: 3, inputTokens: 20, outputTokens: 4, cost: 2 },
+      { model: 'codex-auto-review', count: 9, inputTokens: 90, outputTokens: 9, cost: 9 },
       { model: 'litellm', count: 1, inputTokens: 5, outputTokens: 1, cost: 0 },
       { model: 'glm-5-2-origin', count: 1, inputTokens: 5, outputTokens: 1, cost: 0 },
     ];
@@ -63,6 +64,7 @@ describe('dashboard span aggregation', () => {
     });
     expect(aggregates.modelMap.get('provider:litellm')).toMatchObject({ kind: 'provider_only' });
     expect(aggregates.modelMap.get('unknown:glm-5-2-origin')).toMatchObject({ kind: 'unknown' });
+    expect(aggregates.modelMap.has('runtime:codex-auto-review')).toBe(false);
 
     const views = buildModelViews(aggregates.modelMap);
     expect(views.byModel.map((entry) => entry.model)).toEqual([

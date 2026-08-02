@@ -36,12 +36,13 @@ Model groups use a presentation-only identity contract. Explicit case and
 provider-prefix aliases such as `DeepSeek-V4-Flash` and
 `deepseek-ai/DeepSeek-V4-Pro` are grouped with their canonical model and retain
 their observed raw labels in the API response. Captured Codex turn models
-`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and
-`codex-auto-review` are concrete identities. Provider-only values such as
-`openai` and `litellm` are labeled as not providing a concrete model;
-unrecognized versions/modes remain separate. This grouping never changes the
-persisted Span model or makes an unpriced raw label eligible for a canonical
-model's price.
+`gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` are concrete identities.
+`codex-auto-review` is a runtime-mode label and is excluded from model
+statistics and Model Catalog configuration while remaining in the stored Span
+evidence. Provider-only values such as `openai` and `litellm` are labeled as
+not providing a concrete model; unrecognized versions/modes remain separate.
+This grouping never changes the persisted Span model or makes an unpriced raw
+label eligible for a canonical model's price.
 
 | Dimension | Current metrics |
 | --- | --- |
