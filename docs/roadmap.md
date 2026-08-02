@@ -6,29 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T80 Task Outcome evidence workspace completion
-
-- status: planned
-- estimated size/risk: medium / medium; existing schema and API reduce storage
-  risk, while coverage semantics and evidence-form validation require focused UI
-  and contract testing
-- purpose: make the implemented Task/Outcome model usable for real local
-  delivery verification rather than leaving the Task workspace unable to record
-  every field required for `verified` Outcome coverage
-- dependencies: T49 data model and T98 module/application foundation; no cohort
-  statistics or external CI integration
-- scope: expose human rating, rework reason, completion time, and bounded
-  structured evidence alongside build/test/lint/Git fields; retain explicit
-  null/unknown semantics and local-text privacy modes
-- acceptance: a user can create or update every supported Outcome field from
-  the workspace; the displayed coverage state agrees with `task-profile/v1`;
-  invalid evidence is rejected without silently degrading to success/failure
-- verification: focused Core/Server/Web tests, production Web build, and a local
-  Task Profile smoke check covering not-collected, partial, verified, and failed
-  evidence states
-- documentation: update README, architecture, Task/Outcome guide, Chinese
-  overview, and this Task with the actual UI field/coverage behavior
-
 ### T81 Cohort and Experiment definition workspace
 
 - status: planned
@@ -229,6 +206,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T77](roadmap-archive/2026-q3.md#t77) | planned-scope and execution-order cleanup | completed |
 | [T78](roadmap-archive/2026-q3.md#t78) | product positioning, Profile taxonomy, and documentation governance | completed |
 | [T79](roadmap-archive/2026-q3.md#t79) | roadmap decomposition and local performance/memory assessment | completed |
+| [T80](roadmap-archive/2026-q3.md#t80) | Task Outcome evidence workspace completion | completed |
 | [T82](roadmap-archive/2026-q3.md#t82) | representative scale fixtures and performance budgets | completed |
 | [T83](roadmap-archive/2026-q3.md#t83) | bounded Session discovery and statistics data contract | completed |
 | [T84](roadmap-archive/2026-q3.md#t84) | bounded Session detail and evidence retrieval | completed |

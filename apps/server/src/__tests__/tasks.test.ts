@@ -96,6 +96,22 @@ describe('Task/Outcome foundations', () => {
     expect(repository.buildProfile(task.id).coverage.sessions.ratio).toBe(0);
   });
 
+  it('rejects unsupported evidence status and invalid completion time', () => {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    const repository = new TaskRepository(database);
+    const task = repository.createTask({ title: 'Outcome validation', type: 'feature' });
+
+    expect(() =>
+      repository.upsertOutcome(task.id, {
+        evidence: [{ kind: 'test', status: 'unknown' as never }],
+      }),
+    ).toThrowError('invalid_outcome_evidence');
+    expect(() => repository.upsertOutcome(task.id, { completedAt: Number.NaN })).toThrowError(
+      'invalid_completed_at',
+    );
+  });
+
   it('exposes bounded APIs and prevents an evidence-free causal experiment decision', async () => {
     const database = createDatabase(':memory:');
     databases.push(database);

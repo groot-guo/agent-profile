@@ -14,6 +14,12 @@ import type { DatabaseConnection } from './database';
 
 type TaskRole = TaskProfileSessionSample['role'];
 type TaskContentMode = 'structured' | 'local_text';
+const VERIFICATION_STATUSES = new Set<VerificationStatus>([
+  'passed',
+  'failed',
+  'skipped',
+  'not_run',
+]);
 
 export class TaskModelError extends Error {
   constructor(
@@ -314,7 +320,9 @@ export class TaskRepository {
           ? (current?.reworkReason ?? null)
           : optionalText(input.reworkReason, 2_000),
       completedAt:
-        input.completedAt === undefined ? (current?.completedAt ?? null) : input.completedAt,
+        input.completedAt === undefined
+          ? (current?.completedAt ?? null)
+          : optionalTimestamp(input.completedAt),
       evidence: input.evidence
         ? input.evidence.map(validateOutcomeEvidence)
         : (current?.evidence ?? []),
@@ -792,9 +800,18 @@ function optionalText(value: string | null | undefined, max: number): string | n
 
 function validateOutcomeEvidence(value: TaskOutcomeEvidence): TaskOutcomeEvidence {
   if (!value || typeof value !== 'object') throw new TaskModelError('invalid_outcome_evidence');
+  if (value.status !== undefined && !VERIFICATION_STATUSES.has(value.status)) {
+    throw new TaskModelError('invalid_outcome_evidence');
+  }
   return {
     kind: requiredText(value.kind, 'invalid_outcome_evidence', 80),
     status: value.status,
     reference: optionalText(value.reference, 500) ?? undefined,
   };
+}
+
+function optionalTimestamp(value: number | null): number | null {
+  if (value == null) return null;
+  if (!Number.isFinite(value)) throw new TaskModelError('invalid_completed_at');
+  return value;
 }

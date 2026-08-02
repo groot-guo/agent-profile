@@ -209,11 +209,12 @@ set-based SQLite aggregation for Session-level totals and distributions.
 
 The **任务** workspace adds local delivery evidence above Session analysis. A
 Task can link multiple Sessions, attach version/hash-only Configuration
-Snapshots, and record build/test/lint/Git Outcome fields. The local model/API
-also supports human rating, rework reason, completion time, and bounded
-structured evidence; missing fields remain visibly uncollected rather than
-failed. `task-profile/v1` aggregates available linked Sessions with explicit
-coverage and limitations. Cohort and experiment APIs persist comparison
+Snapshots, and record build/test/lint/Git Outcome fields, human rating, rework
+reason, local completion time, and bounded structured verification evidence.
+Blank fields remain visibly uncollected rather than failed, and incomplete
+evidence rows are rejected instead of being silently omitted.
+`task-profile/v1` aggregates available linked Sessions with explicit coverage
+and limitations. Cohort and experiment APIs persist comparison
 definitions and evidence state, but do not yet calculate a causal winner from
 process metrics.
 

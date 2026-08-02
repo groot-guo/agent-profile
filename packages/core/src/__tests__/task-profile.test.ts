@@ -36,6 +36,24 @@ describe('Task Profile', () => {
     });
     expect(failed.outcome?.testStatus).toBe('failed');
     expect(failed.coverage.outcome.status).toBe('partial');
+
+    const verified = buildTaskProfile({
+      task,
+      configurations: [],
+      sessions: [],
+      generatedAt: 1,
+      outcome: {
+        buildStatus: 'passed',
+        testStatus: 'passed',
+        lintStatus: 'passed',
+        gitCommit: 'abc123',
+        humanRating: 5,
+        reworkReason: null,
+        completedAt: 1,
+        evidence: [{ kind: 'test', status: 'passed' }],
+      },
+    });
+    expect(verified.coverage.outcome.status).toBe('verified');
   });
 
   it('aggregates only available linked Sessions and exposes coverage limits', () => {

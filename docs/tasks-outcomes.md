@@ -43,11 +43,14 @@ Outcome coverage has three states:
 
 An explicit `failed` value is evidence. A missing field is not failure.
 
-The current Task workspace records build, test, lint, and Git-commit fields.
-The local model/API also accepts human rating, rework reason, completion time,
-and bounded structured evidence. Until that extra Outcome surface is exposed in
-the workspace, users should not interpret a UI-only `partial` state as a
-runtime failure or as proof that a Task was unsuccessful.
+The current Task workspace records build, test, lint, Git commit, human rating,
+rework reason, local completion time, and bounded structured evidence. Each
+evidence item has a required kind plus optional supported verification status
+and bounded reference; a partially filled item is rejected rather than silently
+removed. The displayed coverage is the canonical `task-profile/v1` response,
+so `not_collected`, `partial`, and `verified` retain their server-defined
+meaning. Neither a UI `partial` state nor an explicit failed check proves a
+general delivery-quality verdict.
 
 ## Experiment guardrail
 

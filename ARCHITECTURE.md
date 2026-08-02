@@ -402,8 +402,10 @@ stale provider-labelled rows once; no generated-data reset is required.
   no rule or prompt body is copied by this model.
 - `task_sessions` — multi-Session Task links, role, timing, and optional
   Configuration Snapshot. Session IDs remain logical references across reset.
-- `task_outcomes` — nullable build/test/lint/Git/rating/rework/evidence fields;
-  null means not collected and explicit `failed` means failed.
+- `task_outcomes` — nullable build/test/lint/Git/rating/rework/completion-time/
+  bounded-evidence fields; null means not collected and explicit `failed` means
+  failed. The Tasks workspace validates optional evidence before its existing
+  repository boundary accepts it.
 - `cohorts` — local comparison definitions and lifecycle state.
 - `experiments` — control/candidate configurations, cohort, primary metric,
   guardrails, evidence state, and bounded decision state.
