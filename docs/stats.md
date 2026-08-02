@@ -80,7 +80,8 @@ configuration caused the change.
 ## Project Profile v1
 
 `GET /api/projects/profile?project=...&from=...&to=...` and the Project Profile
-section in `/stats` expose `project-profile/v1` for one normalized project key.
+section in `/stats`, together with the read-only `/projects` page, expose
+`project-profile/v1` for one normalized project key.
 The optional `from`/`to` values are millisecond timestamps, with `to` exclusive.
 
 The report includes linked and available primary Session counts, requested range,

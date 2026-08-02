@@ -59,6 +59,8 @@ build/test/lint，不上传内容、不自动写 Outcome，远程 CI/review 证�
   资源、来源覆盖、工具可靠性和日趋势；文件级证据保持“未采集”时不会被推断。
 - **Agent Process Profile**（`agent-profile/v1`）：按 Agent 聚合当前 Session 的资源、
   上下文、可靠性、协作、覆盖度和中性相对特征；它尚未按 Task、配置或 Outcome 分组。
+- **Project Profile**（`project-profile/v1`）：按一个项目聚合已观察到的主链 Session，展示来源、
+  指标覆盖度和 UTC 日工具/资源轨迹；它不是完整仓库活动、文件证据或交付质量结论。
 - **Task Profile**（`task-profile/v1`）：描述一个交付单元的关联 Session、配置快照、
   显式 Outcome 覆盖度与聚合过程证据。
 - **Cohort/Experiment**：持久化比较定义、guardrail 和证据状态，并提供有界的
@@ -167,6 +169,11 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   为“Codex 会话记录”。Codex Desktop 为无项目会话生成的非空
   `~/Documents/Codex/YYYY-MM-DD/<session>` 工作目录也使用该分类；它和
   `~/.codex/sessions/YYYY/MM/DD/` 都是运行/日期分区，不会被当成项目，原始路径仍保留。
+- “项目”页面通过只读 `project-profile/v1` 汇总一个项目已观察到的主链 Session；它始终展示
+  Session、时间范围、来源和字段覆盖度。工具/资源趋势按有观察记录的 UTC 自然日聚合，文件
+  证据当前明确为未采集，不能据此推断完整仓库活动、未使用工具或交付质量。打开页面后，它会复用
+  content-free 更新 cursor，在证据版本推进时重新读取项目范围和报告，并在新报告返回前保留旧报告；
+  这不是 WebSocket 或 Agent 进程存活信号。
 - 有界首页合同不返回来源标题、本地路径、transcript 标识、标签/备注或对话/工具内容；列表
   只用 Agent、项目和本地开始时间组成展示标题。完整详情和兼容 `/api/sessions` 保持原合同。
 - 首页总览、最近工具及成本/Token Top 列表使用 `home-statistics/v1`；完整 `/api/stats` 的
@@ -193,6 +200,7 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   错误率与日趋势；有界采样和未采集的文件证据会明确显示。
 - 生成 `agent-profile/v1` Agent Process Profile，从资源、上下文、工具可靠性和
   sidechain 协作维度比较 Agent；每项均包含样本量、覆盖度和解释边界。
+- 生成只读 `project-profile/v1`，在项目范围展示来源覆盖、资源、工具可靠性与 UTC 日观察轨迹。
 - 生成 `prompt-review/v1` 和 `iteration-hints/v1`：确定性检查目标、范围、验收、
   约束、上下文和验证结构，并可选择结合 Agent 画像提出待验证的调整假设。
 - 在“任务”工作区关联多个 Session 与版本/Hash 配置快照，记录 build/test/lint/Git、

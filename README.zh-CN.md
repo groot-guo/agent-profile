@@ -122,6 +122,8 @@ prompt、answer、thinking、tool input/output、本地路径或 transcript 标�
 必须带 `--confirm --evidence-kind ...`，只追加显式提供且经过 Task repository 校验的证据，不推断任何
 检查通过；`task-feedback <task-id>` 必须带 `--opt-in`，读取已有的只读、有界 `post-run-feedback/v1`。
 四个命令在 `--json` 下都输出 `agent-profile-cli/v1` wrapper。
+Web 还提供只读的 `/projects` 项目页面，查看一个项目已观察到的主链 Session；它不代表完整仓库
+活动，也不判定交付质量。
 
 ## 第一次导入数据
 
@@ -232,6 +234,7 @@ cost 当作可移植的计费证据。
 
 - **会话**：在扁平最近列表中按项目和 Agent 筛选数据；进入会话后可分别查看概览、上下文与成本、工具与
   链路、规范化运行证据。
+- **项目**：查看一个项目已观察到的主链 Session、来源和指标覆盖度，以及按 UTC 日期汇总的工具/资源轨迹。
 - **任务**：把多个 Session 和配置版本关联到显式交付 Outcome，查看带覆盖度的 Task Profile，
   并读取符合条件的任务后反馈。
 - **画像**：在样本量和字段覆盖度限制下，查看 Agent Process Profile。“高于/低于”只

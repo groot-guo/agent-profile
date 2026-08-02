@@ -8,6 +8,7 @@ import { ThemeToggle } from './theme-toggle';
 
 const NAV = [
   { href: '/', label: '会话' },
+  { href: '/projects', label: '项目' },
   { href: '/tasks', label: '任务' },
   { href: '/profiles', label: '画像' },
   { href: '/settings/models', label: '模型' },

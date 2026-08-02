@@ -21,6 +21,12 @@ specific revision that produced each normalized session. Existing databases
 receive these columns through additive migration; normal upgrades do not
 require deleting the local database.
 
+`project-profile/v1` retains this heterogeneity in its per-source Session
+coverage. It groups only current primary Sessions that share the canonical
+project key; it does not merge source-native parent/child records, fill absent
+file evidence, or turn an absent normalized tool call into a claim that a tool
+was not used.
+
 ## Normalization
 
 ### Claude Code

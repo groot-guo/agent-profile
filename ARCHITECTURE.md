@@ -710,6 +710,29 @@ configuration scope are deliberately absent from this report today; use
 `cohort-runtime-profile/v1` for an eligible Experiment. Neither makes an Agent
 Process Profile a configuration-quality ranking or causal comparison.
 
+### Project Profile report contract
+
+`project-profile/v1` is the implemented read-only report for one canonical
+`project_key` across current primary normalized Sessions. `GET
+/api/projects/:project/profile?range=all|7d|30d|90d` selects the project and
+optional start-time window; the Web Project page uses the same contract. The
+report exposes the observed Session count and actual observed time range,
+per-source Session counts, independent duration/cost/tool/file coverage,
+resource totals, explicitly observed tool errors, top observed tool names, and
+UTC-day points only for dates that contain an observed Session.
+
+Cost totals include only Sessions with complete pricing; unknown pricing lowers
+the displayed cost coverage rather than becoming a trusted zero or estimate.
+Tool trend points count normalized observed tool calls and explicit errors; the
+share of Sessions with tool evidence is separate. File-level cross-Session
+evidence is currently `not_captured`, so the report emits no file trend. The
+Project Profile does not claim a complete repository history, an unused or
+unavailable tool, Task Outcome, code quality, or configuration causality.
+While open, the Project page waits on the same content-free Session update
+cursor as Home. A newer cursor version re-queries its project facets and report,
+retaining the last report until the replacement arrives; it is not a WebSocket
+or a claim of live Agent-process state.
+
 ### Task Profile report contract
 
 `task-profile/v1` is the implemented per-Task delivery profile. It aggregates
@@ -825,6 +848,7 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/projects/profile?project=...&from=...&to=...` | Bounded `project-profile/v1` cross-Session project evidence |
 | `GET` | `/api/profiles/agents` | Versioned process profiles for all observed Agents |
 | `GET` | `/api/profiles/agents/:agent` | One observed Agent profile with peer-relative context |
+| `GET` | `/api/projects/:project/profile` | Read-only coverage-aware `project-profile/v1`; optional `range=all|7d|30d|90d` |
 | `POST` | `/api/prompt-review` | Ephemeral deterministic prompt review and guarded iteration hints |
 | `GET/POST` | `/api/tasks` | List or create local Tasks |
 | `GET/PATCH` | `/api/tasks/:id` | Read Task detail or update metadata/lifecycle |

@@ -138,6 +138,9 @@ Their JSON reports retain the existing metric coverage and limitations. Process
 evidence does not establish delivery quality; the Agent Profile's relative
 observations are not universal quality rankings, and a Task Profile only covers
 its explicitly linked Sessions and locally recorded Outcome evidence.
+The Web also includes a read-only `/projects` view over one project's observed
+primary Sessions; it does not represent complete repository activity or delivery
+quality.
 
 `diagnosis <session-id>` and `evidence <session-id>` add content-free, bounded
 Agent-readable reports. Diagnosis returns finding types, severity, cost/token
@@ -299,6 +302,8 @@ automatic configuration control, or a replacement for transcript imports.
 
 - **会话** — browse a flat recent Session list by project and Agent; open a session for
   diagnosis, context/cost, tools/chain, or normalized evidence.
+- **项目** — inspect one project's observed primary Sessions, source and metric
+  coverage, UTC-day tool/resource trace, and stated evidence limits.
 - **任务** — connect Sessions and configuration versions to explicit delivery
   Outcomes, inspect a coverage-aware Task Profile, and read eligible post-run
   findings with their Experiment evidence.
