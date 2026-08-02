@@ -54,6 +54,11 @@ general delivery-quality verdict.
 
 ## Experiment guardrail
 
+The Task workspace creates and edits local Cohort scopes (project, Task type,
+and complexity) and Experiment definitions (control/candidate configuration,
+primary metric, and guardrails). It presents them as definitions only: no UI
+labels a configuration better or computes a distributional result.
+
 Experiments record control/candidate Configuration IDs, cohort, primary metric,
 guardrails, lifecycle, evidence status, and an optional decision. A `keep` or
 `rollback` decision is rejected unless evidence status is `ready`. Even then,

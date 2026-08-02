@@ -215,8 +215,9 @@ Blank fields remain visibly uncollected rather than failed, and incomplete
 evidence rows are rejected instead of being silently omitted.
 `task-profile/v1` aggregates available linked Sessions with explicit coverage
 and limitations. Cohort and experiment APIs persist comparison
-definitions and evidence state, but do not yet calculate a causal winner from
-process metrics.
+definitions and evidence state; the Task workspace can define their scope,
+control/candidate configurations, primary metric, and guardrails, but does not
+calculate a causal winner from process metrics.
 
 ## How to read a Profile
 

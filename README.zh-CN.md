@@ -165,7 +165,8 @@ cursor 分页的 `session-evidence-page/v1`，兼容全量详情接口与 `/api/
 绑定只保存版本/Hash 的 Configuration Snapshot，并在页面记录 build/test/lint/Git Outcome、
 人工评分、返工原因、本地完成时间和有界结构化验证证据。空字段明确保持“未采集”，不完整
 证据行会被拒绝而不会静默丢弃。`task-profile/v1` 只聚合当前可用的关联 Session，并展示覆盖度
-与限制。Cohort 和 Experiment API 可保存比较定义与证据状态，但目前不会自动计算因果赢家。
+与限制。任务工作区可定义 Cohort 范围、Experiment 的控制/候选配置、主要指标和 guardrails，
+但不会自动计算因果赢家。
 
 ## 如何理解 Profile
 

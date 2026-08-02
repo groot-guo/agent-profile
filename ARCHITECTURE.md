@@ -27,8 +27,9 @@ The product has distinct evidence layers:
 - **Task Profile** is the implemented `task-profile/v1` report for one explicit
   delivery unit, its linked Sessions/configurations, and its explicit Outcome
   coverage.
-- **Cohort/Experiment definitions** persist comparison scope and guardrails,
-  but do not calculate outcomes or causal winners.
+- **Cohort/Experiment definitions** persist comparison scope and guardrails.
+  The local Task workspace can create and edit those definitions, but does not
+  calculate outcomes or causal winners.
 - A cohort/configuration-level **Runtime Profile** is future work. It requires
   comparable Task samples, Outcome guardrails, coverage, and statistical rules.
 

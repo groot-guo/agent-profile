@@ -6,26 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T81 Cohort and Experiment definition workspace
-
-- status: planned
-- estimated size/risk: medium / medium; mostly existing persistence exposure, but
-  the UI must not imply an automatically calculated winner
-- purpose: expose the existing guarded local Cohort/Experiment records so users
-  can define comparable Task scope and control/candidate configurations before
-  any automatic result calculation exists
-- dependencies: T80, T98, and T49 persistence contracts
-- scope: create/view/update local Cohort and Experiment definitions, required
-  comparison scope, primary metric, guardrails, evidence status, and constrained
-  keep/rollback decisions; omit automatic distributions, winners, and causality
-- acceptance: the workspace cannot label a configuration better without the
-  existing ready-evidence guardrail; every definition states its Task scope and
-  missing Outcome coverage; raw prompts/rule bodies remain unpersisted
-- verification: repository/API guardrail tests, focused Web interaction tests,
-  production build, and documentation consistency review
-- documentation: update Profile model, Task/Outcome guide, architecture, READMEs,
-  and this Task to keep persistence distinct from statistical evaluation
-
 ### T85 append-only JSONL import for Claude Code and Codex
 
 - status: planned
@@ -207,6 +187,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T78](roadmap-archive/2026-q3.md#t78) | product positioning, Profile taxonomy, and documentation governance | completed |
 | [T79](roadmap-archive/2026-q3.md#t79) | roadmap decomposition and local performance/memory assessment | completed |
 | [T80](roadmap-archive/2026-q3.md#t80) | Task Outcome evidence workspace completion | completed |
+| [T81](roadmap-archive/2026-q3.md#t81) | Cohort and Experiment definition workspace | completed |
 | [T82](roadmap-archive/2026-q3.md#t82) | representative scale fixtures and performance budgets | completed |
 | [T83](roadmap-archive/2026-q3.md#t83) | bounded Session discovery and statistics data contract | completed |
 | [T84](roadmap-archive/2026-q3.md#t84) | bounded Session detail and evidence retrieval | completed |

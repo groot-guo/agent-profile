@@ -40,7 +40,7 @@ better.
 | **Session analysis** | One continuous observed Agent run. Explains resource use, context, tools, chain relationships, diagnosis, and process efficiency. | Implemented. It does not prove task success. |
 | **Agent Process Profile** | Distributional runtime fingerprint for one observed Agent across current Sessions: resource, context, reliability, collaboration, coverage, and neutral peer-relative characteristics. | Implemented as `agent-profile/v1`. It is Session-scoped and does not yet group by Task, Configuration Snapshot, or Outcome. |
 | **Task Profile** | One explicit delivery unit, its linked primary/continuation/subagent/verification Sessions, associated configuration snapshots, outcome fields, coverage, and aggregated process evidence. | Implemented as `task-profile/v1`. It is not a cross-Task configuration comparison. |
-| **Cohort / Experiment definition** | A persisted declaration of what Tasks are comparable and which control/candidate configurations should be evaluated. | Implemented as guarded local records. They do not yet calculate distributions, regressions, or causal winners. |
+| **Cohort / Experiment definition** | A persisted declaration of what Tasks are comparable and which control/candidate configurations should be evaluated. | Implemented as guarded local records and editable in the Task workspace. They do not yet calculate distributions, regressions, or causal winners. |
 | **Cohort/Configuration Runtime Profile** | A distributional comparison of comparable Tasks for a specific runtime/configuration, with Outcome guardrails and explicit scope. | Future work. Do not present it as an existing report or API. |
 
 The product name “Agent Profile” refers to the system as a whole. When naming a
