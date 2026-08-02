@@ -517,7 +517,10 @@ The current server/UI support:
   outcome, content-availability, and coverage semantics;
 - a progressive Session-detail workspace with an always-visible identity,
   token fingerprint, and primary KPIs followed by separate overview,
-  context/cost, tools/chain, and normalized-evidence views;
+  context/cost, tools/chain, and normalized-evidence views. Home retains the
+  selected identity and a reserved detail layout until the active same-origin
+  embedded detail reports bounded-analysis readiness or failure; stale or
+  foreign messages cannot replace the active selection;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - versioned Model Catalog inventory/configuration APIs, editable pricing/context
   data, explicit pricing-equivalent aliases, and previewed cost recomputation;

@@ -21,6 +21,10 @@ import { useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
 import { waitForSessionUpdates } from '../../home-data';
 import { AgentMark } from '../../icons';
+import {
+  SESSION_DETAIL_STATUS_TYPE,
+  type SessionDetailStatus,
+} from '../../session-detail-transition';
 import { sessionDisplayTitle } from '../../session-navigation';
 import {
   C,
@@ -207,6 +211,14 @@ function buildLegacyAnalysisWindows(
   };
 }
 
+function reportEmbedStatus(id: string, isEmbed: boolean, status: SessionDetailStatus): void {
+  if (!isEmbed || window.parent === window) return;
+  window.parent.postMessage(
+    { type: SESSION_DETAIL_STATUS_TYPE, id, status },
+    window.location.origin,
+  );
+}
+
 export default function SessionPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -267,10 +279,12 @@ export default function SessionPage() {
     const run = async () => {
       try {
         applyAnalysis(await loadSessionAnalysis(id, controller.signal));
+        reportEmbedStatus(id, isEmbed, 'ready');
       } catch (reason: unknown) {
         if (controller.signal.aborted) return;
         if (reason instanceof DOMException && reason.name === 'AbortError') return;
         setError(reason instanceof Error ? reason.message : 'failed');
+        reportEmbedStatus(id, isEmbed, 'error');
         return;
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -299,7 +313,7 @@ export default function SessionPage() {
     };
     void run();
     return () => controller.abort();
-  }, [id]);
+  }, [id, isEmbed]);
 
   if (loading) return <Empty text="加载会话中…" />;
   if (error)

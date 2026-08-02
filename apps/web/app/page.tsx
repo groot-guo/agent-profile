@@ -21,6 +21,11 @@ import { projectLabel } from './project-label';
 import { ProjectPicker } from './project-picker';
 import { activityLabel, activityStateAt, groupSessionsWithActivity } from './session-activity';
 import {
+  isCurrentSessionDetailStatus,
+  parseSessionDetailStatus,
+  type SessionDetailStatus,
+} from './session-detail-transition';
+import {
   DEFAULT_SESSION_NAVIGATION,
   parseSessionNavigation,
   projectPickerOptionsFromFacets,
@@ -61,8 +66,13 @@ export default function HomePage() {
   const [resetConfirmation, setResetConfirmation] = useState('');
   const [resetting, setResetting] = useState(false);
   const [activityNow, setActivityNow] = useState(() => Date.now());
+  const [detailStatus, setDetailStatus] = useState<{
+    id: string | null;
+    status: SessionDetailStatus | 'loading';
+  }>({ id: null, status: 'loading' });
   const sessionListRef = useRef<HTMLElement | null>(null);
   const actionMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const detailFrameRef = useRef<HTMLIFrameElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const discoveryRequestRef = useRef(0);
   const sessionUpdateVersionRef = useRef(0);
@@ -276,6 +286,23 @@ export default function HomePage() {
     });
   }, [navigationReady, selectedId]);
 
+  useEffect(() => {
+    if (!selectedId) return;
+    setDetailStatus({ id: selectedId, status: 'loading' });
+  }, [selectedId]);
+
+  useEffect(() => {
+    const receiveDetailStatus = (event: MessageEvent<unknown>) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== detailFrameRef.current?.contentWindow) return;
+      const status = parseSessionDetailStatus(event.data);
+      if (!status || !isCurrentSessionDetailStatus(status, selectedId)) return;
+      setDetailStatus({ id: status.id, status: status.status });
+    };
+    window.addEventListener('message', receiveDetailStatus);
+    return () => window.removeEventListener('message', receiveDetailStatus);
+  }, [selectedId]);
+
   const onScan = async () => {
     setError('');
     setScanResult('');
@@ -432,6 +459,8 @@ export default function HomePage() {
     homeStatistics?.topByCost.find((session) => session.id === selectedId) ??
     homeStatistics?.topByTokens.find((session) => session.id === selectedId) ??
     undefined;
+  const isDetailPending =
+    selectedId !== null && (detailStatus.id !== selectedId || detailStatus.status === 'loading');
   const matchedCount = discovery?.counts.matched ?? 0;
   const totalCount = discovery?.counts.total ?? homeStatistics?.overview.totalSessions ?? 0;
   const remainingCount = Math.max(0, matchedCount - sessions.length);
@@ -795,12 +824,28 @@ export default function HomePage() {
                 </span>
               )}
             </div>
-            <iframe
-              className="session-detail-iframe"
-              title="所选会话详情"
-              src={`/session/${selectedId}?embed=1`}
-              style={{ background: C.bg }}
-            />
+            <div className="session-detail-view">
+              <iframe
+                key={selectedId}
+                ref={detailFrameRef}
+                className="session-detail-iframe"
+                title="所选会话详情"
+                src={`/session/${selectedId}?embed=1`}
+                style={{ background: C.bg }}
+                aria-busy={isDetailPending}
+                onError={() => setDetailStatus({ id: selectedId, status: 'error' })}
+              />
+              {isDetailPending && (
+                <SessionDetailLoading
+                  title={selected ? sessionDisplayTitle(selected) : undefined}
+                />
+              )}
+              {detailStatus.id === selectedId && detailStatus.status === 'error' && (
+                <div className="session-detail-recovery" role="status">
+                  <Notice kind="err">会话详情暂时不可用；请返回总览后重新选择。</Notice>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <DashboardView
@@ -833,6 +878,23 @@ export default function HomePage() {
         onRebuild={onRebuild}
         onReset={onReset}
       />
+    </div>
+  );
+}
+
+function SessionDetailLoading({ title }: { title?: string }) {
+  return (
+    <div className="session-detail-pending" aria-live="polite" role="status">
+      <div className="session-detail-pending-kicker">正在打开会话</div>
+      <strong className="clamp1" title={title}>
+        {title ?? '准备运行分析'}
+      </strong>
+      <span>正在读取有界会话分析；已保留当前选择与返回路径。</span>
+      <div className="session-detail-pending-grid" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
     </div>
   );
 }

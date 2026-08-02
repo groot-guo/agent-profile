@@ -6,22 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T70 session-navigation loading performance and transition feedback
-
-- status: planned
-- purpose: reduce avoidable Session-detail loading latency and replace the
-  isolated spinner with a page-level transition that preserves orientation and
-  explains progress/error recovery
-- scope: measure API and client navigation path; remove confirmed sequential or
-  duplicate work; add reserved-layout loading/skeleton/transition states while
-  retaining accessible status and stale-data safety
-- acceptance: navigation has an immediate visible state change, no misleading
-  blank/unchanged screen during loading, and measured request/render work is no
-  worse than the current path
-- verification plan: Web interaction tests, API/request timing inspection,
-  browser checks, focused lint, full build, and task-specific documentation
-- documentation plan: update `ARCHITECTURE.md`, UI guidance, and this Task
-
 ### T80 Task Outcome evidence workspace completion
 
 - status: planned
@@ -236,6 +220,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T67](roadmap-archive/2026-q3.md#t67) | source metadata completeness and invalid-session handling | completed |
 | [T68](roadmap-archive/2026-q3.md#t68) | canonical model identity and statistics grouping | completed |
 | [T69](roadmap-archive/2026-q3.md#t69) | statistics trend inspection and profile-card layout consistency | completed |
+| [T70](roadmap-archive/2026-q3.md#t70) | session-navigation loading performance and transition feedback | completed |
 | [T72](roadmap-archive/2026-q3.md#t72) | Agent Profile card/grid overlap regression | completed |
 | [T73](roadmap-archive/2026-q3.md#t73) | MiMo external Claude Code history exclusion | completed |
 | [T74](roadmap-archive/2026-q3.md#t74) | Session title fallback and recent-history filter refinement | completed |
@@ -282,9 +267,10 @@ The immediate sequence authorized on 2026-07-31 completed T105 using bounded
 source observation and the existing atomic replacement path without waiting for
 T85's parser optimization, followed by the documentation-only T106
 roadmap-register/archive work and the T71 configuration audit. T99 then
-completed the Model Catalog Server contract. The next dependent implementation
-candidate is T100's Web configuration workspace; the longer-term dependency
-order remains:
+completed the Model Catalog Server contract, and T100 completed its public Web
+configuration surface. T70 subsequently completed the independent Session
+detail transition repair. The next normal implementation candidate is T80; the
+longer-term dependency order remains:
 
 1. T101 CLI foundation, then coordinate T83 bounded discovery and T84 bounded
    detail/evidence retrieval with T102 CLI synchronization/query/report work so
@@ -292,9 +278,9 @@ order remains:
 2. T103 `serve` and distribution after the terminal workflow is useful; retain
    the current Web until the production packaging comparison selects Next
    standalone or a static SPA.
-3. T99 Model Catalog Runtime extraction/data contracts are complete; T100 is
-   the optional Web configuration workspace over that public contract.
-4. T80 Task Outcome evidence work after the Runtime/CLI foundation; T81
+3. T99 Model Catalog Runtime extraction/data contracts and T100's optional Web
+   configuration workspace are complete.
+4. T80 Task Outcome evidence work follows the completed Runtime/CLI foundation; T81
    Cohort/Experiment workflow remains deferred until Task/Outcome usage is
    established and must not drive the initial CLI architecture.
 5. T87 source-native parent/child evidence before T86 project-level aggregation,

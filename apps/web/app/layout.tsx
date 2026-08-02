@@ -1153,6 +1153,53 @@ const GLOBAL_CSS = `
     flex: 1 1 0;
     border: 0;
   }
+  .session-detail-view {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .session-detail-pending,
+  .session-detail-recovery {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px;
+    background: var(--c-bg);
+  }
+  .session-detail-pending-kicker {
+    color: var(--c-sub);
+    font-size: 12px;
+  }
+  .session-detail-pending > strong {
+    max-width: min(560px, 100%);
+    color: var(--c-text);
+    font-size: 18px;
+  }
+  .session-detail-pending > span {
+    color: var(--c-sub);
+    font-size: 13px;
+  }
+  .session-detail-pending-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(720px, 100%);
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .session-detail-pending-grid span {
+    height: 104px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--c-borderSoft) 68%, var(--c-card));
+  }
+  .session-detail-recovery {
+    justify-content: flex-start;
+    padding-top: 24px;
+  }
   .session-page {
     max-width: 1240px;
     margin: 0 auto;
