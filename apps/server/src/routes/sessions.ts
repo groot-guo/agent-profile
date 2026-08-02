@@ -29,6 +29,7 @@ import {
   listPrimarySessionSummaries,
   SessionDiscoveryError,
 } from '../session-discovery-service';
+import { loadSessionRelationships } from '../session-relationships';
 import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
@@ -330,6 +331,7 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
     return {
       schemaVersion: SESSION_ANALYSIS_SCHEMA_VERSION,
       session,
+      relationships: loadSessionRelationships(db, req.params.id),
       spanSummary: windows.summary,
       context: windows.context,
       toolWindow: windows.toolWindow,

@@ -397,9 +397,10 @@ pnpm dev
   local foundations. Automated cohort statistics, regression detection,
   causal experiment conclusions, and Runtime feedback/SDK integration are not
   implemented.
-- Cross-file parent/child Codex threads remain separate Sessions. Their
-  sidechain evidence is preserved, but a full persisted task graph is future
-  work.
+- Cross-file parent/child Codex threads remain separate Sessions. When Codex
+  captures `parent_thread_id`, the Session detail page shows the source-native
+  link (including an unavailable parent); a universal task graph and combined
+  resource attribution remain future work.
 - Very large session histories still use file discovery and full changed-session
   replacement; append-only parsing and large-session virtualisation are planned
   improvements.

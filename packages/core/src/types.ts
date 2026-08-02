@@ -119,6 +119,7 @@ export interface ParsedMeta {
   cwd?: string;
   gitBranch?: string;
   claudeVersion?: string;
+  sourceParentSessionId?: string;
   messageCount: number;
   agent: string;
 }

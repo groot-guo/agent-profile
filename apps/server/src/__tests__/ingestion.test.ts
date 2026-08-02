@@ -449,7 +449,7 @@ describe('session ingestion boundary', () => {
 
     const adapter = new TranscriptSourceAdapter(directory, 'codex');
     const [item] = await adapter.discover();
-    expect(item.revision.fingerprint).toMatch(/^file:codex-v3:/);
+    expect(item.revision.fingerprint).toMatch(/^file:codex-v4:/);
     expect(await importFromSource(adapter, repository)).toMatchObject({
       imported: 0,
       updated: 0,
@@ -517,6 +517,42 @@ describe('session ingestion boundary', () => {
       updated: 0,
       skipped: 1,
       failed: 0,
+    });
+    target.close();
+  });
+
+  it('atomically replaces a source-native child relationship without touching annotations', () => {
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const child = createParsedSession('codex-child', 'child-span');
+    child.meta.sourceParentSessionId = 'codex-parent';
+    repository.replace(
+      { parsed: child },
+      { kind: 'codex', updatedAt: 1, fingerprint: 'codex:child-v1' },
+    );
+    target.prepare("UPDATE sessions SET tags = 'keep' WHERE id = ?").run('codex-child');
+
+    child.meta.sourceParentSessionId = 'codex-parent-replaced';
+    repository.replace(
+      { parsed: child },
+      { kind: 'codex', updatedAt: 2, fingerprint: 'codex:child-v2' },
+    );
+
+    expect(
+      target
+        .prepare(
+          'SELECT parent_session_id as parentSessionId, source_kind as sourceKind FROM session_relationships WHERE child_session_id = ?',
+        )
+        .get('codex-child'),
+    ).toEqual({ parentSessionId: 'codex-parent-replaced', sourceKind: 'codex' });
+    expect(target.prepare('SELECT tags FROM sessions WHERE id = ?').get('codex-child')).toEqual({
+      tags: 'keep',
+    });
+    repository.resetGeneratedData();
+    expect(target.prepare('SELECT COUNT(*) as count FROM session_relationships').get()).toEqual({
+      count: 0,
     });
     target.close();
   });

@@ -311,6 +311,23 @@ const MIGRATIONS: Migration[] = [
       addColumn(database, 'spans', 'pricing_revision', 'INTEGER');
     },
   },
+  {
+    version: 10,
+    name: 'source_native_session_relationships',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS session_relationships (
+          child_session_id  TEXT PRIMARY KEY,
+          parent_session_id TEXT NOT NULL,
+          source_kind       TEXT NOT NULL,
+          relation_kind     TEXT NOT NULL CHECK (relation_kind = 'source_parent'),
+          updated_at        INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_relationships_parent
+          ON session_relationships(parent_session_id);
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -384,6 +401,16 @@ function createBaseSchema(database: DatabaseConnection): void {
     CREATE INDEX IF NOT EXISTS idx_spans_session ON spans(session_id);
     CREATE INDEX IF NOT EXISTS idx_spans_parent ON spans(parent_id);
     CREATE INDEX IF NOT EXISTS idx_spans_session_time_id ON spans(session_id, start_time, id);
+
+    CREATE TABLE IF NOT EXISTS session_relationships (
+      child_session_id  TEXT PRIMARY KEY,
+      parent_session_id TEXT NOT NULL,
+      source_kind       TEXT NOT NULL,
+      relation_kind     TEXT NOT NULL CHECK (relation_kind = 'source_parent'),
+      updated_at        INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_session_relationships_parent
+      ON session_relationships(parent_session_id);
 
     CREATE TABLE IF NOT EXISTS pricing (
       model                  TEXT NOT NULL,

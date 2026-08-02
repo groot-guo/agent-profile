@@ -104,6 +104,7 @@ describe('database migrations', () => {
       { version: 7, name: 'bounded_session_evidence' },
       { version: 8, name: 'model_catalog_provenance' },
       { version: 9, name: 'model_catalog_span_provenance_recovery' },
+      { version: 10, name: 'source_native_session_relationships' },
     ]);
 
     const legacySession = database
@@ -140,7 +141,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(9);
+    expect(count.count).toBe(10);
     database.close();
   });
 

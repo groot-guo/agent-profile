@@ -49,27 +49,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update Profile taxonomy, architecture, stats/multi-agent
   guidance, README/Chinese overview as appropriate, and roadmap
 
-### T87 source-native parent and child Session evidence
-
-- status: planned
-- estimated size/risk: large / high; likely additive migration and per-source
-  identity behavior must remain atomically replaceable
-- purpose: preserve and present parent/child Session relationships only where a
-  source supplies stable structural evidence, without manufacturing a universal
-  Task graph
-- dependencies: T73, T98, and source-adapter contract review; potential
-  migration plan
-- scope: inventory source-native relation IDs, add an additive relationship
-  model only for proven links, retain existing Span sidechain evidence, and show
-  unavailable/ambiguous relation coverage explicitly
-- acceptance: no relationship is inferred from path, prompt, title, timing, or
-  model heuristics; source updates replace links atomically; reset/reimport and
-  user annotations preserve the documented semantics
-- verification: parser/adapter/repository migration tests, source fixtures for
-  linked/missing/ambiguous cases, reset/reimport checks, and UI coverage checks
-- documentation: update schema, source adapter, evidence limitations, and
-  roadmap documentation with actual supported sources
-
 ### T88 conditional non-local access safety
 
 - status: planned
@@ -188,6 +167,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T79](roadmap-archive/2026-q3.md#t79) | roadmap decomposition and local performance/memory assessment | completed |
 | [T80](roadmap-archive/2026-q3.md#t80) | Task Outcome evidence workspace completion | completed |
 | [T81](roadmap-archive/2026-q3.md#t81) | Cohort and Experiment definition workspace | completed |
+| [T87](roadmap-archive/2026-q3.md#t87) | source-native parent and child Session evidence | completed |
 | [T82](roadmap-archive/2026-q3.md#t82) | representative scale fixtures and performance budgets | completed |
 | [T83](roadmap-archive/2026-q3.md#t83) | bounded Session discovery and statistics data contract | completed |
 | [T84](roadmap-archive/2026-q3.md#t84) | bounded Session detail and evidence retrieval | completed |

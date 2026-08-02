@@ -85,8 +85,9 @@ start time, then session totals are rebuilt from those span values.
 
 `GET /api/profiles/agents` and `GET /api/profiles/agents/:agent` expose the
 versioned `agent-profile/v1` report over the same primary Session scope. Retained
-Codex child-only rollout usage is not merged into its parent until a future
-source-native relationship contract is implemented. The current dimensions are:
+Codex child-only rollout usage is not merged into its parent. Codex
+`parent_thread_id` is available as source-native Session evidence, but combined
+resource attribution remains future work. The current dimensions are:
 
 | Dimension | Current metrics |
 | --- | --- |

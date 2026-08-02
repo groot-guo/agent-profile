@@ -27,6 +27,11 @@ describe('bounded session analysis route', () => {
     expect(body.schemaVersion).toBe('session-analysis/v1');
     expect(body.session.id).toBe('session-1');
     expect(body.session).not.toHaveProperty('spans');
+    expect(body.relationships).toEqual({
+      parent: null,
+      children: [],
+      coverage: { status: 'not_captured', supportedSources: ['codex'] },
+    });
     expect(body.spanSummary).toMatchObject({
       events: 445,
       llmTurns: 325,
@@ -53,6 +58,43 @@ describe('bounded session analysis route', () => {
     });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: 'session not found' });
+    await app.close();
+  });
+
+  it('shows linked and unavailable source-native parent coverage without inference', async () => {
+    const { app, database } = createApp();
+    insertSession(database, 'codex-parent', '/fixture/project', 100);
+    insertSession(database, 'codex-child', '/fixture/project', 200);
+    database
+      .prepare(
+        `INSERT INTO session_relationships (
+          child_session_id, parent_session_id, source_kind, relation_kind, updated_at
+        ) VALUES (?, ?, 'codex', 'source_parent', ?)`,
+      )
+      .run('codex-child', 'codex-parent', 1);
+
+    const linked = await app.inject({
+      method: 'GET',
+      url: '/api/session/codex-child/analysis-summary',
+    });
+    expect(linked.json().relationships).toEqual({
+      parent: { id: 'codex-parent', availability: 'available', sourceKind: 'codex' },
+      children: [],
+      coverage: { status: 'linked', supportedSources: ['codex'] },
+    });
+
+    database
+      .prepare('UPDATE session_relationships SET parent_session_id = ? WHERE child_session_id = ?')
+      .run('codex-parent-missing', 'codex-child');
+    const unavailable = await app.inject({
+      method: 'GET',
+      url: '/api/session/codex-child/analysis-summary',
+    });
+    expect(unavailable.json().relationships).toEqual({
+      parent: { id: 'codex-parent-missing', availability: 'unavailable', sourceKind: 'codex' },
+      children: [],
+      coverage: { status: 'parent_unavailable', supportedSources: ['codex'] },
+    });
     await app.close();
   });
 });

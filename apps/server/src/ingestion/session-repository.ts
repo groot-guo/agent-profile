@@ -15,6 +15,8 @@ export class SessionRepository {
   private readonly getAnnotationsStatement;
   private readonly upsertSessionStatement;
   private readonly deleteSpansStatement;
+  private readonly deleteChildRelationshipsStatement;
+  private readonly insertSourceParentRelationshipStatement;
   private readonly deleteSessionStatement;
   private readonly insertSpanStatement;
   private readonly replaceTransaction;
@@ -84,6 +86,14 @@ export class SessionRepository {
         imported_at = excluded.imported_at
     `);
     this.deleteSpansStatement = database.prepare('DELETE FROM spans WHERE session_id = ?');
+    this.deleteChildRelationshipsStatement = database.prepare(
+      'DELETE FROM session_relationships WHERE child_session_id = ?',
+    );
+    this.insertSourceParentRelationshipStatement = database.prepare(`
+      INSERT INTO session_relationships (
+        child_session_id, parent_session_id, source_kind, relation_kind, updated_at
+      ) VALUES (?, ?, ?, 'source_parent', ?)
+    `);
     this.deleteSessionStatement = database.prepare('DELETE FROM sessions WHERE id = ?');
     this.insertSpanStatement = database.prepare(`
       INSERT OR REPLACE INTO spans (
@@ -103,7 +113,13 @@ export class SessionRepository {
       )
     `);
     this.replaceTransaction = database.transaction(
-      (summary: SessionSummary, spans: Span[], revision: SourceRevision) => {
+      (
+        summary: SessionSummary,
+        spans: Span[],
+        revision: SourceRevision,
+        sourceParentSessionId: string | undefined,
+        importedAt: number,
+      ) => {
         this.upsertSessionStatement.run({
           id: summary.id,
           name: summary.name ?? null,
@@ -137,13 +153,23 @@ export class SessionRepository {
           importedAt: summary.importedAt,
         });
         this.deleteSpansStatement.run(summary.id);
+        this.deleteChildRelationshipsStatement.run(summary.id);
         for (const span of spans) {
           this.insertSpanStatement.run(toSpanRow(span));
+        }
+        if (sourceParentSessionId) {
+          this.insertSourceParentRelationshipStatement.run(
+            summary.id,
+            sourceParentSessionId,
+            revision.kind,
+            importedAt,
+          );
         }
       },
     );
     this.removeTransaction = database.transaction((sessionId: string) => {
       this.deleteSpansStatement.run(sessionId);
+      this.deleteChildRelationshipsStatement.run(sessionId);
       this.deleteSessionStatement.run(sessionId);
     });
     this.resetTransaction = database.transaction(() => {
@@ -162,6 +188,7 @@ export class SessionRepository {
         ).count,
       };
       database.prepare('DELETE FROM spans').run();
+      database.prepare('DELETE FROM session_relationships').run();
       database.prepare('DELETE FROM sessions').run();
       return counts;
     });
@@ -198,7 +225,13 @@ export class SessionRepository {
       loaded.fileMeta,
       importedAt,
     );
-    this.replaceTransaction(summary, spans, revision);
+    this.replaceTransaction(
+      summary,
+      spans,
+      revision,
+      normalizedSourceParentSessionId(loaded.parsed.meta.sourceParentSessionId, summary.id),
+      importedAt,
+    );
   }
 
   removeGeneratedIfUnannotated(
@@ -218,6 +251,14 @@ export class SessionRepository {
   resetGeneratedData(): { sessions: number; spans: number; annotatedSessions: number } {
     return this.resetTransaction();
   }
+}
+
+function normalizedSourceParentSessionId(
+  value: string | undefined,
+  sessionId: string,
+): string | undefined {
+  const parentId = value?.trim();
+  return parentId && parentId !== sessionId ? parentId : undefined;
 }
 
 function toSpanRow(span: Span) {

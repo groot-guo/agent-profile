@@ -71,6 +71,7 @@ describe('parseCodexTranscript', () => {
     );
 
     expect(parsed?.sessionId).toBe('thread-child');
+    expect(parsed?.meta.sourceParentSessionId).toBe('thread-parent');
     expect(parsed?.spans).toHaveLength(1);
     expect(parsed?.spans.every((span) => span.sessionId === 'thread-child')).toBe(true);
     expect(parsed?.spans.every((span) => span.isSidechain)).toBe(true);

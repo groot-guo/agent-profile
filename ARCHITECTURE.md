@@ -360,19 +360,22 @@ discovery, dashboard/statistics aggregates, project cohorts, Agent Process
 Profiles, and per-source stored-Session counts—exclude a Codex record only when
 it has no main-chain Span. This keeps one top-level Session count per visible
 Codex Task without deleting child evidence or inferring relationships from
-titles, paths, models, or timing. Parent/child relationship persistence and
-combined resource attribution remain future T87 work; current primary
-aggregates intentionally omit resource usage stored only in a child rollout.
+titles, paths, models, or timing. T87 persists only Codex's captured
+`parent_thread_id` as an atomic source-native child-to-parent link. The Session
+detail surface labels whether that parent is imported, unavailable, or not
+captured; it does not infer links for other sources. Combined resource
+attribution remains future work, so primary aggregates still omit resource
+usage stored only in a child rollout.
 
 Each modern Codex LLM turn takes its model from that turn's captured
 `turn_context.payload.model`. `session_meta.model_provider` is provider evidence,
 not a concrete model, and is never promoted into `Span.model`. Advancing the
-Codex parser revision to `codex-v3` makes an ordinary sync atomically replace
+Codex parser revision to `codex-v4` makes an ordinary sync atomically replace
 stale provider-labelled rows once; no generated-data reset is required.
 
 ## Persistence model
 
-`apps/server/src/database.ts` owns fourteen current internal tables:
+`apps/server/src/database.ts` owns fifteen current internal tables:
 
 - `sessions` — source identity and revision metadata (`source_kind`,
   `source_updated_at`, `source_fingerprint`); agent/model fields plus the
@@ -381,6 +384,9 @@ stale provider-labelled rows once; no generated-data reset is required.
 - `spans` — normalized `llm_turn` and `tool_call` evidence, token/context/cost
   fields, selected pricing model/revision, timing, parent/sidechain links, tool
   input/output metadata, and truncation-safe content.
+- `session_relationships` — source-native child-to-parent Session IDs, source
+  kind, and update time. It deliberately permits an unavailable parent ID so
+  imported child evidence is not discarded.
 - `pricing` — current per-model CNY schedules for the four token classes, with
   effective time, scheme, status, revision, and source provenance. Startup
   seeding preserves an existing epoch-zero applicability row; any bundled

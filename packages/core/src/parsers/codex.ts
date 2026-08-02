@@ -169,7 +169,13 @@ export function parseCodexTranscript(
   const hasTurnContexts = sorted.some((entry) => entry.type === 'turn_context');
   const cwd = meta.cwd as string | undefined;
   const claudeVersion = meta.cli_version as string | undefined;
-  const isSidechain = typeof meta.parent_thread_id === 'string' && meta.parent_thread_id.length > 0;
+  const sourceParentSessionId =
+    typeof meta.parent_thread_id === 'string' &&
+    meta.parent_thread_id.trim() &&
+    meta.parent_thread_id !== sessionId
+      ? meta.parent_thread_id
+      : undefined;
+  const isSidechain = sourceParentSessionId !== undefined;
 
   // 2. 收集 reasoning 文本构建 session name
   const allReasoningTexts: string[] = [];
@@ -461,6 +467,7 @@ export function parseCodexTranscript(
       cwd,
       gitBranch: undefined,
       claudeVersion,
+      sourceParentSessionId,
       messageCount: turns.length,
       agent: 'codex',
     },

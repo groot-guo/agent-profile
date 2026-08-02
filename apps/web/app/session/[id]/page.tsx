@@ -43,10 +43,12 @@ import {
 } from '../../theme';
 import { BarRow, Card, Chip, Empty, Notice, SoftButton, StatCard, TokenStrip } from '../../ui';
 import { EvidencePanel } from './evidence-panel';
+import { type SessionRelationshipReport, SourceRelationshipCard } from './source-relationship-card';
 
 interface SessionAnalysis {
   schemaVersion: string;
   session: SessionSummary;
+  relationships?: SessionRelationshipReport;
   spanSummary: SessionAnalysisSpanSummary;
   context: {
     total: number;
@@ -248,6 +250,7 @@ export default function SessionPage() {
   >([]);
   const [perf, setPerf] = useState<PerformanceMetrics | null>(null);
   const [toolParams, setToolParams] = useState<ToolParamAnalysis | null>(null);
+  const [relationships, setRelationships] = useState<SessionRelationshipReport | null>(null);
   const [activeView, setActiveView] = useState<SessionView>('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -263,6 +266,7 @@ export default function SessionPage() {
     const applyAnalysis = (analysis: SessionAnalysis) => {
       if (controller.signal.aborted) return;
       setData(analysis.session);
+      setRelationships(analysis.relationships ?? null);
       setSpanSummary(analysis.spanSummary);
       setContext(analysis.context);
       setToolWindow(analysis.toolWindow);
@@ -477,6 +481,7 @@ export default function SessionPage() {
               title="先看诊断，再决定是否下钻"
               description="这里保留最影响判断的建议、性能信号和交付痕迹；资源构成、工具过程和完整 Span 已拆到独立视图。"
             />
+            {relationships && <SourceRelationshipCard relationships={relationships} />}
             <Card
               title="诊断建议"
               meta={diag ? `可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : undefined}
