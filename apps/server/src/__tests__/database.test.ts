@@ -105,6 +105,7 @@ describe('database migrations', () => {
       { version: 8, name: 'model_catalog_provenance' },
       { version: 9, name: 'model_catalog_span_provenance_recovery' },
       { version: 10, name: 'source_native_session_relationships' },
+      { version: 11, name: 'task_assistance_provenance' },
     ]);
 
     const legacySession = database
@@ -141,7 +142,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(10);
+    expect(count.count).toBe(11);
     database.close();
   });
 

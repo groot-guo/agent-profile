@@ -25,30 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T113 Task discovery and local Outcome-assistance workflow
-
-- status: planned
-- estimated size/risk: medium / medium; it reduces manual evidence collection
-  while retaining a human-confirmed Task boundary
-- purpose: help users create or update a Task from observed Session/project
-  metadata and prefill locally observable Git/verification references without
-  silently attaching Sessions or declaring success
-- scope: propose candidate Session links from bounded local metadata, surface
-  local Git commit candidates, support human confirmation and structured
-  evidence prefill, and record producer/time/provenance for every suggestion
-- dependencies: existing Task repository, Task Profile, and local Git lookup;
-  no remote CI or repository-service credentials are assumed
-- risks and assumptions: time/project correlation is not proof of Task
-  membership; missing evidence remains `not_collected`; suggestions must never
-  change a Task or Outcome without explicit confirmation
-- acceptance: users can review and accept/reject each candidate independently;
-  accepted data preserves source/provenance; no suggestion marks build/test/
-  lint/Git/rating as passed; Task Profile coverage remains accurate
-- verification: repository and route tests for candidate boundaries, focused
-  Web workflow tests, local Git fixture tests, and privacy review
-- documentation: update README, profile model, tasks/outcomes design,
-  architecture, Chinese overview, and roadmap
-
 ### T114 Outcome-evidence adapter contract
 
 - status: planned
@@ -269,6 +245,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T110](roadmap-archive/2026-q3.md#t110) | profile-evolution documentation and roadmap decomposition | completed |
 | [T111](roadmap-archive/2026-q3.md#t111) | semantic-diagnosis consent, redaction, and audit boundary | completed |
 | [T112](roadmap-archive/2026-q3.md#t112) | diagnosis-to-evidence navigation | completed |
+| [T113](roadmap-archive/2026-q3.md#t113) | Task discovery and local Outcome-assistance workflow | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
 | [T6](roadmap-archive/2026-q3.md#t6) | Codex parser | completed |
@@ -363,7 +340,7 @@ The next implementation order is intentionally trust- and evidence-first:
 
 1. T111 and T112 establish the consent, redaction, audit, and
    finding-to-evidence boundaries.
-2. T113 then proposes local Task/Outcome candidates for explicit human review;
+2. T113 now provides local Task/Outcome candidates for explicit human review;
    T114 follows with one versioned Outcome-evidence producer contract.
 3. T115 builds the content-free Agent-readable local report and explicit write
    workflow on those contracts.

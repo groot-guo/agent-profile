@@ -5,6 +5,7 @@ import {
   buildTaskProfile,
   type CohortRuntimeProfileReport,
   type PostRunFeedbackReport,
+  type TaskEvidenceProvenance,
   type TaskOutcomeEvidence,
   type TaskProfileConfiguration,
   type TaskProfileOutcome,
@@ -46,6 +47,7 @@ export interface TaskSessionRecord {
   available: boolean;
   agent: string | null;
   name: string | null;
+  provenance?: TaskEvidenceProvenance;
 }
 
 export interface CohortRecord {
@@ -235,6 +237,7 @@ export class TaskRepository {
       role?: TaskRole;
       startedAt?: number;
       finishedAt?: number;
+      provenance?: TaskEvidenceProvenance;
     },
   ): TaskSessionRecord {
     this.requireTask(taskId);
@@ -243,12 +246,14 @@ export class TaskRepository {
       throw new TaskModelError('session_not_found', 404);
     }
     if (input.configSnapshotId) this.requireConfiguration(input.configSnapshotId);
+    const provenance = validateEvidenceProvenance(input.provenance);
     try {
       this.database
         .prepare(
           `INSERT INTO task_sessions (
-            task_id, session_id, config_snapshot_id, role, started_at, finished_at, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            task_id, session_id, config_snapshot_id, role, started_at, finished_at,
+            link_producer, link_captured_at, link_provenance_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           taskId,
@@ -257,6 +262,9 @@ export class TaskRepository {
           input.role ?? 'primary',
           input.startedAt ?? null,
           input.finishedAt ?? null,
+          provenance?.producer ?? null,
+          provenance?.capturedAt ?? null,
+          provenance ? JSON.stringify(provenance) : null,
           Date.now(),
         );
     } catch (error) {
@@ -276,7 +284,8 @@ export class TaskRepository {
       this.database
         .prepare(
           `SELECT ts.task_id, ts.session_id, ts.config_snapshot_id, ts.role,
-            ts.started_at, ts.finished_at, s.id AS stored_session_id,
+            ts.started_at, ts.finished_at, ts.link_provenance_json,
+            s.id AS stored_session_id,
             s.agent, s.name
            FROM task_sessions ts
            LEFT JOIN sessions s ON s.id = ts.session_id
@@ -733,6 +742,7 @@ interface TaskSessionRow {
   role: TaskRole;
   started_at: number | null;
   finished_at: number | null;
+  link_provenance_json: string | null;
   stored_session_id: string | null;
   agent: string | null;
   name: string | null;
@@ -854,6 +864,9 @@ function mapTaskSession(row: TaskSessionRow): TaskSessionRecord {
     available: row.stored_session_id != null,
     agent: row.agent,
     name: row.name,
+    ...(row.link_provenance_json
+      ? { provenance: JSON.parse(row.link_provenance_json) as TaskEvidenceProvenance }
+      : {}),
   };
 }
 
@@ -979,6 +992,35 @@ function validateOutcomeEvidence(value: unknown): TaskOutcomeEvidence {
     kind: requiredText(evidence.kind, 'invalid_outcome_evidence', 80),
     status: evidence.status as VerificationStatus | undefined,
     reference: optionalText(evidence.reference as string | null | undefined, 500) ?? undefined,
+    ...(evidence.provenance === undefined
+      ? {}
+      : { provenance: validateEvidenceProvenance(evidence.provenance) }),
+  };
+}
+
+function validateEvidenceProvenance(value: unknown): TaskEvidenceProvenance | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TaskModelError('invalid_task_provenance');
+  }
+  const provenance = value as Record<string, unknown>;
+  if (
+    typeof provenance.producer !== 'string' ||
+    typeof provenance.capturedAt !== 'number' ||
+    !Number.isSafeInteger(provenance.capturedAt) ||
+    typeof provenance.source !== 'string' ||
+    !['local_session', 'local_git'].includes(provenance.source) ||
+    typeof provenance.sourceId !== 'string' ||
+    typeof provenance.basis !== 'string'
+  ) {
+    throw new TaskModelError('invalid_task_provenance');
+  }
+  return {
+    producer: requiredText(provenance.producer, 'invalid_task_provenance', 200),
+    capturedAt: provenance.capturedAt,
+    source: provenance.source as TaskEvidenceProvenance['source'],
+    sourceId: requiredText(provenance.sourceId, 'invalid_task_provenance', 500),
+    basis: requiredText(provenance.basis, 'invalid_task_provenance', 200),
   };
 }
 

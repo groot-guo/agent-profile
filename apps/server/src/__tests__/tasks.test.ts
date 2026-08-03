@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Fastify from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase, lookupPricing } from '../database';
@@ -151,6 +155,97 @@ describe('Task/Outcome foundations', () => {
       'invalid_completed_at',
     );
     await app.close();
+  });
+
+  it('proposes bounded local candidates and preserves provenance after confirmation', async () => {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    const repository = new TaskRepository(database);
+    const fixture = mkdtempSync(join(tmpdir(), 'agent-profile-task-assistance-'));
+    let app: ReturnType<typeof Fastify> | undefined;
+    try {
+      execFileSync('git', ['-C', fixture, 'init', '-q']);
+      execFileSync('git', ['-C', fixture, 'config', 'user.email', 'fixture@example.test']);
+      execFileSync('git', ['-C', fixture, 'config', 'user.name', 'Fixture']);
+      writeFileSync(join(fixture, 'file.txt'), 'fixture\n');
+      execFileSync('git', ['-C', fixture, 'add', 'file.txt']);
+      execFileSync('git', ['-C', fixture, 'commit', '-m', 'assistant fixture']);
+
+      const task = repository.createTask({
+        title: 'Assistance task',
+        type: 'feature',
+        projectId: fixture,
+      });
+      const startedAt = Date.now() - 1_000;
+      database
+        .prepare(
+          `INSERT INTO sessions (
+            id, file_path, agent, project_key, start_time, end_time, cwd,
+            input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens,
+            total_cost, cost_unknown_count, peak_context_tokens, cache_hit_rate, imported_at
+          ) VALUES (?, ?, 'claude-code', ?, ?, ?, ?, 1, 0, 0, 1, 0, 0, 1, 0, ?)`,
+        )
+        .run(
+          'assistance-session',
+          join(fixture, 'session.jsonl'),
+          fixture,
+          startedAt,
+          startedAt + 500,
+          fixture,
+          startedAt,
+        );
+
+      app = Fastify();
+      registerTaskRoutes(app, { database });
+      const report = await app.inject({ method: 'GET', url: `/api/tasks/${task.id}/assistance` });
+      expect(report.statusCode).toBe(200);
+      const body = report.json();
+      expect(body).toMatchObject({
+        schemaVersion: 'task-assistance/v1',
+        candidates: {
+          sessions: [
+            {
+              sessionId: 'assistance-session',
+              provenance: { source: 'local_session', sourceId: 'assistance-session' },
+            },
+          ],
+          gitCommits: [
+            {
+              message: 'assistant fixture',
+              evidence: { kind: 'git_commit' },
+              provenance: { source: 'local_git' },
+            },
+          ],
+        },
+      });
+
+      const sessionCandidate = body.candidates.sessions[0];
+      const attached = await app.inject({
+        method: 'POST',
+        url: `/api/tasks/${task.id}/sessions`,
+        payload: { ...sessionCandidate, sessionId: sessionCandidate.sessionId, role: 'primary' },
+      });
+      expect(attached.statusCode).toBe(201);
+      expect(attached.json().provenance).toMatchObject({
+        producer: 'agent-profile/local-task-assistance',
+        source: 'local_session',
+      });
+
+      const gitEvidence = body.candidates.gitCommits[0].evidence;
+      const outcome = await app.inject({
+        method: 'PUT',
+        url: `/api/tasks/${task.id}/outcome`,
+        payload: { evidence: [gitEvidence] },
+      });
+      expect(outcome.statusCode).toBe(200);
+      expect(outcome.json().evidence[0].provenance).toMatchObject({
+        producer: 'agent-profile/local-task-assistance',
+        source: 'local_git',
+      });
+    } finally {
+      await app?.close();
+      rmSync(fixture, { recursive: true, force: true });
+    }
   });
 
   it('exposes bounded APIs and prevents an evidence-free causal experiment decision', async () => {

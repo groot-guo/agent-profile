@@ -3,6 +3,9 @@
 import type {
   PostRunFeedbackReport,
   SessionSummary,
+  TaskAssistanceReport,
+  TaskEvidenceProvenance,
+  TaskGitCommitCandidate,
   TaskProfileOutcome,
   TaskProfileReport,
   TaskStatus,
@@ -14,7 +17,7 @@ import {
   type ExperimentDecision,
   type ExperimentEvidenceStatus,
 } from '../experiment-guardrail';
-import { sessionDisplayTitle } from '../session-navigation';
+import { sessionDisplayTitle, sessionProject } from '../session-navigation';
 import { C, FS, fmtTokens, R, SP } from '../theme';
 import { Card, Chip, Empty, Notice, SoftButton, StatCard } from '../ui';
 import { OutcomeEditor } from './outcome-editor';
@@ -68,6 +71,7 @@ interface TaskDetail {
     available: boolean;
     agent: string | null;
     name: string | null;
+    provenance?: TaskEvidenceProvenance;
   }>;
   outcome: TaskProfileOutcome | null;
 }
@@ -97,11 +101,16 @@ export default function TasksPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [profile, setProfile] = useState<TaskProfileReport | null>(null);
+  const [assistance, setAssistance] = useState<TaskAssistanceReport | null>(null);
+  const [assistanceLoading, setAssistanceLoading] = useState(false);
+  const [assistanceError, setAssistanceError] = useState(false);
+  const [dismissedAssistance, setDismissedAssistance] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<PostRunFeedbackReport[]>([]);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [title, setTitle] = useState('');
   const [type, setType] = useState('feature');
   const [projectId, setProjectId] = useState('');
+  const [sourceSessionId, setSourceSessionId] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [configId, setConfigId] = useState('');
   const [role, setRole] = useState('primary');
@@ -163,6 +172,21 @@ export default function TasksPage() {
     setOutcome(outcomeToDraft(nextDetail.outcome));
   }, []);
 
+  const loadAssistance = useCallback(async (id: string) => {
+    setAssistanceLoading(true);
+    setAssistanceError(false);
+    try {
+      const response = await fetch(`${API}/tasks/${id}/assistance`);
+      if (!response.ok) throw new Error('assistance_failed');
+      setAssistance((await response.json()) as TaskAssistanceReport);
+    } catch {
+      setAssistance(null);
+      setAssistanceError(true);
+    } finally {
+      setAssistanceLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadBase().catch(() => setNotice({ kind: 'err', text: '任务数据加载失败' }));
   }, [loadBase]);
@@ -172,16 +196,26 @@ export default function TasksPage() {
       setDetail(null);
       setProfile(null);
       setFeedback([]);
+      setAssistance(null);
       return;
     }
+    setDismissedAssistance(new Set());
     loadDetail(selectedId).catch(() => setNotice({ kind: 'err', text: '任务详情加载失败' }));
-  }, [loadDetail, selectedId]);
+    void loadAssistance(selectedId);
+  }, [loadAssistance, loadDetail, selectedId]);
 
   const linkedIds = useMemo(
     () => new Set(detail?.sessions.map((item) => item.sessionId) ?? []),
     [detail],
   );
   const availableSessions = sessions.filter((item) => !linkedIds.has(item.id));
+  const suggestedSessions =
+    assistance?.candidates.sessions.filter((item) => !dismissedAssistance.has(item.suggestionId)) ??
+    [];
+  const suggestedGitCommits =
+    assistance?.candidates.gitCommits.filter(
+      (item) => !dismissedAssistance.has(item.suggestionId),
+    ) ?? [];
 
   async function createTask() {
     const response = await send('/tasks', 'POST', {
@@ -191,9 +225,18 @@ export default function TasksPage() {
     });
     if (!response) return;
     setTitle('');
+    setSourceSessionId('');
     await loadBase();
     setSelectedId(response.id);
     setNotice({ kind: 'ok', text: '任务已创建' });
+  }
+
+  function prefillTaskFromSession() {
+    const source = sessions.find((session) => session.id === sourceSessionId);
+    if (!source) return;
+    setProjectId(sessionProject(source));
+    if (!title.trim()) setTitle(`复盘 ${sessionDisplayTitle(source)}`);
+    setNotice({ kind: 'ok', text: '已从本地 Session 预填项目和标题；不会自动关联 Session' });
   }
 
   async function createConfiguration() {
@@ -219,7 +262,52 @@ export default function TasksPage() {
     if (!response) return;
     setSessionId('');
     await loadDetail(selectedId);
+    await loadAssistance(selectedId);
     setNotice({ kind: 'ok', text: 'Session 已关联' });
+  }
+
+  async function acceptSessionCandidate(
+    candidate: TaskAssistanceReport['candidates']['sessions'][number],
+  ) {
+    if (!selectedId) return;
+    const response = await send(`/tasks/${selectedId}/sessions`, 'POST', {
+      sessionId: candidate.sessionId,
+      role: 'primary',
+      startedAt: candidate.startedAt,
+      finishedAt: candidate.finishedAt ?? undefined,
+      provenance: candidate.provenance,
+    });
+    if (!response) return;
+    setDismissedAssistance((current) => new Set(current).add(candidate.suggestionId));
+    await loadDetail(selectedId);
+    await loadAssistance(selectedId);
+    setNotice({ kind: 'ok', text: '已确认关联候选 Session' });
+  }
+
+  function dismissAssistanceSuggestion(suggestionId: string) {
+    setDismissedAssistance((current) => new Set(current).add(suggestionId));
+  }
+
+  function acceptGitCandidate(candidate: TaskGitCommitCandidate) {
+    const evidence = candidate.evidence;
+    setOutcome((current) => {
+      if (current.evidence.some((item) => item.reference === evidence.reference)) return current;
+      return {
+        ...current,
+        evidence: [
+          ...current.evidence,
+          {
+            id: `suggested-${candidate.hash}`,
+            kind: evidence.kind,
+            status: evidence.status ?? '',
+            reference: evidence.reference ?? '',
+            provenance: candidate.provenance,
+          },
+        ],
+      };
+    });
+    setDismissedAssistance((current) => new Set(current).add(candidate.suggestionId));
+    setNotice({ kind: 'ok', text: 'Git 候选已加入 Outcome 草稿；请检查后显式保存' });
   }
 
   async function saveOutcome(payload: TaskProfileOutcome): Promise<boolean> {
@@ -373,6 +461,23 @@ export default function TasksPage() {
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="任务标题"
               />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
+                <select
+                  style={fieldStyle}
+                  value={sourceSessionId}
+                  onChange={(event) => setSourceSessionId(event.target.value)}
+                >
+                  <option value="">从观测 Session 预填（可选）</option>
+                  {sessions.slice(0, 50).map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {sessionDisplayTitle(session)}
+                    </option>
+                  ))}
+                </select>
+                <SoftButton disabled={!sourceSessionId} onClick={prefillTaskFromSession}>
+                  预填
+                </SoftButton>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <input
                   style={fieldStyle}
@@ -529,6 +634,103 @@ export default function TasksPage() {
                   </div>
                 ))}
               </div>
+            </Card>
+
+            <Card title="本地 Task 建议" meta="候选 · 逐项确认">
+              <div style={{ color: C.sub, fontSize: FS.cap, lineHeight: 1.6 }}>
+                建议只基于项目 key、时间窗口和本地 Git 元数据；不会自动关联 Session，也不会把 Git
+                提交当作通过结果。确认 Git 项目后仍需在 Outcome 卡片中显式保存。
+              </div>
+              {assistanceLoading && (
+                <div style={{ color: C.mute, marginTop: 10 }}>正在生成本地候选…</div>
+              )}
+              {assistanceError && (
+                <Notice kind="err">本地候选暂时不可用；Task/Outcome 仍可手动维护。</Notice>
+              )}
+              {!assistanceLoading &&
+                !assistanceError &&
+                suggestedSessions.length === 0 &&
+                suggestedGitCommits.length === 0 && (
+                  <Empty
+                    text="暂无候选"
+                    hint="需要 Task 项目 key 与时间窗口内的本地 Session 或 Git 记录"
+                  />
+                )}
+              {suggestedSessions.length > 0 && (
+                <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                  <strong style={{ fontSize: FS.sm }}>可关联 Session</strong>
+                  {suggestedSessions.map((candidate) => (
+                    <div key={candidate.suggestionId} className="ap-row">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <div>
+                          <div className="tnum">{candidate.sessionId}</div>
+                          <div style={{ color: C.sub, fontSize: FS.cap }}>
+                            {candidate.agent} · {new Date(candidate.startedAt).toLocaleString()} ·{' '}
+                            {candidate.projectId}
+                          </div>
+                          <div style={{ color: C.mute, fontSize: FS.cap }}>
+                            来源 {candidate.provenance.source} · 生成于{' '}
+                            {new Date(candidate.provenance.capturedAt).toLocaleString()}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <SoftButton
+                            variant="primary"
+                            onClick={() => acceptSessionCandidate(candidate)}
+                          >
+                            确认关联
+                          </SoftButton>
+                          <SoftButton
+                            onClick={() => dismissAssistanceSuggestion(candidate.suggestionId)}
+                          >
+                            忽略
+                          </SoftButton>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {suggestedGitCommits.length > 0 && (
+                <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+                  <strong style={{ fontSize: FS.sm }}>本地 Git 提交候选</strong>
+                  {suggestedGitCommits.map((candidate) => (
+                    <div key={candidate.suggestionId} className="ap-row">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="tnum clamp1" title={candidate.hash}>
+                            {candidate.hash}
+                          </div>
+                          <div className="clamp1" title={candidate.message}>
+                            {candidate.message}
+                          </div>
+                          <div style={{ color: C.mute, fontSize: FS.cap }}>
+                            {candidate.author} · {candidate.date} · {candidate.provenance.basis}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <SoftButton
+                            variant="primary"
+                            onClick={() => acceptGitCandidate(candidate)}
+                          >
+                            加入 Outcome 草稿
+                          </SoftButton>
+                          <SoftButton
+                            onClick={() => dismissAssistanceSuggestion(candidate.suggestionId)}
+                          >
+                            忽略
+                          </SoftButton>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {assistance && (
+                <div style={{ color: C.mute, fontSize: FS.cap, marginTop: 10 }}>
+                  {assistance.limitations[0]}
+                </div>
+              )}
             </Card>
 
             <div className={styles.twoColumn}>

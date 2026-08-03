@@ -158,8 +158,17 @@ export {
   SESSION_EVIDENCE_SCHEMA_VERSION,
 } from './session-evidence';
 export {
+  TASK_ASSISTANCE_PRODUCER,
+  TASK_ASSISTANCE_SCHEMA_VERSION,
+  type TaskAssistanceReport,
+  type TaskGitCommitCandidate,
+  type TaskSessionCandidate,
+} from './task-assistance';
+export {
   buildTaskProfile,
   TASK_PROFILE_SCHEMA_VERSION,
+  type TaskEvidenceProvenance,
+  type TaskEvidenceSource,
   type TaskOutcomeEvidence,
   type TaskProfileConfiguration,
   type TaskProfileInput,

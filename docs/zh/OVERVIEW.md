@@ -18,6 +18,9 @@ Agent Profile 是面向 AI 编码 Agent 的本地优先运行画像、诊断与�
 Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度的 `task-profile/v1`。
 但系统仍不能仅凭过程指标判断最终交付是否正确，也不能直接宣称某个 Agent 全面优于
 另一个 Agent 或某次配置改动一定有效。
+任务页还可从观测 Session 显式预填新 Task 的标题/项目，并读取 `task-assistance/v1` 的
+同项目、七天时间窗口候选。每个 Session/Git 建议都要单独确认；确认数据保留 producer、
+时间、来源和相关性依据，Git 建议只进入未保存的 Outcome 草稿，不代表验证通过。
 
 ## 作为 Profile 工具的适用边界
 

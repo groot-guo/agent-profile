@@ -3,10 +3,21 @@ export const TASK_PROFILE_SCHEMA_VERSION = 'task-profile/v1' as const;
 export type TaskStatus = 'planned' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
 export type VerificationStatus = 'passed' | 'failed' | 'skipped' | 'not_run';
 
+export type TaskEvidenceSource = 'local_session' | 'local_git';
+
+export interface TaskEvidenceProvenance {
+  producer: string;
+  capturedAt: number;
+  source: TaskEvidenceSource;
+  sourceId: string;
+  basis: string;
+}
+
 export interface TaskOutcomeEvidence {
   kind: string;
   status?: VerificationStatus;
   reference?: string;
+  provenance?: TaskEvidenceProvenance;
 }
 
 export interface TaskProfileTask {

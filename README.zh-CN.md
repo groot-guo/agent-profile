@@ -169,7 +169,7 @@ cursor 分页的 `session-evidence-page/v1`，兼容全量详情接口与 `/api/
 **任务**页面在 Session 过程分析之上补充本地交付证据。一个 Task 可关联多个 Session、
 绑定只保存版本/Hash 的 Configuration Snapshot，并记录 build/test/lint/Git 状态、1–5 分
 人工评分、返工原因、完成时间，以及最多 50 条结构化证据。每条证据要求 kind，并可带验证
-状态和本地引用；非法证据会被拒绝，不会被静默转成结果。缺失 Outcome 会明确保持“未采集”，
+状态、本地引用，以及本地辅助产生时的有界 provenance；非法证据会被拒绝，不会被静默转成结果。缺失 Outcome 会明确保持“未采集”，
 不会变成失败。`task-profile/v1` 只聚合当前可用的关联 Session，并展示覆盖度与限制；其中
 verified 覆盖严格由 build、test、lint、Git commit 和人工评分五项组成。Cohort 和
 Experiment API 可保存比较定义与证据状态，但不会自动计算因果赢家。符合条件的 completed
@@ -178,6 +178,12 @@ candidate Task 可在任务页面显式读取只读 `post-run-feedback/v1`，其
 
 `verified` 只表示五项覆盖字段都已记录，不表示 build/test/lint 都通过；`failed`、
 `skipped` 和 `not_run` 仍是有效、应保留的 Outcome 证据。
+
+任务页可从本地观测 Session 显式预填新 Task 的标题和项目，也可通过
+`GET /api/tasks/:id/assistance` 读取有界的 `task-assistance/v1` 候选报告。候选只使用相同
+project key 与七天本地时间窗口；每个 Session 关联和 Git 证据都要单独确认。确认的 Session
+关联会保留 producer/时间/来源 provenance，Git 候选只进入 Outcome 草稿，仍需显式保存；任何
+候选都不会把 build/test/lint 或交付标记为成功，也不读取 prompt 或 transcript 原文。
 
 ## 如何理解 Profile
 

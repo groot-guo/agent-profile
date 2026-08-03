@@ -437,8 +437,9 @@ stale provider-labelled rows once; no generated-data reset is required.
   explicit content mode. Goal/acceptance prose is allowed only in `local_text`.
 - `config_snapshots` — Agent/model identifiers, version labels, and source hash;
   no rule or prompt body is copied by this model.
-- `task_sessions` — multi-Session Task links, role, timing, and optional
-  Configuration Snapshot. Session IDs remain logical references across reset.
+- `task_sessions` — multi-Session Task links, role, timing, optional
+  Configuration Snapshot, and optional accepted-assistance provenance. Session
+  IDs remain logical references across reset.
 - `task_outcomes` — nullable build/test/lint/Git/rating/rework/completion-time/
   bounded-evidence fields; null means not collected and explicit `failed` means
   failed. The Tasks workspace validates optional evidence before its existing
@@ -715,7 +716,7 @@ completion time, and structured evidence remain visible supplemental evidence
 but do not change that denominator. The Task workspace edits every Outcome
 field and reports the same observed/total count as `task-profile/v1`. Structured
 evidence is limited to 50 entries with required kind and optional verification
-status/reference; malformed arrays or entries are rejected with a model error
+status/reference/provenance; malformed arrays, entries, or provenance are rejected with a model error
 instead of being stored or converted into success/failure. A missing field
 never becomes a failure. `task-profile/v1` remains a single-Task report;
 cross-Task distributions are exposed separately by the bounded
@@ -806,6 +807,7 @@ page exposes the same contract and privacy boundaries.
 | `GET/POST` | `/api/tasks` | List or create local Tasks |
 | `GET/PATCH` | `/api/tasks/:id` | Read Task detail or update metadata/lifecycle |
 | `GET/POST` | `/api/tasks/:id/sessions` | List or attach Session/configuration links |
+| `GET` | `/api/tasks/:id/assistance` | Bounded `task-assistance/v1` local Session/Git candidates; acceptance remains explicit |
 | `PUT` | `/api/tasks/:id/outcome` | Upsert explicit nullable Outcome fields |
 | `GET` | `/api/tasks/:id/profile` | Export coverage-aware `task-profile/v1` |
 | `GET` | `/api/tasks/:id/feedback?optIn=true` | Explicitly requested bounded `post-run-feedback/v1` records |

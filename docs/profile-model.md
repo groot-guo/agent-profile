@@ -77,14 +77,20 @@ Today the product supports a local, primarily human-mediated loop:
 1. Import local source histories and inspect Session evidence and diagnostics.
 2. Use the Agent Process Profile to identify recurring process patterns.
 3. Treat prompt-review and runtime differences as hypotheses, not prescriptions.
-4. Create a Task for meaningful delivery work; link its Sessions and a
-   version/hash-only Configuration Snapshot.
-5. Record explicit Outcome evidence and inspect the Task Profile.
+4. Create a Task for meaningful delivery work; optionally prefill its title and
+   project from a locally observed Session, then review assistance candidates
+   before linking Sessions or adding evidence.
+5. Record explicit Outcome evidence and inspect the Task Profile. Accepted local
+   assistance retains producer, capture time, source, and correlation basis.
 6. For eligible completed candidate Tasks, explicitly inspect bounded post-run
    feedback and use it to decide what to investigate or test next.
 
 The Task workspace records build, test, lint, Git commit, human rating, rework
-reason, completion time, and bounded structured evidence. `verified` Outcome
+reason, completion time, and bounded structured evidence. Local assistance can
+suggest same-project/time-window Sessions and local Git references through
+`task-assistance/v1`, but every candidate requires separate human confirmation;
+Git suggestions remain references and do not populate a passing status. Accepted
+evidence retains producer/time/provenance. `verified` Outcome
 coverage means the five tracked coverage fields are present; it does not mean
 that every recorded check passed.
 

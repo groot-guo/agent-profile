@@ -1,4 +1,5 @@
 import type {
+  TaskEvidenceProvenance,
   TaskOutcomeEvidence,
   TaskProfileOutcome,
   VerificationStatus,
@@ -13,6 +14,7 @@ export interface OutcomeEvidenceDraft {
   kind: string;
   status: DraftStatus;
   reference: string;
+  provenance?: TaskEvidenceProvenance;
 }
 
 export interface OutcomeDraft {
@@ -59,6 +61,7 @@ export function outcomeToDraft(outcome: TaskProfileOutcome | null): OutcomeDraft
       kind: item.kind,
       status: item.status ?? '',
       reference: item.reference ?? '',
+      ...(item.provenance ? { provenance: item.provenance } : {}),
     })),
   };
 }
@@ -92,6 +95,7 @@ export function buildOutcomePayload(draft: OutcomeDraft): OutcomePayloadResult {
       kind,
       status: item.status || undefined,
       reference: reference || undefined,
+      ...(item.provenance ? { provenance: item.provenance } : {}),
     };
   });
 

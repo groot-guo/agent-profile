@@ -328,6 +328,15 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 11,
+    name: 'task_assistance_provenance',
+    up(database) {
+      addColumn(database, 'task_sessions', 'link_producer', 'TEXT');
+      addColumn(database, 'task_sessions', 'link_captured_at', 'INTEGER');
+      addColumn(database, 'task_sessions', 'link_provenance_json', 'TEXT');
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {

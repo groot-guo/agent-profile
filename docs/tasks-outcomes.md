@@ -17,8 +17,10 @@ automatically establish causality.
   source hash. They do not copy rule bodies, prompt templates, or raw prompts.
 - Outcome evidence is a structured list of at most 50 entries. Each entry has a
   required kind of at most 80 characters, an optional verification status, and
-  an optional reference of at most 500 characters. Missing verification fields
-  remain `null`; malformed arrays, entries, statuses, and timestamps are
+  an optional reference of at most 500 characters. Local assistance may add a
+  bounded provenance object with producer, capture time, source, source ID, and
+  correlation basis; it never adds a verification result. Missing verification
+  fields remain `null`; malformed arrays, entries, statuses, provenance, and timestamps are
   rejected instead of being stored or silently converted into a result.
 
 ## Storage and reset behavior
@@ -29,6 +31,9 @@ the Session exists when attached, but retain the source Session ID as a logical
 reference. If generated Sessions/Spans are reset, Tasks, Outcomes,
 Configurations, cohorts, experiments, and links remain. A later source sync can
 make a retained link available again.
+Migration v11 adds optional producer, capture-time, and provenance JSON columns
+to Task-Session links so accepted local suggestions remain auditable without
+changing existing links.
 
 ## Task Profile
 
@@ -56,6 +61,22 @@ evidence. It shows the exact `observedFields/totalFields` coverage returned by
 supplemental and do not increase the five-field coverage denominator. A
 `partial` state is therefore a coverage statement, not a runtime failure or
 proof that a Task was unsuccessful.
+
+## Local Task assistance
+
+`GET /api/tasks/:id/assistance` returns `task-assistance/v1`. It proposes at most
+20 currently unlinked primary Sessions sharing the Task project key and a
+seven-day window around the Task's local timestamps, plus at most 20 local Git
+commits from up to three observed repository paths in the same window. The
+response contains only bounded Session metadata and commit metadata, not prompt,
+answer, thinking, tool content, or local paths. Every suggestion includes a
+producer, capture time, source ID, and correlation basis.
+
+The Web workspace lets a person ignore or accept each candidate independently.
+Session acceptance writes only the explicit logical link and its provenance. Git
+acceptance adds a provenance-bearing reference to the unsaved Outcome draft; the
+user must review and save it. Suggestions are correlation aids, not membership
+proof, verification results, or delivery-quality conclusions.
 
 ## Experiment guardrail
 
@@ -111,10 +132,9 @@ post-run observation, not a causal guarantee or live Runtime instruction.
 
 ## Planned evidence evolution
 
-- T113 may suggest locally observable Task, Session, Git, or verification
-  candidates, but a person must confirm every Task link and Outcome update.
-  Correlation by time, project, or commit is not proof of Task membership or
-  success.
+- T113 implements bounded local Task/Session/Git candidates and explicit
+  per-item confirmation. Correlation by time, project, or commit is not proof of
+  Task membership or success.
 - T114 will define a versioned Outcome-evidence adapter contract and implement
   one approved local producer only after its authority and privacy boundary are
   chosen. It must preserve producer, timestamp, local reference, capture limits,

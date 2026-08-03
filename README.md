@@ -214,7 +214,8 @@ The **任务** workspace adds local delivery evidence above Session analysis. A
 Task can link multiple Sessions, attach version/hash-only Configuration
 Snapshots, and record build/test/lint/Git status, a 1–5 human rating, rework
 reason, completion time, and up to 50 structured evidence entries. Each entry
-has a required kind plus optional verification status and local reference;
+has a required kind plus optional verification status, local reference, and
+bounded provenance when it came from local assistance;
 invalid entries are rejected rather than converted into a result. Missing
 fields remain visibly uncollected rather than failed. `task-profile/v1`
 aggregates available linked Sessions with explicit coverage and limitations;
@@ -227,6 +228,15 @@ Outcome-verified candidate Task, the workspace explicitly reads
 findings linked to Experiment evidence and limitations. It does not infer a
 universal or causal winner, expose raw Task/transcript content, or change a
 configuration from process metrics.
+
+The Task workspace can explicitly prefill a new Task's title/project from a
+locally observed Session and can request `GET /api/tasks/:id/assistance` for a
+bounded `task-assistance/v1` candidate report. Candidates use a matching project
+key and seven-day local time window. Each Session link and Git evidence candidate
+must be accepted separately; accepted Session links retain producer/time/source
+provenance, while Git candidates enter the Outcome draft and require an explicit
+save. No candidate marks build, test, lint, or delivery success, and raw prompt
+or transcript content is not used.
 
 ## How to read a Profile
 

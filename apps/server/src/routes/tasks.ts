@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { getTaskProfileReport } from '../reports-service';
 import type { AppRuntime } from '../runtime';
+import { buildTaskAssistanceReport } from '../task-assistance';
 import { TaskModelError, TaskRepository } from '../task-repository';
 
 type TaskRuntime = Pick<AppRuntime, 'database'>;
@@ -24,6 +25,18 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
       outcome: repository.getOutcome(request.params.id),
     })),
   );
+
+  app.get<{ Params: { id: string } }>('/api/tasks/:id/assistance', async (request, reply) => {
+    try {
+      const task = repository.requireTask(request.params.id);
+      return reply.code(200).send(await buildTaskAssistanceReport(database, task));
+    } catch (error) {
+      if (error instanceof TaskModelError) {
+        return reply.code(error.statusCode).send({ error: error.code });
+      }
+      throw error;
+    }
+  });
 
   app.patch<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) =>
     respond(reply, 200, () =>
