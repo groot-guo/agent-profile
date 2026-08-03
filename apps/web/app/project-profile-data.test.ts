@@ -3,8 +3,15 @@ import { projectProfileUpdateState, projectProfileUrl } from './project-profile-
 
 describe('project profile data', () => {
   it('builds an encoded, range-scoped Project Profile URL', () => {
-    expect(projectProfileUrl('http://localhost:3000/api', '/workspace/agent profile', '30d')).toBe(
-      'http://localhost:3000/api/projects/%2Fworkspace%2Fagent%20profile/profile?range=30d',
+    expect(
+      projectProfileUrl(
+        'http://localhost:3000/api',
+        '/workspace/agent profile',
+        '30d',
+        Date.UTC(2026, 7, 30),
+      ),
+    ).toBe(
+      `http://localhost:3000/api/projects/profile?project=%2Fworkspace%2Fagent%20profile&from=${Date.UTC(2026, 6, 31)}&to=${Date.UTC(2026, 7, 30)}`,
     );
   });
 

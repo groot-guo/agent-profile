@@ -1,12 +1,15 @@
 'use client';
 
-import type { ProjectProfileMetricCoverage, ProjectProfileReport } from '@agent-profile/core';
+import type { ProjectProfileReport } from '@agent-profile/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { API } from '../config';
 import { waitForSessionUpdates } from '../home-data';
 import { projectLabel } from '../project-label';
 import { ProjectPicker } from '../project-picker';
 import {
+  normalizeProjectProfileReport,
+  type ProjectPageMetricCoverage,
+  type ProjectPageReport,
   type ProjectProfileRange,
   projectProfileUpdateState,
   projectProfileUrl,
@@ -32,7 +35,7 @@ export default function ProjectsPage() {
   const [facets, setFacets] = useState<ProjectFacetResponse['facets']['projects']>([]);
   const [project, setProject] = useState('');
   const [range, setRange] = useState<ProjectProfileRange>('30d');
-  const [report, setReport] = useState<ProjectProfileReport | null>(null);
+  const [report, setReport] = useState<ProjectPageReport | null>(null);
   const [error, setError] = useState('');
   const [liveError, setLiveError] = useState('');
   const [updateVersion, setUpdateVersion] = useState(0);
@@ -79,7 +82,7 @@ export default function ProjectsPage() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json() as Promise<ProjectProfileReport>;
       })
-      .then((data) => setReport(data))
+      .then((data) => setReport(normalizeProjectProfileReport(data)))
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError(errorMessage(reason, '项目画像加载失败'));
       });
@@ -213,7 +216,7 @@ function RangePicker({
   );
 }
 
-function ProjectReport({ report }: { report: ProjectProfileReport }) {
+function ProjectReport({ report }: { report: ProjectPageReport }) {
   const project = projectLabel(report.scope.project);
   return (
     <>
@@ -335,7 +338,9 @@ function ProjectReport({ report }: { report: ProjectProfileReport }) {
                     {point.tool.observedErrors} 错误 / {point.tool.calls} 调用
                   </div>
                   <div style={{ color: C.mute, fontSize: FS.cap }}>
-                    工具证据覆盖 {(point.tool.sessionCoverage * 100).toFixed(0)}%
+                    {point.tool.sessionCoverage == null
+                      ? '工具会话覆盖：报告未提供'
+                      : `工具证据覆盖 ${(point.tool.sessionCoverage * 100).toFixed(0)}%`}
                   </div>
                 </div>
               </div>
@@ -374,13 +379,7 @@ function ProjectReport({ report }: { report: ProjectProfileReport }) {
   );
 }
 
-function CoverageCard({
-  label,
-  coverage,
-}: {
-  label: string;
-  coverage: ProjectProfileMetricCoverage;
-}) {
+function CoverageCard({ label, coverage }: { label: string; coverage: ProjectPageMetricCoverage }) {
   return (
     <div
       style={{
@@ -398,7 +397,7 @@ function CoverageCard({
   );
 }
 
-function coverageTip(coverage: ProjectProfileMetricCoverage): string {
+function coverageTip(coverage: ProjectPageMetricCoverage): string {
   if (coverage.status === 'not_applicable') return '不适用：没有 Session';
   if (coverage.status === 'not_captured') return `未采集：0 / ${coverage.total}`;
   return `${coverage.observed} / ${coverage.total} · ${(coverage.coverage ?? 0) * 100}%`;
