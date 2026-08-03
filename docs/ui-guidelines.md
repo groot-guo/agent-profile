@@ -45,6 +45,11 @@ Agent Profile Web 端统一视觉与交互约束。改 UI 前必读;新增页面
 4. **数字**:不换行(`whiteSpace: nowrap` via `.tnum`/chip)。
 5. 表格单元格:`nowrap` + `maxWidth` + `title`,数值列右对齐等宽。
 
+诊断 finding 的“查看关联证据”必须使用 finding 已提供的 Span ID 做精确
+`spanIds` 定位，并保持 `content=none`；没有 Span 引用时显示不可用原因，
+目标缺失或被筛选排除时显示明确空态，不用相邻事件替代。清除定位后回到完整
+证据浏览，URL 状态应可恢复同一定位。
+
 ## 6. 状态与提示(信息明确性)
 
 - 不用裸符号表达状态:`⚠`/`—`/`❌` 禁止单独出现,必须用带文字的 `Chip`(如「异常」「未定价」「错误」)。

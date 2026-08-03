@@ -170,6 +170,36 @@ describe('session evidence route', () => {
     await app.close();
   });
 
+  it('focuses a bounded page on explicitly requested Span IDs', async () => {
+    const { app, database } = createApp();
+    insertFixture(database);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/session/session-1/evidence-page?spanIds=tool-1%2Cturn-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      query: { spanIds: ['tool-1', 'turn-1'] },
+      counts: { matched: 2, total: 3 },
+      page: { returned: 2, hasMore: false },
+    });
+    expect(response.json().events.map((event: { id: string }) => event.id)).toEqual([
+      'turn-1',
+      'tool-1',
+    ]);
+    expect(response.body).not.toContain('private-command-marker');
+
+    const invalid = await app.inject({
+      method: 'GET',
+      url: '/api/session/session-1/evidence-page?spanIds=tool-1%2Cbad%20id',
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toEqual({ error: 'invalid evidence span ids' });
+    await app.close();
+  });
+
   it('loads and redacts preview content only for the current page window', async () => {
     const { app, database } = createApp();
     insertPreviewWindowFixture(database);

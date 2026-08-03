@@ -21,6 +21,7 @@ interface EvidencePageQuery {
   outcome?: string;
   limit?: string;
   cursor?: string;
+  spanIds?: string;
 }
 
 const evidenceQuerySchema = {
@@ -41,6 +42,7 @@ const evidencePageQuerySchema = {
     outcome: { type: 'string' },
     limit: { type: 'string' },
     cursor: { type: 'string' },
+    spanIds: { type: 'string', maxLength: 4_000 },
   },
 } as const;
 
@@ -65,6 +67,7 @@ export function registerSessionEvidenceRoutes(
           outcome: request.query.outcome,
           limit: parseOptionalInteger(request.query.limit),
           cursor: request.query.cursor,
+          spanIds: parseSpanIds(request.query.spanIds),
         });
       } catch (error) {
         if (error instanceof SessionEvidencePageError) {
@@ -98,4 +101,9 @@ function parseOptionalInteger(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!/^\d+$/.test(value)) return Number.NaN;
   return Number.parseInt(value, 10);
+}
+
+function parseSpanIds(value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  return value.split(',');
 }

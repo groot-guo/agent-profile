@@ -26,6 +26,7 @@ export interface SessionEvidencePageOptions {
   outcome?: string;
   limit?: number;
   cursor?: string;
+  spanIds?: string[];
   generatedAt?: number;
 }
 
@@ -36,7 +37,8 @@ export type SessionEvidencePageErrorCode =
   | 'invalid_content'
   | 'invalid_type'
   | 'invalid_lane'
-  | 'invalid_outcome';
+  | 'invalid_outcome'
+  | 'invalid_span_ids';
 
 export class SessionEvidencePageError extends Error {
   constructor(readonly code: SessionEvidencePageErrorCode) {
@@ -49,6 +51,7 @@ interface NormalizedOptions {
   type: EvidenceTypeFilter;
   lane: EvidenceLaneFilter;
   outcome: EvidenceOutcomeFilter;
+  spanIds: string[];
   limit: number;
 }
 
@@ -128,6 +131,7 @@ const ERROR_MESSAGES: Record<SessionEvidencePageErrorCode, string> = {
   invalid_type: 'invalid evidence type',
   invalid_lane: 'invalid evidence lane',
   invalid_outcome: 'invalid evidence outcome',
+  invalid_span_ids: 'invalid evidence span ids',
 };
 
 const CONTENT_FIELDS = ['input', 'output', 'thinking', 'text'] as const;
@@ -170,6 +174,7 @@ export function loadSessionEvidencePage(
       type: normalized.type,
       lane: normalized.lane,
       outcome: normalized.outcome,
+      ...(normalized.spanIds.length > 0 ? { spanIds: normalized.spanIds } : {}),
     },
     counts: { matched: aggregate.matchedEvents, total: aggregate.totalEvents },
     page: {
@@ -217,6 +222,11 @@ export function loadSessionEvidencePage(
       'Current parsers do not create first-class user-message Spans across all sources.',
       'no_error_observed means no explicit error flag was captured; it does not prove the tool result was correct.',
       'Preview content can already be truncated by the source parser before this response applies its own bound.',
+      ...(normalized.spanIds.length > 0
+        ? [
+            'This response is focused on explicitly requested Span IDs; clear the focus to browse the full filtered timeline.',
+          ]
+        : []),
     ],
   };
 }
@@ -345,8 +355,13 @@ function contentColumns(content: EvidenceContentMode): string {
 function evidenceFilter(options: NormalizedOptions, prefix: string): SqlFilter {
   const clauses = ['1 = 1'];
   const parameters: Array<number | string> = [];
+  const idColumn = prefix ? `${prefix}id` : 'id';
   const sidechainColumn = prefix ? `${prefix}is_sidechain` : 'isSidechain';
   const errorColumn = prefix ? `${prefix}is_error` : 'isError';
+  if (options.spanIds.length > 0) {
+    clauses.push(`${idColumn} IN (${options.spanIds.map(() => '?').join(', ')})`);
+    parameters.push(...options.spanIds);
+  }
   if (options.type !== 'all') {
     clauses.push(`${prefix}type = ?`);
     parameters.push(options.type);
@@ -374,7 +389,20 @@ function normalizeOptions(options: SessionEvidencePageOptions): NormalizedOption
   if (!isTypeFilter(type)) throw new SessionEvidencePageError('invalid_type');
   if (!isLaneFilter(lane)) throw new SessionEvidencePageError('invalid_lane');
   if (!isOutcomeFilter(outcome)) throw new SessionEvidencePageError('invalid_outcome');
-  return { content, type, lane, outcome, limit: validatedLimit(options.limit) };
+  const spanIds = normalizeSpanIds(options.spanIds);
+  return { content, type, lane, outcome, spanIds, limit: validatedLimit(options.limit) };
+}
+
+function normalizeSpanIds(value: string[] | undefined): string[] {
+  if (value === undefined) return [];
+  const spanIds = [...new Set(value.map((spanId) => spanId.trim()).filter(Boolean))];
+  if (
+    spanIds.length > 20 ||
+    spanIds.some((spanId) => spanId.length > 200 || /[,\s]/.test(spanId))
+  ) {
+    throw new SessionEvidencePageError('invalid_span_ids');
+  }
+  return spanIds.sort();
 }
 
 function toEvidenceEvent(row: EvidenceRow, content: EvidenceContentMode): SessionEvidenceEvent {
@@ -517,6 +545,7 @@ function evidenceQueryKey(sessionId: string, options: NormalizedOptions): string
     type: options.type,
     lane: options.lane,
     outcome: options.outcome,
+    spanIds: options.spanIds,
   });
 }
 

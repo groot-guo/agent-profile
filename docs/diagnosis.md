@@ -106,8 +106,13 @@ GET /api/session/:id/diagnosis[?semantic=opt_in]
 ```
 
 T111 implements request-level consent, tested redaction, and content-free audit
-metadata. T112 owns finding-to-evidence navigation; it must preserve bounded,
-content-free defaults.
+metadata. Findings with stored Span references now expose a bounded navigation
+to `view=evidence&spanIds=<comma-separated-ids>` in Session detail. The evidence
+route validates and caps the exact target list, keeps `content=none` by default,
+and reports a target as unavailable when it was rebuilt, is missing, or is
+excluded by an active filter. Findings without Span IDs do not link to inferred
+nearby events. This preserves the content-free default while making the stored
+evidence reference inspectable.
 Any future change to rules, thresholds, semantic prompts, providers, evidence
 coverage, or displayed confidence must start with a task in `roadmap.md` and
 must update this document after implementation.

@@ -303,6 +303,11 @@ not load metadata text into Node; preview pages read only the selected window's
 relevant fields. The compatibility `/api/session/:id/analysis`,
 `/api/session/:id/evidence`, export, report, and other focused routes retain
 their complete-Span behavior and remain explicit full-detail/export surfaces.
+The Session detail diagnosis view links findings with stored Span IDs to an
+exact `spanIds` focus query on the bounded evidence route. The target IDs are
+part of the query-bound page state, are capped and validated server-side, and
+do not change the default `content=none` behavior. A missing or filter-excluded
+target is reported as unavailable; no nearby Span is substituted.
 
 The source import coordinator discovers all source items but skips an unchanged
 item before loading/parsing it. When a source revision changes, Claude Code and

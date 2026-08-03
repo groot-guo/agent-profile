@@ -107,6 +107,7 @@ export interface SessionEvidencePage {
     type: EvidenceTypeFilter;
     lane: EvidenceLaneFilter;
     outcome: EvidenceOutcomeFilter;
+    spanIds?: string[];
   };
   counts: {
     matched: number;

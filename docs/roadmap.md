@@ -25,28 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T112 diagnosis-to-evidence navigation
-
-- status: planned
-- estimated size/risk: small / low; it reuses stored finding span IDs and the
-  existing bounded evidence timeline
-- purpose: let a person or Agent move from a diagnosis finding to the exact
-  normalized evidence without defaulting to transcript content disclosure
-- scope: define a stable finding-to-evidence navigation state, make every
-  available finding span selectable from Session detail, highlight or explain
-  missing/filtered evidence, and preserve current evidence paging/filtering
-- dependencies: T43 normalized evidence timeline and T84 bounded evidence
-  retrieval; no schema change expected
-- risks and assumptions: a Span may be absent after a rebuild or unavailable
-  after reset, and a link must communicate that state rather than infer content
-- acceptance: selecting a finding opens the bounded evidence view at the
-  relevant event(s), preserves `content=none` by default, and reports an
-  explicit unavailable state; deep-link and regression tests pass
-- verification: Core/UI helper tests, Server evidence-route tests, browser
-  check across filtered and paged evidence, and production Web build
-- documentation: update README, architecture, diagnosis design, UI guidance,
-  and roadmap
-
 ### T113 Task discovery and local Outcome-assistance workflow
 
 - status: planned
@@ -290,6 +268,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T122](roadmap-archive/2026-q3.md#t122) | concise commit-message convention | completed |
 | [T110](roadmap-archive/2026-q3.md#t110) | profile-evolution documentation and roadmap decomposition | completed |
 | [T111](roadmap-archive/2026-q3.md#t111) | semantic-diagnosis consent, redaction, and audit boundary | completed |
+| [T112](roadmap-archive/2026-q3.md#t112) | diagnosis-to-evidence navigation | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
 | [T6](roadmap-archive/2026-q3.md#t6) | Codex parser | completed |
@@ -382,8 +361,8 @@ The completed T79/T82/T85/T87/T89/T90/T99/T100/T101-T105 work establishes the
 current local evidence, bounded comparison, Model Catalog, and CLI foundations.
 The next implementation order is intentionally trust- and evidence-first:
 
-1. T111 and T112 may proceed in parallel: harden semantic-provider disclosure
-   and connect findings to bounded evidence.
+1. T111 and T112 establish the consent, redaction, audit, and
+   finding-to-evidence boundaries.
 2. T113 then proposes local Task/Outcome candidates for explicit human review;
    T114 follows with one versioned Outcome-evidence producer contract.
 3. T115 builds the content-free Agent-readable local report and explicit write

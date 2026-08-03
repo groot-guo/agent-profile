@@ -275,6 +275,12 @@ loaded, redacted, and bounded to 500 characters each. The overview uses complete
 aggregates with sampled/windowed context, tool, and sidechain displays rather
 than retaining the complete Span array in the browser.
 
+Diagnosis findings with stored Span references can open this evidence view with
+an exact, bounded `spanIds` focus query. The URL preserves that focus for a
+reload or handoff, keeps `content=none` by default, and reports when a target is
+missing or excluded by the current filters; findings without a Span reference
+remain explicitly unavailable rather than being inferred from nearby events.
+
 Codex Desktop external-history materializations are excluded when they contain
 `external-import-turn-*` records without normal runtime context and only
 text-wrapped tool history. Their project and tool evidence is not trustworthy,

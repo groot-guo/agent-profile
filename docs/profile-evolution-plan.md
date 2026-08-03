@@ -50,9 +50,9 @@ Agent ranking, or automatic prompt/configuration mutation.
 
 The highest-impact gap is the missing last mile from a finding to a safe action:
 semantic diagnosis now has request-scoped consent, common-secret redaction, and
-bounded content-free audit metadata (T111); findings still need direct bounded
-evidence navigation (T112), Outcome evidence needs confirmation and a
-producer contract (T113/T114), and an Agent needs content-free local reports and
+bounded content-free audit metadata (T111), while findings with stored Span IDs
+now have direct bounded evidence navigation (T112). Outcome evidence needs
+confirmation and a producer contract (T113/T114), and an Agent needs content-free local reports and
 an explicit write path (T115). Only then should the product add a local Runtime
 event protocol (T116) and bounded in-run advice (T117). Comparison rigor (T118),
 typed multi-Agent attribution (T119), pricing governance (T120), and large-history
@@ -139,8 +139,9 @@ content-free process-local audit metadata. Endpoint locality remains unverified
 and redaction is not a guarantee against every secret.
 Deterministic diagnosis remains useful without a provider; Provider failure
 preserves the heuristic-only response. No audit entry stores the prompt,
-thinking, tool input, tool output, Provider response, or credential. T112 remains
-the next trust-before-action task.
+thinking, tool input, tool output, Provider response, or credential. T112's
+navigation does not add a transcript-content disclosure path; it only focuses
+the existing bounded evidence query.
 
 ### Task and Outcome evidence
 

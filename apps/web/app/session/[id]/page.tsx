@@ -43,6 +43,7 @@ import {
   SP,
 } from '../../theme';
 import { BarRow, Card, Chip, Empty, Notice, SoftButton, StatCard, TokenStrip } from '../../ui';
+import { parseEvidenceSpanIds } from './evidence-data';
 import { EvidencePanel } from './evidence-panel';
 import { type SessionRelationshipReport, SourceRelationshipCard } from './source-relationship-card';
 
@@ -243,6 +244,9 @@ export default function SessionPage() {
   const searchParams = useSearchParams();
   const id = params.id as string;
   const isEmbed = searchParams.get('embed') === '1';
+  const requestedView = searchParams.get('view') === 'evidence' ? 'evidence' : 'overview';
+  const requestedEvidenceSpanIds = parseEvidenceSpanIds(searchParams.get('spanIds'));
+  const requestedEvidenceKey = requestedEvidenceSpanIds.join(',');
   const [data, setData] = useState<SessionSummary | null>(null);
   const [spanSummary, setSpanSummary] = useState<SessionAnalysisSpanSummary | null>(null);
   const [context, setContext] = useState<SessionAnalysis['context']>({
@@ -268,7 +272,9 @@ export default function SessionPage() {
   const [perf, setPerf] = useState<PerformanceMetrics | null>(null);
   const [toolParams, setToolParams] = useState<ToolParamAnalysis | null>(null);
   const [relationships, setRelationships] = useState<SessionRelationshipReport | null>(null);
-  const [activeView, setActiveView] = useState<SessionView>('overview');
+  const [activeView, setActiveView] = useState<SessionView>(requestedView);
+  const [evidenceTargetSpanIds, setEvidenceTargetSpanIds] =
+    useState<string[]>(requestedEvidenceSpanIds);
   const [semanticLoading, setSemanticLoading] = useState(false);
   const [semanticError, setSemanticError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -277,7 +283,8 @@ export default function SessionPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setActiveView('overview');
+    setActiveView(requestedView);
+    setEvidenceTargetSpanIds(parseEvidenceSpanIds(requestedEvidenceKey));
     setLoading(true);
     setError('');
     setLiveError('');
@@ -338,7 +345,7 @@ export default function SessionPage() {
     };
     void run();
     return () => controller.abort();
-  }, [id, isEmbed]);
+  }, [id, isEmbed, requestedEvidenceKey, requestedView]);
 
   if (loading) return <Empty text="加载会话中…" />;
   if (error)
@@ -372,6 +379,25 @@ export default function SessionPage() {
     } finally {
       setSemanticLoading(false);
     }
+  };
+
+  const navigateToEvidence = (spanIds: string[]) => {
+    const targetIds = parseEvidenceSpanIds(spanIds.join(','));
+    if (targetIds.length === 0) return;
+    setEvidenceTargetSpanIds(targetIds);
+    setActiveView('evidence');
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'evidence');
+    url.searchParams.set('spanIds', targetIds.join(','));
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  const clearEvidenceFocus = () => {
+    setEvidenceTargetSpanIds([]);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('spanIds');
+    url.searchParams.set('view', 'evidence');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
   };
 
   return (
@@ -543,7 +569,7 @@ export default function SessionPage() {
                 error={semanticError}
                 onRequest={requestSemanticDiagnosis}
               />
-              <DiagnosisList result={diag} />
+              <DiagnosisList result={diag} onEvidenceRequest={navigateToEvidence} />
             </Card>
             {perf && <PerformancePanel metrics={perf} />}
             {commits.length > 0 && (
@@ -737,7 +763,12 @@ export default function SessionPage() {
               title="需要核查时，再进入完整 Span"
               description="默认只加载结构化事件和覆盖度；输入、输出、thinking 与 answer 内容仍需主动请求脱敏且有界的预览。"
             />
-            <EvidencePanel sessionId={id} revision={data.importedAt} />
+            <EvidencePanel
+              sessionId={id}
+              revision={data.importedAt}
+              focusSpanIds={evidenceTargetSpanIds}
+              onClearFocus={clearEvidenceFocus}
+            />
           </>
         )}
       </section>
@@ -1841,7 +1872,13 @@ function TagEditor({ id, initialTags }: { id: string; initialTags: string }) {
   );
 }
 
-function DiagnosisList({ result }: { result: DiagnosisResult | null }) {
+function DiagnosisList({
+  result,
+  onEvidenceRequest,
+}: {
+  result: DiagnosisResult | null;
+  onEvidenceRequest: (spanIds: string[]) => void;
+}) {
   if (!result) return <Empty text="诊断不可用" hint="server 未返回诊断结果" />;
   if (result.findings.length === 0) {
     return <div style={{ color: C.cr, fontSize: FS.sm }}>✓ 未发现明显可优化项</div>;
@@ -1913,6 +1950,28 @@ function DiagnosisList({ result }: { result: DiagnosisResult | null }) {
             }}
           >
             💡 {f.suggestion}
+          </div>
+          <div style={{ marginTop: SP.sm }}>
+            {f.spanIds.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => onEvidenceRequest(f.spanIds)}
+                style={{
+                  border: 0,
+                  padding: 0,
+                  background: 'transparent',
+                  color: C.link,
+                  cursor: 'pointer',
+                  fontSize: FS.cap,
+                }}
+              >
+                查看 {f.spanIds.length} 个关联证据 Span →
+              </button>
+            ) : (
+              <span style={{ color: C.mute, fontSize: FS.cap }}>
+                关联证据不可用：当前 finding 没有 Span 引用
+              </span>
+            )}
           </div>
         </div>
       ))}

@@ -16,7 +16,17 @@ import { C, FS, fmtBytes, fmtDuration, fmtTime, fmtTokens, R, SP } from '../../t
 import { Card, Chip, Empty, Notice } from '../../ui';
 import { type EvidencePageFilters, evidencePageUrl, mergeEvidenceEvents } from './evidence-data';
 
-export function EvidencePanel({ sessionId, revision }: { sessionId: string; revision?: number }) {
+export function EvidencePanel({
+  sessionId,
+  revision,
+  focusSpanIds = [],
+  onClearFocus,
+}: {
+  sessionId: string;
+  revision?: number;
+  focusSpanIds?: string[];
+  onClearFocus?: () => void;
+}) {
   const [report, setReport] = useState<SessionEvidencePage | null>(null);
   const [events, setEvents] = useState<SessionEvidenceEvent[]>([]);
   const [error, setError] = useState('');
@@ -28,6 +38,7 @@ export function EvidencePanel({ sessionId, revision }: { sessionId: string; revi
   const [outcomeFilter, setOutcomeFilter] = useState<EvidenceOutcomeFilter>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const loadMoreControllerRef = useRef<AbortController | null>(null);
+  const focusKey = focusSpanIds.join(',');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -41,7 +52,13 @@ export function EvidencePanel({ sessionId, revision }: { sessionId: string; revi
     setExpanded(new Set());
     void fetchEvidencePage(
       sessionId,
-      { content: contentMode, type: typeFilter, lane: laneFilter, outcome: outcomeFilter },
+      {
+        content: contentMode,
+        type: typeFilter,
+        lane: laneFilter,
+        outcome: outcomeFilter,
+        ...(focusKey ? { spanIds: focusKey.split(',') } : {}),
+      },
       undefined,
       controller.signal,
     )
@@ -63,7 +80,7 @@ export function EvidencePanel({ sessionId, revision }: { sessionId: string; revi
       loadMoreControllerRef.current?.abort();
       loadMoreControllerRef.current = null;
     };
-  }, [contentMode, laneFilter, outcomeFilter, revision, sessionId, typeFilter]);
+  }, [contentMode, focusKey, laneFilter, outcomeFilter, revision, sessionId, typeFilter]);
 
   async function loadMore(): Promise<void> {
     if (!report?.page.nextCursor || loadingMore) return;
@@ -74,7 +91,13 @@ export function EvidencePanel({ sessionId, revision }: { sessionId: string; revi
     try {
       const next = await fetchEvidencePage(
         sessionId,
-        { content: contentMode, type: typeFilter, lane: laneFilter, outcome: outcomeFilter },
+        {
+          content: contentMode,
+          type: typeFilter,
+          lane: laneFilter,
+          outcome: outcomeFilter,
+          ...(focusKey ? { spanIds: focusKey.split(',') } : {}),
+        },
         report.page.nextCursor,
         controller.signal,
       );
@@ -120,6 +143,7 @@ export function EvidencePanel({ sessionId, revision }: { sessionId: string; revi
   }
 
   const showingPreviews = contentMode === 'preview';
+  const isFocused = focusKey.length > 0;
   const remaining = Math.max(0, report.counts.matched - events.length);
   return (
     <Card
@@ -142,6 +166,30 @@ export function EvidencePanel({ sessionId, revision }: { sessionId: string; revi
           Session，事件列表只是当前筛选下已加载的窗口；
           可持续加载直到到达全部匹配事件。缺失表示“未采集”，工具未标错只表示“未观察到错误”。
         </div>
+        {isFocused && (
+          <div style={{ color: C.link, fontSize: FS.cap, lineHeight: 1.6 }}>
+            当前定位 {focusSpanIds.length} 个诊断证据 Span；
+            {report.counts.matched === 0 ? '目标不可用或已被重建/过滤。' : '已保持 content=none。'}
+            {onClearFocus && (
+              <button
+                type="button"
+                onClick={onClearFocus}
+                style={{
+                  display: 'block',
+                  border: 0,
+                  padding: 0,
+                  marginTop: SP.xs,
+                  background: 'transparent',
+                  color: C.link,
+                  cursor: 'pointer',
+                  fontSize: FS.cap,
+                }}
+              >
+                清除定位，浏览完整证据
+              </button>
+            )}
+          </div>
+        )}
         <button
           type="button"
           className="ap-btn"
