@@ -58,6 +58,20 @@ Run verification in proportion to the change. Core behavior normally needs core
 tests; server/type changes need TypeScript/build validation; web changes need
 lint and a production build or focused UI verification.
 
+## Commit message convention
+
+When the user explicitly authorizes a commit:
+
+- Use one subject line in the form `<type>(<optional scope>): <imperative outcome>`,
+  at most 72 characters. Allowed types are `feat`, `fix`, `docs`, `refactor`,
+  `test`, and `chore`.
+- Keep one logical Task per commit. Name the delivered outcome; do not use vague
+  subjects such as `update`, `changes`, `WIP`, or a Task ID alone.
+- Add a body only when non-obvious context, compatibility, risk, or verification
+  needs recording. It must not repeat the subject or include secrets.
+- The staged diff must remain within the active Task and satisfy the existing
+  review and explicit-commit gates before committing.
+
 ## Durable implementation invariants
 
 These rules protect metric correctness and must not change accidentally:
