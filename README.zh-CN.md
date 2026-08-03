@@ -107,6 +107,9 @@ Profile 和显式 Task Profile。JSON 会保留原报告的指标覆盖度与 li
 交付质量；`/api/experiments/:id/profile` 在 Outcome 和指标覆盖达到最低门槛时输出有界的
 cohort/configuration 分布与 guardrail 结果，但不推断通用或因果赢家。Agent Profile 的相对观察
 不是通用质量排名，Task Profile 只覆盖其显式关联的 Session 与本地记录的 Outcome 证据。
+已完成且 Outcome 已验证的 candidate Task 可通过显式
+`GET /api/tasks/:id/feedback?optIn=true` 读取 `post-run-feedback/v1`；它只引用
+Experiment 的有界证据与 limitations，证据不足或过期时会抑制，不会自动修改配置。
 
 ## 第一次导入数据
 
@@ -168,7 +171,9 @@ cursor 分页的 `session-evidence-page/v1`，兼容全量详情接口与 `/api/
 状态和本地引用；非法证据会被拒绝，不会被静默转成结果。缺失 Outcome 会明确保持“未采集”，
 不会变成失败。`task-profile/v1` 只聚合当前可用的关联 Session，并展示覆盖度与限制；其中
 verified 覆盖严格由 build、test、lint、Git commit 和人工评分五项组成。Cohort 和
-Experiment API 可保存比较定义与证据状态，但目前不会自动计算因果赢家。
+Experiment API 可保存比较定义与证据状态，但不会自动计算因果赢家。符合条件的 completed
+candidate Task 可在任务页面显式读取只读 `post-run-feedback/v1`，其内容只含有界 cohort
+证据与限制，不含提示词、规则、transcript 或思维链。
 
 ## 如何理解 Profile
 
@@ -179,8 +184,9 @@ Experiment API 可保存比较定义与证据状态，但目前不会自动计�
   资源汇总、来源/指标覆盖、工具可靠性和日趋势；它是有界过程证据，文件覆盖可能保持“未采集”。
 - **Task Profile**（`task-profile/v1`）展示一个交付单元的关联 Session/配置、Outcome
   覆盖度与聚合过程证据。
-- 按 cohort/configuration 聚合的 Runtime Profile、自动实验结论、回归决策和运行时反馈
-  仍是后续能力，不能当作当前产品承诺。
+- **Verified Post-Run Feedback**（`post-run-feedback/v1`）在显式 opt-in 后展示完成且
+  Outcome 已验证的 candidate Task 的有界 Experiment 发现；证据不足或过期时会抑制。
+- 外部 Runtime feedback、运行中 hint、自动实验结论、回归决策和配置修改仍是后续能力。
 
 OpenCode 适配器以只读方式打开本机 SQLite。当前来源把 Token 总量保存在 Session
 聚合字段中，而不是逐消息记录；Agent Profile 因此保留一个明确标记的聚合 LLM 回合，
@@ -192,7 +198,8 @@ cost 当作可移植的计费证据。
 
 - **会话**：在扁平最近列表中按项目和 Agent 筛选数据；进入会话后可分别查看概览、上下文与成本、工具与
   链路、规范化运行证据。
-- **任务**：把多个 Session 和配置版本关联到显式交付 Outcome，并查看带覆盖度的 Task Profile。
+- **任务**：把多个 Session 和配置版本关联到显式交付 Outcome，查看带覆盖度的 Task Profile，
+  并读取符合条件的任务后反馈。
 - **画像**：在样本量和字段覆盖度限制下，查看 Agent Process Profile。“高于/低于”只
   表示观察到的行为差异，不代表谁更好。
 - **迭代**：本地检查任务提示词的目标、范围、验收、约束、上下文和验证结构。结合运行
@@ -307,8 +314,9 @@ pnpm dev
   `stats`、`profiles`、`task-profile <id>` 和回环 `serve`。`build:release` 可生成当前
   平台的未签名 Node 归档；尚无已发布 package、签名安装器、跨平台 CI matrix 或桌面应用。
   详细 Session/证据 CLI 命令仍是后续工作。
-- Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型。
-  自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback/SDK 仍未实现。
+- Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型；有界 cohort
+  Profile 和显式 opt-in 的任务后反馈已经实现。更广泛的回归检测、因果实验结论和 Runtime
+  feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化
   任务树仍是后续能力。
 - 历史很大时仍需发现文件；Claude Code/Codex 的安全 JSONL 尾部追加可复用进程内结构化

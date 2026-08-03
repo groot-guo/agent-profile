@@ -218,8 +218,12 @@ fields remain visibly uncollected rather than failed. `task-profile/v1`
 aggregates available linked Sessions with explicit coverage and limitations;
 its five-field verified coverage is build, test, lint, Git commit, and human
 rating. `GET /api/experiments/:id/profile` provides Outcome-guarded,
-minimum-sample distributions and bounded guardrail results; it does not infer
-a universal or causal winner from process metrics.
+minimum-sample distributions and bounded guardrail results. For a completed,
+Outcome-verified candidate Task, the workspace explicitly reads
+`GET /api/tasks/:id/feedback?optIn=true` to show bounded `post-run-feedback/v1`
+findings linked to Experiment evidence and limitations. It does not infer a
+universal or causal winner, expose raw Task/transcript content, or change a
+configuration from process metrics.
 
 ## How to read a Profile
 
@@ -235,16 +239,22 @@ a universal or causal winner from process metrics.
 - **Task Profile** (`task-profile/v1`) describes one delivery unit, its linked
   Sessions/configurations, explicit Outcome coverage, and aggregated process
   evidence.
+- **Verified Post-Run Feedback** (`post-run-feedback/v1`) is an opt-in,
+  read-only finding for an eligible completed candidate Task. It links only to
+  current cohort evidence, guardrails, and limitations; insufficient or stale
+  evidence is suppressed rather than recommended.
 - `cohort-runtime-profile/v1` provides a bounded cohort/configuration comparison
-  when Outcome and metric coverage meet minimum thresholds; live Runtime
-  feedback and automatic configuration mutation remain future work.
+  when Outcome and metric coverage meet minimum thresholds; external Runtime
+  feedback, live in-run hints, and automatic configuration mutation remain
+  future work.
 
 ## What the main views do
 
 - **会话** — browse a flat recent Session list by project and Agent; open a session for
   diagnosis, context/cost, tools/chain, or normalized evidence.
 - **任务** — connect Sessions and configuration versions to explicit delivery
-  Outcomes and inspect a coverage-aware Task Profile.
+  Outcomes, inspect a coverage-aware Task Profile, and read eligible post-run
+  findings with their Experiment evidence.
 - **画像** — inspect Agent Process Profiles with sample-size and coverage limits.
   “Higher” or “lower” describes observed behavior, not quality.
 - **迭代** — review a task prompt locally for goal, scope, acceptance,
@@ -400,9 +410,9 @@ pnpm dev
   no published package, signed installer, cross-platform CI matrix, or desktop
   application yet. Detailed Session/evidence CLI commands remain future work.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
-  local foundations. Automated cohort statistics, regression detection,
-  causal experiment conclusions, and Runtime feedback/SDK integration are not
-  implemented.
+  local foundations. The bounded cohort report and opt-in post-run findings are
+  implemented; broader automated regression detection, causal experiment
+  conclusions, and Runtime feedback/SDK integration are not implemented.
 - Cross-file parent/child Codex threads remain separate Sessions. When Codex
   captures `parent_thread_id`, the Session detail page shows the source-native
   link (including an unavailable parent); a universal task graph and combined

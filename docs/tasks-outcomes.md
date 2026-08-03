@@ -82,4 +82,26 @@ evaluated only when they use `{ metric, maxRelativeRegression }`; arbitrary
 stored guardrail values remain `not_evaluable`. Relative differences are
 descriptive observations and never become a universal Agent/configuration
 winner or an automatic keep/rollback mutation. Runtime feedback hints remain
-future work.
+future work; the separate post-run feedback contract below is the only current
+Runtime-facing consumer.
+
+## Verified Post-Run Feedback
+
+`GET /api/tasks/:id/feedback?optIn=true` returns zero or more
+`post-run-feedback/v1` records for the selected Task. The explicit opt-in is
+required; a request without it is rejected. The Task workspace requests the
+same read-only report when the user opens a Task.
+
+The report emits a finding only for a completed, Outcome-verified Task in the
+candidate side of an Experiment whose current `cohort-runtime-profile/v1` is
+`ready` and whose persisted decision is explicitly `keep` or `rollback`.
+Incomplete Outcome, control-baseline, absent decision, incomplete Experiment,
+insufficient Profile evidence, and a decision whose current Profile is no longer
+ready are returned as suppression reasons instead of recommendations.
+
+Each finding links only to bounded cohort evidence: Experiment/Cohort IDs,
+report version/time, primary metric, guardrail summaries, and limitations. It
+does not persist a feedback record, expose Task goal/acceptance text, prompts,
+rules, transcripts, tool output, or chain-of-thought, and cannot mutate an
+Experiment decision or Configuration Snapshot. The finding is a bounded
+post-run observation, not a causal guarantee or live Runtime instruction.

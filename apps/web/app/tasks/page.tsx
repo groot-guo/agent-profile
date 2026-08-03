@@ -1,6 +1,7 @@
 'use client';
 
 import type {
+  PostRunFeedbackReport,
   SessionSummary,
   TaskProfileOutcome,
   TaskProfileReport,
@@ -71,6 +72,10 @@ interface TaskDetail {
   outcome: TaskProfileOutcome | null;
 }
 
+interface TaskFeedbackResponse {
+  feedback: PostRunFeedbackReport[];
+}
+
 const fieldStyle: React.CSSProperties = {
   width: '100%',
   minWidth: 0,
@@ -92,6 +97,7 @@ export default function TasksPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [profile, setProfile] = useState<TaskProfileReport | null>(null);
+  const [feedback, setFeedback] = useState<PostRunFeedbackReport[]>([]);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [title, setTitle] = useState('');
   const [type, setType] = useState('feature');
@@ -141,14 +147,19 @@ export default function TasksPage() {
   }, []);
 
   const loadDetail = useCallback(async (id: string) => {
-    const [detailResponse, profileResponse] = await Promise.all([
+    const [detailResponse, profileResponse, feedbackResponse] = await Promise.all([
       fetch(`${API}/tasks/${id}`),
       fetch(`${API}/tasks/${id}/profile`),
+      fetch(`${API}/tasks/${id}/feedback?optIn=true`),
     ]);
-    if (!detailResponse.ok || !profileResponse.ok) throw new Error('load_failed');
+    if (!detailResponse.ok || !profileResponse.ok || !feedbackResponse.ok) {
+      throw new Error('load_failed');
+    }
     const nextDetail = (await detailResponse.json()) as TaskDetail;
     setDetail(nextDetail);
     setProfile((await profileResponse.json()) as TaskProfileReport);
+    const nextFeedback = (await feedbackResponse.json()) as TaskFeedbackResponse;
+    setFeedback(nextFeedback.feedback ?? []);
     setOutcome(outcomeToDraft(nextDetail.outcome));
   }, []);
 
@@ -160,6 +171,7 @@ export default function TasksPage() {
     if (!selectedId) {
       setDetail(null);
       setProfile(null);
+      setFeedback([]);
       return;
     }
     loadDetail(selectedId).catch(() => setNotice({ kind: 'err', text: '任务详情加载失败' }));
@@ -311,6 +323,7 @@ export default function TasksPage() {
     const response = await send(`/experiments/${id}`, 'PATCH', { evidenceStatus, decision });
     if (!response) return;
     await loadBase();
+    if (selectedId) await loadDetail(selectedId);
   }
 
   async function updateStatus(status: TaskStatus) {
@@ -573,6 +586,42 @@ export default function TasksPage() {
                   </Chip>
                 ))}
               </div>
+            </Card>
+            <Card title="已验证的任务后反馈" meta="显式读取 · 只读">
+              {feedback.length === 0 ? (
+                <Empty text="暂无关联的 cohort 反馈" hint="需要可比较的 Experiment 样本" />
+              ) : (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {feedback.map((item) =>
+                    item.status === 'available' ? (
+                      item.findings.map((finding) => (
+                        <div key={`${item.task.id}:${finding.id}`} className="ap-row">
+                          <strong>{finding.title}</strong>
+                          <p style={{ margin: '6px 0', color: C.sub, fontSize: FS.sm }}>
+                            {finding.summary}
+                          </p>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <Chip color={C.link}>{finding.action}</Chip>
+                            <Chip color={C.medium}>
+                              {finding.evidence.profileSchemaVersion} ·{' '}
+                              {finding.evidence.primaryMetric}
+                            </Chip>
+                            <Chip color={C.medium}>Experiment {finding.evidence.experimentId}</Chip>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div key={`${item.task.id}:${item.suppression?.reason}`} className="ap-row">
+                        <strong>反馈已抑制</strong>
+                        <p style={{ margin: '6px 0', color: C.sub, fontSize: FS.sm }}>
+                          {item.suppression?.detail}
+                        </p>
+                        <Chip color={C.medium}>{item.suppression?.reason}</Chip>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
             </Card>
             <Card title="Cohort 与 Experiment 定义" meta="仅定义范围，不计算赢家">
               <div style={{ display: 'grid', gap: 10 }}>

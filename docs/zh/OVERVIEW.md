@@ -2,8 +2,8 @@
 
 > 本文描述当前已经实现的能力，并与 [中文 README](../../README.zh-CN.md)、
 > `README.md`、`ARCHITECTURE.md` 和 [Profile 模型](../profile-model.md) 保持一致。
-> Task、Outcome、Configuration Snapshot、Cohort、Experiment 与 Task Profile
-> 已实现本地基础；自动实验评估和 Runtime feedback 仍是未来方案。
+> Task、Outcome、Configuration Snapshot、Cohort、Experiment、Task Profile 与有界
+> post-run feedback 已实现本地能力；外部/运行中 Runtime feedback 仍是未来方案。
 
 ## 定位
 
@@ -28,8 +28,11 @@ Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度�
   上下文、可靠性、协作、覆盖度和中性相对特征；它尚未按 Task、配置或 Outcome 分组。
 - **Task Profile**（`task-profile/v1`）：描述一个交付单元的关联 Session、配置快照、
   显式 Outcome 覆盖度与聚合过程证据。
-- **Cohort/Experiment**：当前只持久化比较定义、guardrail 和证据状态；自动分布比较、
-  回归检测、配置赢家和 Runtime feedback 是未来能力。
+- **Cohort/Experiment**：持久化比较定义、guardrail 和证据状态，并提供有界的
+  `cohort-runtime-profile/v1`；它不产生通用或因果赢家。
+- **Verified Post-Run Feedback**（`post-run-feedback/v1`）：完成且 Outcome 已验证的
+  candidate Task 可显式 opt-in 读取与 Experiment 关联的有界发现；证据不足、过期或控制组
+  基线会抑制，不传输提示词、规则、transcript 或思维链。
 
 Task 是把过程证据连接到交付结果的边界，不是产品唯一目的。所有 Profile 都必须说明
 适用范围、样本量、字段覆盖度和限制；“高于/低于”描述观察到的行为，不是质量排名。
@@ -64,7 +67,8 @@ transcript 标识。
 按开始时间和 ID 排序，并使用不透明 cursor 继续翻页；它不返回本地路径、transcript 标识、
 Span metadata 或内容。详细 Session 分析和 cursor 分页证据时间线仍以 Web/API 为主。
 `stats`、`profiles` 与 `task-profile <id>` 读取已有的汇总统计、Project Profile、Agent Process Profile
-和 Task Profile，并保留覆盖度与 limitations；不新增指标公式、Outcome 结论或配置质量判断。
+和 Task Profile，并保留覆盖度与 limitations；任务工作区还会显式读取有界 post-run feedback，
+不新增指标公式、Outcome 结论或配置质量判断。
 
 各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
 每个来源都会提供来源类型、更新时间和稳定指纹。导入协调器统一判断跳过、新增、更新
@@ -229,11 +233,13 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
 - 能提供带样本量和覆盖度的 Agent 运行画像、相对比较和人工复盘证据；
 - 能提供无持久化的提示词结构审查和带护栏的下一步实验假设；
 - 能持久化 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment，并生成
-  `task-profile/v1`；缺失 Outcome 与失败严格区分。
+  `task-profile/v1`；缺失 Outcome 与失败严格区分，并可为符合条件的 candidate Task 显式
+  读取有界 `post-run-feedback/v1`。
 - 能运行 `agent-profile help/version/doctor/sources/sync/sessions/stats/profiles/serve`
   与 `task-profile <id>`；详细 Session/证据 CLI 查询仍未实现。当前可在本机生成未签名、
   仅限同平台/架构的 Node 发行归档，尚无公开 package、签名安装器或跨平台 CI matrix。
-- 自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback 尚未实现。
+- 有界 cohort Profile 与显式 opt-in 的任务后反馈已实现；更广泛的回归检测、因果实验结论和
+  Runtime feedback/SDK 尚未实现。
 
 未来方案：
 

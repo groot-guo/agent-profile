@@ -4,10 +4,11 @@ This document describes the implementation that exists today.
 Agent Profile is a local-first runtime profiling, diagnosis, and
 outcome-evaluation system for AI coding agents. Its canonical current-state
 terminology is in `docs/profile-model.md`. Task/Outcome/Configuration
-persistence, Task-Session links, cohort/experiment definitions, and
-`task-profile/v1` are implemented foundations. Automated cohort statistics,
-configuration-level Runtime Profiles, causal experiment evaluation, regression
-decisions, and Runtime feedback APIs remain proposals in
+persistence, Task-Session links, cohort/experiment definitions,
+`task-profile/v1`, `cohort-runtime-profile/v1`, and bounded
+`post-run-feedback/v1` are implemented foundations. Broader automated cohort
+statistics, causal experiment evaluation, automatic regression decisions, and
+live Runtime feedback remain proposals in
 `docs/agent-runtime-profile-design.md`. The prompt-review surface remains
 ephemeral and does not automatically create or modify those persisted records.
 
@@ -35,8 +36,12 @@ The product has distinct evidence layers:
   The local Task workspace can create and edit those definitions. The bounded
   `cohort-runtime-profile/v1` report evaluates comparable samples and guardrails
   without calculating a universal or causal winner.
-- Broader time-window/statistical regression policies and Runtime feedback remain
-  future work beyond the current bounded Experiment report.
+- **Post-run feedback** is an opt-in, read-only `post-run-feedback/v1` report
+  for one completed, Outcome-verified candidate Task. It links a bounded finding
+  to the current cohort report, decision, guardrails, and limitations; it does
+  not mutate configuration or transmit raw Task/transcript content.
+- Broader time-window/statistical regression policies and live Runtime feedback
+  remain future work beyond the current bounded reports.
 
 All reports expose their scope and limitations. Process metrics may form a
 diagnostic or iteration hypothesis; they are not a universal Agent ranking or a
@@ -686,6 +691,24 @@ cross-Task distributions are exposed separately by the bounded
 `cohort-runtime-profile/v1` Experiment report, which does not infer universal
 configuration winners or causal effects.
 
+### Post-run feedback contract
+
+`GET /api/tasks/:id/feedback?optIn=true` returns zero or more
+`post-run-feedback/v1` records for Experiments whose current comparable sample
+contains the Task. It is a deliberate read-only consumer action: requests that
+omit `optIn=true` are rejected, and the Task workspace makes that explicit when
+loading feedback.
+
+A finding is emitted only when the Task is completed and Outcome-verified, used
+the candidate Configuration, the Experiment is completed with an explicit
+`keep` or `rollback` decision, and the current cohort report still has `ready`
+evidence. Otherwise the report is suppressed with a fixed reason, including
+incomplete Outcome, control baseline, insufficient evidence, or stale persisted
+decision. Each finding contains only Experiment/Cohort IDs, report version/time,
+primary metric/guardrail summaries, and limitations. It never returns Task goal,
+acceptance prose, prompt, rules, transcript, tool output, or chain-of-thought;
+it never updates Experiment decisions or runtime configuration.
+
 ### Prompt review and iteration-hint contract
 
 `POST /api/prompt-review` accepts a non-empty prompt up to 20,000 characters,
@@ -754,6 +777,7 @@ page exposes the same contract and privacy boundaries.
 | `GET/POST` | `/api/tasks/:id/sessions` | List or attach Session/configuration links |
 | `PUT` | `/api/tasks/:id/outcome` | Upsert explicit nullable Outcome fields |
 | `GET` | `/api/tasks/:id/profile` | Export coverage-aware `task-profile/v1` |
+| `GET` | `/api/tasks/:id/feedback?optIn=true` | Explicitly requested bounded `post-run-feedback/v1` records |
 | `GET/POST` | `/api/config-snapshots` | List or create version/hash-only Configuration Snapshots |
 | `GET/POST` | `/api/cohorts` | List or create cohort definitions |
 | `GET/POST` | `/api/experiments` | List or create guarded experiment records |

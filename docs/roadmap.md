@@ -25,24 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T90 bounded verified post-run feedback
-
-- status: planned
-- estimated size/risk: medium-large / high; recommendations become Runtime-facing
-  product behavior and therefore need strict evidence and staleness contracts
-- purpose: make verified cohort findings consumable after a Task completes,
-  without automatic prompt/rule rewrites or in-run Agent control
-- dependencies: T89 and an explicit consumer/privacy contract
-- scope: versioned, coverage-aware post-run finding records and presentation;
-  opt-in, bounded evidence references; stale/insufficient-evidence suppression
-- acceptance: each recommendation links to its cohort evidence and limitations;
-  no raw prompt/chain-of-thought transfer, automatic configuration mutation, or
-  causal claim beyond T89's decision contract
-- verification: Core/API/UI contract tests, privacy/redaction review, and
-  representative post-run user-flow check
-- documentation: update Profile model, Runtime proposal, architecture, README,
-  and roadmap to distinguish post-run feedback from future live Runtime hints
-
 ## Terminal Task Index
 
 | Task | Title | Status |
@@ -107,6 +89,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T85](roadmap-archive/2026-q3.md#t85) | append-only JSONL import for Claude Code and Codex | completed |
 | [T86](roadmap-archive/2026-q3.md#t86) | project-level cross-Session evidence | completed |
 | [T89](roadmap-archive/2026-q3.md#t89) | comparable cohort/configuration Runtime Profile evaluation | completed |
+| [T90](roadmap-archive/2026-q3.md#t90) | bounded verified post-run feedback | completed |
 | [T87](roadmap-archive/2026-q3.md#t87) | source-native parent and child Session evidence | completed |
 | [T82](roadmap-archive/2026-q3.md#t82) | representative scale fixtures and performance budgets | completed |
 | [T83](roadmap-archive/2026-q3.md#t83) | bounded Session discovery and statistics data contract | completed |
@@ -166,8 +149,9 @@ longer-term dependency order remains:
    complete; none imply calculated winners or combined resource attribution.
 5. T85 append-only JSONL import is complete with a process-local checkpoint and
    full-parse fallback for unsafe suffixes.
-6. T89 comparable cohort evaluation is complete; T90 verified post-run feedback
-   is the next normal implementation candidate.
+6. T89 comparable cohort evaluation and T90 bounded verified post-run feedback
+   are complete; external Runtime consumption and live in-run hints remain
+   future work.
 
 T88 is conditional on a product decision to support non-local access and is not
 part of the default local-first sequence. Mobile dashboard navigation remains

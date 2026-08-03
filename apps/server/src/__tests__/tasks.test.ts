@@ -281,8 +281,10 @@ describe('Task/Outcome foundations', () => {
       primaryMetric: 'duration_ms',
       guardrails: [{ metric: 'duration_ms', maxRelativeRegression: 0.2 }],
     });
+    let candidateTaskId = '';
     for (let index = 1; index <= 6; index++) {
       const task = repository.createTask({ title: `Feature ${index}`, type: 'feature' });
+      if (index === 4) candidateTaskId = task.id;
       repository.attachSession(task.id, {
         sessionId: `profile-session-${index}`,
         configSnapshotId: index <= 3 ? control.id : candidate.id,
@@ -294,6 +296,7 @@ describe('Task/Outcome foundations', () => {
         gitCommit: `commit-${index}`,
         humanRating: 4,
       });
+      repository.updateTask(task.id, { status: 'completed' });
     }
 
     const report = repository.buildExperimentProfile(experiment.id);
@@ -315,6 +318,26 @@ describe('Task/Outcome foundations', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ schemaVersion: 'cohort-runtime-profile/v1' });
+
+    repository.updateExperiment(experiment.id, {
+      status: 'completed',
+      evidenceStatus: 'ready',
+      decision: 'keep',
+    });
+    const feedback = await app.inject({
+      method: 'GET',
+      url: `/api/tasks/${candidateTaskId}/feedback?optIn=true`,
+    });
+    expect(feedback.statusCode).toBe(200);
+    expect(feedback.json()).toMatchObject({
+      feedback: [{ schemaVersion: 'post-run-feedback/v1', status: 'available' }],
+    });
+    const withoutOptIn = await app.inject({
+      method: 'GET',
+      url: `/api/tasks/${candidateTaskId}/feedback`,
+    });
+    expect(withoutOptIn.statusCode).toBe(400);
+    expect(withoutOptIn.json()).toEqual({ error: 'post_run_feedback_opt_in_required' });
     await app.close();
   });
 });

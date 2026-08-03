@@ -2,7 +2,8 @@
 
 > 状态：Proposal；Task/Outcome/Configuration、Cohort/Experiment 定义与单 Task 的
 > `task-profile/v1` 已由 T49 实现，T89 已实现有界的
-> `cohort-runtime-profile/v1`。更广泛的回归策略与 Runtime feedback 仍未实现。
+> `cohort-runtime-profile/v1`，T90 已实现只读、显式 opt-in 的
+> `post-run-feedback/v1`。更广泛的回归策略与 live Runtime feedback 仍未实现。
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
 ## 文档地位
@@ -265,8 +266,9 @@ Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，�
 ### Phase 2：Cohort 与 Experiment
 
 当前进度：T49 已实现 cohort/experiment 定义、证据状态和因果决策护栏；T89 已实现
-`cohort-runtime-profile/v1` 的 Outcome-guarded 分布、最低样本与有限 guardrail 计算。
-通用回归策略和 Runtime feedback 仍未实现。
+`cohort-runtime-profile/v1` 的 Outcome-guarded 分布、最低样本与有限 guardrail 计算；
+T90 已让完成且 Outcome-verified 的 candidate Task 显式读取有界 post-run finding。
+通用回归策略、外部 Runtime 消费和 live Runtime feedback 仍未实现。
 
 - 定义 cohort：项目、任务类型、复杂度区间、Agent/模型。
 - 支持控制组/候选配置对比，展示主要指标与 guardrail。
@@ -276,6 +278,9 @@ Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，�
 
 ### Phase 3：Runtime Feedback
 
+- 已实现前置的 post-run feedback：本地 Task 工作区可在显式 opt-in 后读取
+  `post-run-feedback/v1`；它只引用 Experiment/Cohort ID、报告版本、指标、guardrail
+  与 limitations，并在证据不足或过期时抑制。
 - 提供 Runtime SDK/HTTP 事件适配器。
 - 提供 `hint` 接口和预算/上下文/失败策略。
 - 支持 Agent 在下一次或执行中消费 Profile Report。

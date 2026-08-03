@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import {
   buildCohortRuntimeProfile,
+  buildPostRunFeedback,
   buildTaskProfile,
   type CohortRuntimeProfileReport,
+  type PostRunFeedbackReport,
   type TaskOutcomeEvidence,
   type TaskProfileConfiguration,
   type TaskProfileOutcome,
@@ -641,6 +643,40 @@ export class TaskRepository {
     });
   }
 
+  buildTaskFeedback(taskId: string): PostRunFeedbackReport[] {
+    const task = this.requireTask(taskId);
+    const outcome = this.getOutcome(taskId);
+    const outcomeVerified = isVerifiedOutcome(outcome);
+    const feedback: PostRunFeedbackReport[] = [];
+    for (const experiment of this.listExperiments()) {
+      const profile = this.buildExperimentProfile(experiment.id);
+      const taskRole = profile.groups.candidate.taskIds.includes(taskId)
+        ? 'candidate'
+        : profile.groups.control.taskIds.includes(taskId)
+          ? 'control'
+          : null;
+      if (!taskRole) continue;
+      feedback.push(
+        buildPostRunFeedback({
+          task: {
+            id: task.id,
+            status: task.status,
+            outcomeVerified,
+            completedAt: outcome?.completedAt ?? null,
+          },
+          experiment: {
+            id: experiment.id,
+            cohortId: experiment.cohortId,
+            status: experiment.status,
+            profile,
+            taskRole,
+          },
+        }),
+      );
+    }
+    return feedback;
+  }
+
   private requireConfiguration(id: string): TaskProfileConfiguration {
     const row = this.database.prepare('SELECT * FROM config_snapshots WHERE id = ?').get(id) as
       | ConfigRow
@@ -950,4 +986,14 @@ function optionalTimestamp(value: number | null): number | null {
   if (value == null) return null;
   if (!Number.isFinite(value)) throw new TaskModelError('invalid_completed_at');
   return value;
+}
+
+function isVerifiedOutcome(outcome: TaskProfileOutcome | null): boolean {
+  return Boolean(
+    outcome?.buildStatus &&
+      outcome.testStatus &&
+      outcome.lintStatus &&
+      outcome.gitCommit &&
+      outcome.humanRating != null,
+  );
 }

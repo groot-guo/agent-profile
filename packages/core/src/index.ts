@@ -46,6 +46,15 @@ export type { OpenCodeMessage, OpenCodePart, OpenCodeSessionMeta } from './parse
 export { parseOpenCodeSession } from './parsers/opencode';
 export type { ZedThreadInput } from './parsers/zed';
 export { parseZedThread } from './parsers/zed';
+export {
+  buildPostRunFeedback,
+  POST_RUN_FEEDBACK_SCHEMA_VERSION,
+  type PostRunFeedbackEvidence,
+  type PostRunFeedbackFinding,
+  type PostRunFeedbackInput,
+  type PostRunFeedbackReport,
+  type PostRunFeedbackSuppression,
+} from './post-run-feedback';
 export { COST_CALCULATOR_VERSION, COST_CURRENCY, COST_UNIT, calcCost } from './pricing';
 export type {
   AgentProcessProfile,

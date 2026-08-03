@@ -60,6 +60,27 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
     respond(reply, 200, () => getTaskProfileReport(runtime, request.params.id)),
   );
 
+  app.get<{ Params: { id: string }; Querystring: { optIn?: string } }>(
+    '/api/tasks/:id/feedback',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { optIn: { type: 'string', enum: ['true'] } },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (request.query.optIn !== 'true') {
+        return reply.code(400).send({ error: 'post_run_feedback_opt_in_required' });
+      }
+      return respond(reply, 200, () => ({
+        feedback: repository.buildTaskFeedback(request.params.id),
+      }));
+    },
+  );
+
   app.get('/api/config-snapshots', async () => ({
     configurations: repository.listConfigurations(),
   }));

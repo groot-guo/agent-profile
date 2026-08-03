@@ -26,7 +26,8 @@ local source histories
   -> Agent Process Profile
   -> Task + Configuration Snapshot + Outcome
   -> Task Profile
-  -> future comparable cohort/configuration Runtime Profile
+  -> Cohort/Configuration Runtime Profile
+  -> opt-in post-run feedback
 ```
 
 Every layer must retain its evidence boundary. Missing source data is "not
@@ -44,6 +45,7 @@ better.
 | **Task Profile** | One explicit delivery unit, its linked primary/continuation/subagent/verification Sessions, associated configuration snapshots, outcome fields, coverage, and aggregated process evidence. | Implemented as `task-profile/v1`. It is not a cross-Task configuration comparison. |
 | **Cohort / Experiment definition** | A persisted declaration of what Tasks are comparable and which control/candidate configurations should be evaluated. | Implemented as guarded local records and editable in the Task workspace. |
 | **Cohort/Configuration Runtime Profile** | A distributional comparison of comparable Tasks for a specific runtime/configuration, with Outcome guardrails and explicit scope. | Implemented as `cohort-runtime-profile/v1` at `GET /api/experiments/:id/profile`; minimum samples, metric coverage, and unsupported guardrails remain explicit. It does not produce a universal or causal winner. |
+| **Verified Post-Run Feedback** | One completed, Outcome-verified candidate Task's bounded view of an Experiment decision and current cohort evidence. | Implemented as opt-in `post-run-feedback/v1` at `GET /api/tasks/:id/feedback?optIn=true`. It is read-only, suppresses stale/insufficient evidence, and contains no prompt, rule, transcript, or chain-of-thought content. |
 
 The product name “Agent Profile” refers to the system as a whole. When naming a
 specific implemented report, use the precise term above rather than implying
@@ -78,7 +80,8 @@ Today the product supports a local, human- or Runtime-mediated loop:
 4. Create a Task for meaningful delivery work; link its Sessions and a
    version/hash-only Configuration Snapshot.
 5. Record explicit Outcome evidence and inspect the Task Profile.
-6. Use the results to decide what to investigate or test next.
+6. For eligible completed candidate Tasks, explicitly inspect bounded post-run
+   feedback and use it to decide what to investigate or test next.
 
 The Task workspace records build, test, lint, and Git-commit fields. The local
 model/API additionally supports human rating, rework reason, completion time,
@@ -86,9 +89,9 @@ and bounded structured evidence; a later UI Task must expose any additional
 fields before the workspace alone can produce fully verified Outcome coverage.
 
 The product does not automatically rewrite prompts, rules, model settings, or
-tool policy. It computes only the bounded `cohort-runtime-profile/v1` report;
-Runtime-consumable live hints and automatic configuration mutation remain
-future layers.
+tool policy. It can expose an explicit, bounded post-run finding linked to the
+current `cohort-runtime-profile/v1`, but Runtime-consumable live hints and
+automatic configuration mutation remain future layers.
 
 ## Deferred implementation boundaries
 
@@ -97,10 +100,8 @@ The following are deliberate future boundaries, not current product claims:
 - extend the bounded cohort/configuration Runtime Profile with broader time,
   project, and statistical regression contracts beyond the current Experiment
   and Cohort definition scope;
-- make verified post-run findings and evidence-sufficient experiment decisions
-  more broadly consumable rather than limiting them to the current report;
-- make verified post-run findings and, later, bounded in-run hints consumable by
-  an Agent Runtime without transmitting raw prompts or chain-of-thought;
+- make post-run feedback available to an external Agent Runtime, then add
+  bounded in-run hints without transmitting raw prompts or chain-of-thought;
 - add optional code-quality evidence integrations such as CI, static analysis,
   review, and rework signals. Process metrics alone must not be relabelled as
   code-quality evidence.
