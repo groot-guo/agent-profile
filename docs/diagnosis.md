@@ -5,9 +5,9 @@ Diagnosis has two current layers:
 1. deterministic heuristic rules that quantify observable patterns;
 2. optional LLM semantic analysis that interprets thinking/tool sequences.
 
-The heuristic layer always works locally. The semantic layer is enabled only
-when an LLM API key is configured and degrades to heuristic-only results on
-provider, timeout, or parsing failure.
+The heuristic layer always works locally. The semantic layer requires both an
+LLM API key and request-scoped `semantic=opt_in`; it degrades to heuristic-only
+results on provider, timeout, or parsing failure.
 
 ## Heuristic rules
 
@@ -38,8 +38,9 @@ reported as unknown rather than converted into a trusted cost.
 
 `packages/core` defines the provider-independent `LlmDiagnoser` interface.
 `apps/server/src/llm-diagnoser.ts` implements Anthropic-native and
-OpenAI-compatible HTTP clients. `apps/server/src/routes/diagnosis.ts` injects
-that implementation into the async diagnosis path when credentials exist.
+OpenAI-compatible HTTP clients. `apps/server/src/routes/diagnosis.ts` invokes
+that implementation only for an explicit request-scoped opt-in; the normal
+Session analysis path remains deterministic and local.
 
 The current semantic types are:
 
@@ -47,12 +48,14 @@ The current semantic types are:
 - `ineffective_exploration` — repeated exploration without visible progress;
 - `tool_off_target` — tool activity appears unrelated to the task.
 
-When the semantic path is enabled, the server sends the captured Session title
-when present, at most five thinking snippets (the first 2,000 characters of
-each), and at most twenty tool calls (name, error state, and the first 200
-characters of each stored input). It asks for a strict JSON array, applies a
-30-second timeout, and returns only heuristic findings if the provider fails or
-the response cannot be parsed.
+When the semantic path is enabled, the server sends a bounded, redacted payload:
+the captured Session title (at most 500 characters), at most five thinking
+snippets (500 characters each), and at most twenty tool calls (200-character
+tool names and inputs). It asks for a strict JSON array, applies a 30-second
+timeout, validates returned findings against the current evidence span IDs, and
+returns only heuristic findings if the provider fails or the response cannot be
+parsed. The response includes a `semantic` report with consent, status, Provider,
+payload counts, redaction count, and limitations; it never includes the payload.
 
 ### Configuration
 
@@ -70,16 +73,17 @@ application does not verify that distinction.
 ## Trust and privacy boundaries
 
 - Semantic findings are model inference and are labelled separately from
-  deterministic findings; each should retain evidence span IDs.
-- This semantic path is not local-only. With `LLM_API_KEY` configured, a
-  request to `GET /api/session/:id/diagnosis` invokes the provider path when
-  evidence exists. The current implementation has no request-scoped consent,
-  pre-transmission secret-redaction pass, or content-free provider-call audit.
-  The bounded title/thinking/tool-input payload described above can therefore
-  contain sensitive source-derived content. Use only an approved endpoint, or
-  leave `LLM_API_KEY` unset to keep diagnosis deterministic and local.
-- Truncation limits payload size; they are not redaction. A semantic finding can
-  have incomplete context and cannot establish the final Task Outcome.
+  deterministic findings; returned span IDs are constrained to the current
+  Session evidence.
+- This semantic path is not local-only. It requires both `LLM_API_KEY` and an
+  explicit `GET /api/session/:id/diagnosis?semantic=opt_in` request. The shared
+  redaction pass covers common credential forms before payload construction, but
+  is not a guarantee against every secret. A bounded process-local audit retains
+  only Session ID, timestamps, status, Provider, and payload counts; raw source
+  and Provider response content are not stored.
+- Truncation and redaction reduce disclosure risk but do not prove a payload is
+  safe for every endpoint. A semantic finding can have incomplete context and
+  cannot establish the final Task Outcome.
 - The current implementation does not persist a separate semantic-analysis
   token/cost ledger or cache results by session-content hash. Those remain
   explicit follow-up opportunities, not current capabilities.
@@ -89,21 +93,21 @@ application does not verify that distinction.
 ## Request flow
 
 ```text
-GET /api/session/:id/diagnosis
+GET /api/session/:id/diagnosis[?semantic=opt_in]
   → load normalized session and spans
   → run 11 deterministic heuristic rules
-  → when LLM is configured and at least one captured thinking/tool-call Span exists:
-       construct the bounded provider payload
-       (no request-level opt-in or pre-send redaction in the current release)
+  → when semantic=opt_in, LLM is configured, and evidence exists:
+       construct bounded, redacted provider payload
        → provider request with 30-second timeout
        → parse semantic findings
        → merge with deterministic findings
-  → on any semantic failure, return heuristic findings
+       → return content-free semantic metadata and record bounded audit metadata
+  → without opt-in, or on any semantic failure, return heuristic findings
 ```
 
-T111 owns request-level consent, tested redaction, and content-free audit
-metadata before any semantic-provider hardening can be claimed. T112 owns
-finding-to-evidence navigation; it must preserve bounded, content-free defaults.
+T111 implements request-level consent, tested redaction, and content-free audit
+metadata. T112 owns finding-to-evidence navigation; it must preserve bounded,
+content-free defaults.
 Any future change to rules, thresholds, semantic prompts, providers, evidence
 coverage, or displayed confidence must start with a task in `roadmap.md` and
 must update this document after implementation.

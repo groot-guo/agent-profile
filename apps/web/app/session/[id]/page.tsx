@@ -269,6 +269,8 @@ export default function SessionPage() {
   const [toolParams, setToolParams] = useState<ToolParamAnalysis | null>(null);
   const [relationships, setRelationships] = useState<SessionRelationshipReport | null>(null);
   const [activeView, setActiveView] = useState<SessionView>('overview');
+  const [semanticLoading, setSemanticLoading] = useState(false);
+  const [semanticError, setSemanticError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [liveError, setLiveError] = useState('');
@@ -279,6 +281,8 @@ export default function SessionPage() {
     setLoading(true);
     setError('');
     setLiveError('');
+    setSemanticError('');
+    setSemanticLoading(false);
 
     const applyAnalysis = (analysis: SessionAnalysis) => {
       if (controller.signal.aborted) return;
@@ -353,6 +357,22 @@ export default function SessionPage() {
     data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens + data.outputTokens;
   const errorToolCount = spanSummary.observedToolErrors;
   const diagnosisCount = diag?.findings.length ?? 0;
+
+  const requestSemanticDiagnosis = async () => {
+    setSemanticLoading(true);
+    setSemanticError('');
+    try {
+      const response = await fetch(
+        `${API}/session/${encodeURIComponent(id)}/diagnosis?semantic=opt_in`,
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setDiag((await response.json()) as DiagnosisResult);
+    } catch (reason: unknown) {
+      setSemanticError(reason instanceof Error ? reason.message : '语义诊断请求失败');
+    } finally {
+      setSemanticLoading(false);
+    }
+  };
 
   return (
     <div className="session-page">
@@ -517,6 +537,12 @@ export default function SessionPage() {
               title="诊断建议"
               meta={diag ? `可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : undefined}
             >
+              <SemanticDiagnosisDisclosure
+                report={diag?.semantic}
+                loading={semanticLoading}
+                error={semanticError}
+                onRequest={requestSemanticDiagnosis}
+              />
               <DiagnosisList result={diag} />
             </Card>
             {perf && <PerformancePanel metrics={perf} />}
@@ -1889,6 +1915,80 @@ function DiagnosisList({ result }: { result: DiagnosisResult | null }) {
             💡 {f.suggestion}
           </div>
         </div>
+      ))}
+    </div>
+  );
+}
+
+function SemanticDiagnosisDisclosure({
+  report,
+  loading,
+  error,
+  onRequest,
+}: {
+  report: DiagnosisResult['semantic'];
+  loading: boolean;
+  error: string;
+  onRequest: () => void;
+}) {
+  if (!report || report.status === 'not_requested') {
+    return (
+      <div
+        style={{
+          marginBottom: SP.lg,
+          padding: SP.md,
+          border: `1px solid ${C.border}`,
+          borderRadius: R.md,
+          background: `${C.link}08`,
+        }}
+      >
+        <div style={{ color: C.text, fontWeight: 600, fontSize: FS.sm }}>语义诊断（可选）</div>
+        <div style={{ color: C.sub, fontSize: FS.cap, lineHeight: 1.6, marginTop: SP.xs }}>
+          默认只运行本地 deterministic 诊断。开启后，仅会把有界、脱敏的任务标题、thinking
+          摘要和工具输入发送到已配置的 Provider；Provider
+          地址的本地性不会由本地进程验证，原始内容不会写入 audit。
+        </div>
+        {error && (
+          <div style={{ color: C.medium, fontSize: FS.cap, marginTop: SP.xs }}>{error}</div>
+        )}
+        <SoftButton
+          variant="primary"
+          disabled={loading}
+          onClick={onRequest}
+          style={{ marginTop: SP.sm }}
+        >
+          {loading ? '请求中…' : '允许并运行语义诊断'}
+        </SoftButton>
+      </div>
+    );
+  }
+
+  const status =
+    report.status === 'completed'
+      ? `已完成 · ${report.provider || 'Provider'} · ${report.payload.redactions} 处脱敏`
+      : report.status === 'not_configured'
+        ? '未配置 Provider，未发送内容'
+        : 'Provider 请求失败，已保留本地诊断';
+  return (
+    <div
+      style={{
+        marginBottom: SP.lg,
+        padding: SP.md,
+        borderRadius: R.md,
+        background: report.status === 'completed' ? `${C.cr}0A` : `${C.medium}12`,
+        color: C.sub,
+        fontSize: FS.cap,
+        lineHeight: 1.6,
+      }}
+    >
+      <div style={{ color: C.text, fontWeight: 600 }}>{status}</div>
+      <div>
+        Provider payload：{report.payload.thinkingItems} 个 thinking、{report.payload.toolItems}{' '}
+        个工具输入，
+        {report.payload.characters} 字符；只保留有界、脱敏的本地 audit metadata。
+      </div>
+      {report.limitations.map((limitation) => (
+        <div key={limitation}>· {limitation}</div>
       ))}
     </div>
   );

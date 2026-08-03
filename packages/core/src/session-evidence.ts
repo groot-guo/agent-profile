@@ -286,17 +286,59 @@ function storedText(value: unknown): string | null {
   }
 }
 
-export function redactEvidencePreview(value: string): string {
-  const redacted = value
+export interface RedactedText {
+  text: string;
+  redactions: number;
+}
+
+export function redactSensitiveText(value: string, maxCharacters: number): RedactedText {
+  let redactions = 0;
+  let redacted = value
     .replace(
       /\b(api[_-]?key|access[_-]?token|token|password|passwd|secret)\s*[:=：]\s*["']?[^,\s"']+/gi,
-      '$1=[REDACTED]',
+      (_match, key: string) => {
+        redactions += 1;
+        return `${key}=[REDACTED]`;
+      },
     )
-    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED_TOKEN]')
-    .replace(/\bgh[pousr]_[A-Za-z0-9]{12,}\b/g, '[REDACTED_TOKEN]')
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]{8,}=*\b/gi, 'Bearer [REDACTED]');
-  if (redacted.length <= MAX_EVIDENCE_PREVIEW_CHARACTERS) return redacted;
-  return `${redacted.slice(0, MAX_EVIDENCE_PREVIEW_CHARACTERS)}…`;
+    .replace(
+      /([?&](?:api[_-]?key|access[_-]?token|token|password|secret)=)[^&#\s]+/gi,
+      (_match, key: string) => {
+        redactions += 1;
+        return `${key}[REDACTED]`;
+      },
+    )
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]{8,}=*\b/gi, () => {
+      redactions += 1;
+      return 'Bearer [REDACTED]';
+    })
+    .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, () => {
+      redactions += 1;
+      return '[REDACTED_PRIVATE_KEY]';
+    })
+    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{8,}\b/g, () => {
+      redactions += 1;
+      return '[REDACTED_TOKEN]';
+    })
+    .replace(/\bgh[pousr]_[A-Za-z0-9]{12,}\b/g, () => {
+      redactions += 1;
+      return '[REDACTED_TOKEN]';
+    })
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, () => {
+      redactions += 1;
+      return '[REDACTED_TOKEN]';
+    })
+    .replace(/\bxox[baprs]-[A-Za-z0-9-]{12,}\b/g, () => {
+      redactions += 1;
+      return '[REDACTED_TOKEN]';
+    });
+  const limit = Math.max(0, Math.floor(maxCharacters));
+  if (redacted.length > limit) redacted = `${redacted.slice(0, limit)}…`;
+  return { text: redacted, redactions };
+}
+
+export function redactEvidencePreview(value: string): string {
+  return redactSensitiveText(value, MAX_EVIDENCE_PREVIEW_CHARACTERS).text;
 }
 
 function validEndTime(span: Span): boolean {

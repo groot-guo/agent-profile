@@ -30,7 +30,10 @@ export type {
   DiagnosisType,
   LlmDiagnoseContext,
   LlmDiagnoser,
+  LlmDiagnosisResponse,
   LlmFinding,
+  SemanticDiagnosisReport,
+  SemanticDiagnosisStatus,
   Severity,
 } from './diagnosis';
 export { DEFAULT_THRESHOLDS, diagnoseSession, diagnoseSessionSync } from './diagnosis';
@@ -150,6 +153,7 @@ export {
   buildSessionEvidenceReport,
   MAX_EVIDENCE_PREVIEW_CHARACTERS,
   redactEvidencePreview,
+  redactSensitiveText,
   SESSION_EVIDENCE_PAGE_SCHEMA_VERSION,
   SESSION_EVIDENCE_SCHEMA_VERSION,
 } from './session-evidence';

@@ -235,13 +235,13 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 | `LLM_API_KEY` | 开启可选语义诊断；确定性分析不需要 Key |
 | `LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL` | 可选语义诊断服务配置 |
 
-设置 `LLM_API_KEY` 后，语义诊断会使用配置的 provider；通过 `LLM_BASE_URL` 配置的
-provider 可以是本地或外部服务，但实际 provider 调用并非纯本地分析，配置也不等于逐请求
-opt-in。未覆盖时默认使用外部的 DeepSeek-compatible endpoint；Agent Profile 不会判断或
-验证自定义 endpoint 是否本地。诊断请求会发送已捕获的 Session 标题（如有）、最多五段各
-2,000 字符的 thinking，以及最多二十个工具调用的名称、错误状态和输入前 200 字符。当前版本
-没有逐请求确认或发送前脱敏；敏感来源只能使用已批准的 endpoint，或不设置该 Key 以仅运行
-本地确定性诊断。
+设置 `LLM_API_KEY` 后，只有显式发起带 `semantic=opt_in` 的诊断请求才会使用配置的
+provider。通过 `LLM_BASE_URL` 配置的 provider 可以是本地或外部服务，但 Agent Profile 不会
+判断或验证 endpoint 的本地性；未覆盖时默认使用外部的 DeepSeek-compatible endpoint。
+Web 会先展示 disclosure：只发送有界且经过常见密钥脱敏的 Session 标题、thinking 和工具输入
+片段；HTTP 响应只返回 provider、数量、脱敏次数和状态，不返回 payload 内容。进程内有界 audit
+只保留 Session ID、时间、状态和 payload 计数，不保存原始来源或 provider 响应内容。未配置 Key
+或不主动 opt-in 时，仍只运行本地确定性诊断。
 
 模型、上下文和诊断配置分别属于不同范围：
 
@@ -281,8 +281,9 @@ AUTO_SCAN_DIR="" pnpm dev
   Configuration Snapshot、cohort、experiment 和逻辑 Session 关联，随后可从当前可用来源
   重新同步运行证据。
 - 提示词审查是临时计算：提示词文本不会写入数据库，也不会由该功能发送给语义模型服务。
-- 语义诊断与提示词审查不同：配置 Key 后会发送上文所述受限的来源派生内容；截断不是
-  secret redaction。T111 将负责逐请求 consent、脱敏和无内容审计边界。
+- 语义诊断与提示词审查不同：显式 opt-in 后会向配置的 provider 发送上文所述有界、经过
+  常见密钥脱敏的来源派生内容。脱敏不是对所有秘密的保证，endpoint 本地性不验证；只保留
+  有界且不含内容的本地 audit metadata。
 - 不同来源的数据覆盖度不同。字段缺失表示“未采集”，不表示零、成功或失败。
 
 文件级备份时，先停止 `agent-profile serve`、`pnpm dev` 或 `pnpm start`，再复制选中的

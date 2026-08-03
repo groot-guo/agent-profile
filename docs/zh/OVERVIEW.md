@@ -160,10 +160,11 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   覆盖度及匹配数/总数仍按完整 Session 计算。`session-evidence/v1` 作为兼容全量合同保留。
 - 使用 11 条确定性启发式规则诊断重复读取、大输出、低缓存命中、上下文膨胀、长 thinking、
   重复失败、读取范围过大、同参数循环、写后即读、上下文压缩和模型降级。
-- 在配置 Anthropic-native 或 OpenAI-compatible API 后执行可选的 LLM 语义诊断；设置
-  `LLM_API_KEY` 时，请求会把已捕获的 Session 标题（如有）、最多五段 thinking（各最多
-  2,000 字符）和最多二十个工具调用的名称/错误状态/输入前 200 字符发送给配置的 provider。
-  当前没有逐请求 consent 或发送前脱敏；没有配置时，启发式分析与整个服务仍可正常使用。
+- 在配置 Anthropic-native 或 OpenAI-compatible API 后执行可选的 LLM 语义诊断；只有显式
+  请求 `semantic=opt_in` 才会发送 payload。发送前只保留有界的 Session 标题、最多五段
+  thinking 和最多二十个工具调用，并经过常见密钥脱敏；响应只返回状态、provider 和计数，
+  不返回 payload。进程内 audit 只保留不含原始内容的有界 metadata；没有配置 Key 或没有
+  opt-in 时，启发式分析与整个服务仍可正常使用。
 - 展示过程效率、综合过程分、项目内相对位置、趋势、分布，以及按 Agent/项目/模型的
   消耗统计。
 - 在“统计”页面按项目查看 `project-profile/v1`：展示 Session、来源和指标覆盖，资源汇总、工具
@@ -227,10 +228,10 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
   保存定价生效时间、计算时间和计算器版本。未知定价必须显式展示为未知。
 - 工具成本归因是按同一 LLM 回合内的工具类别进行分析分摊，不等于供应商账单。
 - 效率分是“过程效率”，不能替代测试、构建或人工验收结果。
-- LLM 语义诊断属于带证据的推断，应与确定性规则区分。它在配置 Key 后会向配置的
-  provider 发送受限的来源派生内容；provider 可以是本地或外部服务，截断不等于脱敏，
-  默认 endpoint 是外部 DeepSeek-compatible 服务且产品不验证自定义 endpoint 的本地性；
-  T111 才会补逐请求 consent、脱敏与无内容审计。
+- LLM 语义诊断属于带证据的推断，应与确定性规则区分。显式 opt-in 后才会向配置的
+  provider 发送有界、经过常见密钥脱敏的来源派生内容；provider 可以是本地或外部服务，
+  产品不验证自定义 endpoint 的本地性，且脱敏不保证识别所有秘密。只保留有界且不含内容
+  的本地 audit metadata。
 - Agent 相对画像要求目标和至少一个同类 Agent 各有 3 个 Session，且指标覆盖度至少
   50%；与同类中位数相差 ±10% 以内记为“接近”，其余只描述“高于/低于”，不代表
   更好或更差。

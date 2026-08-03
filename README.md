@@ -303,16 +303,17 @@ source database's aggregate cost is not treated as portable billing evidence.
 | `LLM_API_KEY` | Enables optional semantic diagnosis; no key is required for deterministic analysis |
 | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Optional semantic-diagnosis provider settings |
 
-Semantic diagnosis uses configured-provider processing when `LLM_API_KEY` is
-set. The provider may be local or external through `LLM_BASE_URL`, but a provider
-call is not a local-only analysis and configuration is not request-level opt-in.
-Without an override, the endpoint is the external DeepSeek-compatible default;
-Agent Profile does not determine or verify whether a custom endpoint is local.
-Diagnosis requests send the captured Session title when present, up to five
-2,000-character thinking snippets, and up to twenty tool-call names/error states
-with 200-character input prefixes to the configured provider. The current release
-has no request-level confirmation or pre-send redaction for that payload; use an
-approved endpoint or leave the key unset for deterministic local diagnosis only.
+Semantic diagnosis uses configured-provider processing only after an explicit
+request-scoped `semantic=opt_in` diagnosis request. The provider may be local or
+external through `LLM_BASE_URL`; Agent Profile does not determine or verify that
+endpoint's locality. Without an override, the endpoint is the external DeepSeek-
+compatible default. The Web disclosure explains that only bounded, common-secret-
+redacted Session title, thinking, and tool-input excerpts are sent; the response
+reports the provider, payload counts, redaction count, and failure status without
+returning payload content. A bounded process-local audit keeps Session ID,
+timestamps, status, and payload counts only; raw source or provider response
+content is not stored. Leave the key unset, or do not opt in, for deterministic
+local diagnosis only.
 
 Model, context, and diagnosis configuration has separate scopes:
 
@@ -369,11 +370,12 @@ AUTO_SCAN_DIR="" pnpm dev
   logical Session links so runtime evidence can be synchronized again.
 - Prompt review is ephemeral: prompt text is not written to the database and is
   not sent to a semantic provider by that feature.
-- Semantic diagnosis is different from prompt review. A semantic request can
-  transmit the bounded source-derived payload described in **Configuration** to
-  its configured provider, which may be local or external; truncation is not
-  secret redaction. T111 is the planned consent, redaction, and audit hardening
-  work.
+- Semantic diagnosis is different from prompt review. An explicit semantic
+  request can transmit the bounded, common-secret-redacted source-derived payload
+  described in **Configuration** to its configured provider, which may be local or
+  external. Redaction is a safety pass, not a guarantee against every secret;
+  endpoint locality is not verified, and only content-free bounded audit metadata
+  is retained.
 - Source data varies. A missing field means “not captured”, not zero, success,
   or failure.
 

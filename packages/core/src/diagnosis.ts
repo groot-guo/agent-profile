@@ -32,11 +32,35 @@ export interface DiagnosisFinding {
   spanIds: string[]; // 关联 span，前端可跳转定位
 }
 
+export type SemanticDiagnosisStatus = 'not_requested' | 'not_configured' | 'completed' | 'failed';
+
+export interface SemanticDiagnosisReport {
+  requested: boolean;
+  consent: 'not_granted' | 'granted';
+  status: SemanticDiagnosisStatus;
+  provider: 'anthropic' | 'openai' | null;
+  payload: {
+    mode: 'not_sent' | 'bounded_redacted';
+    thinkingItems: number;
+    toolItems: number;
+    characters: number;
+    redactions: number;
+    rawContentIncluded: false;
+  };
+  audit: {
+    recorded: boolean;
+    retention: 'process_bounded_content_free';
+    rawContentStored: false;
+  };
+  limitations: string[];
+}
+
 export interface DiagnosisResult {
   findings: DiagnosisFinding[];
   totalWastedTokens: number;
   totalWastedCost: number;
   costUnknownCount: number;
+  semantic?: SemanticDiagnosisReport;
 }
 
 export interface DiagnosisThresholds {
@@ -101,8 +125,14 @@ export interface LlmFinding {
   spanIds: string[];
 }
 
+export interface LlmDiagnosisResponse {
+  findings: LlmFinding[];
+  semantic: SemanticDiagnosisReport;
+}
+
 export interface LlmDiagnoser {
   diagnose(ctx: LlmDiagnoseContext): Promise<LlmFinding[]>;
+  diagnoseWithMetadata?(ctx: LlmDiagnoseContext): Promise<LlmDiagnosisResponse>;
 }
 
 export async function diagnoseSession(
@@ -128,7 +158,11 @@ export async function diagnoseSession(
         isError: tool.isError,
       })),
     };
-    const llmFindings = await options.llmDiagnoser.diagnose(ctx);
+    const llmResponse = options.llmDiagnoser.diagnoseWithMetadata
+      ? await options.llmDiagnoser.diagnoseWithMetadata(ctx)
+      : { findings: await options.llmDiagnoser.diagnose(ctx) };
+    const llmFindings = llmResponse.findings;
+    if ('semantic' in llmResponse) result.semantic = llmResponse.semantic;
     for (const lf of llmFindings) {
       result.findings.push({ ...lf, wastedTokens: 0, wastedCost: 0, costUnknown: false });
     }

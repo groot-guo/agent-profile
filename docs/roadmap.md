@@ -25,34 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T111 semantic-diagnosis consent, redaction, and audit boundary
-
-- status: planned
-- estimated size/risk: medium / high; it changes the disclosure boundary for
-  configured-provider processing of thinking and tool-input evidence
-- purpose: replace the current implicit provider-disclosure path with a safe,
-  explicit semantic-diagnosis contract before any new semantic workflow expands
-- scope: add request-scoped informed opt-in, apply a tested secret-redaction
-  pass before provider payload construction, retain only bounded content-free
-  local audit metadata, expose provider/payload limitations through HTTP/UI and
-  documentation, and preserve heuristic-only fallback. CLI and Agent-workflow
-  disclosure consume this contract in T115 rather than expanding this Task.
-- dependencies: existing deterministic diagnosis and evidence-preview redaction;
-  T110 documents the current external-content disclosure gap, and this Task must
-  not broaden T88 non-local deployment scope
-- risks and assumptions: redaction is not a guarantee against every secret;
-  no raw thinking, tool input, prompt, or provider response may be persisted as
-  an audit record; provider calls remain optional
-- acceptance: a semantic request without explicit opt-in makes no provider
-  call; provider payloads are bounded and redacted before transmission;
-  audit records contain no source content or credentials; diagnostics remain
-  usable without an LLM key; focused privacy and failure tests pass
-- verification: Core redaction/provider-payload tests, Server route tests,
-  focused Web interaction tests, and a manual payload inspection using a fake
-  provider
-- documentation: update README, Chinese overview, architecture, diagnosis,
-  privacy/configuration guidance, and the future-runtime proposal
-
 ### T112 diagnosis-to-evidence navigation
 
 - status: planned
@@ -317,6 +289,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T123](roadmap-archive/2026-q3.md#t123) | embedded Session relationship navigation containment | completed |
 | [T122](roadmap-archive/2026-q3.md#t122) | concise commit-message convention | completed |
 | [T110](roadmap-archive/2026-q3.md#t110) | profile-evolution documentation and roadmap decomposition | completed |
+| [T111](roadmap-archive/2026-q3.md#t111) | semantic-diagnosis consent, redaction, and audit boundary | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
 | [T6](roadmap-archive/2026-q3.md#t6) | Codex parser | completed |

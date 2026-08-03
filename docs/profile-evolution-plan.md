@@ -49,8 +49,9 @@ Agent ranking, or automatic prompt/configuration mutation.
 ### Material gaps mapped to Tasks
 
 The highest-impact gap is the missing last mile from a finding to a safe action:
-semantic diagnosis needs consent/redaction/audit (T111), findings need direct
-bounded evidence navigation (T112), Outcome evidence needs confirmation and a
+semantic diagnosis now has request-scoped consent, common-secret redaction, and
+bounded content-free audit metadata (T111); findings still need direct bounded
+evidence navigation (T112), Outcome evidence needs confirmation and a
 producer contract (T113/T114), and an Agent needs content-free local reports and
 an explicit write path (T115). Only then should the product add a local Runtime
 event protocol (T116) and bounded in-run advice (T117). Comparison rigor (T118),
@@ -129,17 +130,17 @@ open a bounded, content-free evidence view by default. A missing, filtered, or
 reset Span must be reported as unavailable; it must not be reconstructed from
 unrelated transcript content.
 
-### Semantic diagnosis (T111 target contract)
+### Semantic diagnosis (T111 implemented contract)
 
 The current configured-provider content boundary is documented in `diagnosis.md`:
-the existing provider path has no request-level opt-in, pre-transmission
-redaction, or content-free audit. T111 is the target contract for changing that
-behavior.
-After T111, deterministic diagnosis must remain useful without a provider; a
-semantic request must require explicit request-level opt-in, pre-transmission
-redaction, and a bounded content-free local audit. Provider failure must preserve
-the heuristic-only response. No audit row may store the prompt, thinking, tool
-input, tool output, provider response, or credential.
+the provider path requires request-level `semantic=opt_in`, applies bounded
+common-secret redaction before payload construction, and keeps only bounded
+content-free process-local audit metadata. Endpoint locality remains unverified
+and redaction is not a guarantee against every secret.
+Deterministic diagnosis remains useful without a provider; Provider failure
+preserves the heuristic-only response. No audit entry stores the prompt,
+thinking, tool input, tool output, Provider response, or credential. T112 remains
+the next trust-before-action task.
 
 ### Task and Outcome evidence
 

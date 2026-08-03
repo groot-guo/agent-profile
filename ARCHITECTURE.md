@@ -580,21 +580,24 @@ independently for each historical LLM Span and records calculator version `v1`.
 Pre-T39 stored costs retain `legacy` provenance until they are imported again or
 recomputed.
 
-LLM diagnosis is optional. Without its API configuration, deterministic
-analysis remains available and the service continues to function.
+LLM diagnosis is optional. Without its API configuration, or without an explicit
+request-scoped opt-in, deterministic analysis remains available and no Provider
+call is made.
 
-With `LLM_API_KEY` configured, `GET /api/session/:id/diagnosis` currently
-invokes the configured Anthropic-native or OpenAI-compatible provider whenever
-the Session has at least one captured `thinking` or `tool_call` Span. The request
-includes the captured Session title when present, up to five thinking snippets
-capped at 2,000 characters each, and up to twenty tool calls with name, error
-state, and a 200-character input prefix. `LLM_BASE_URL` may target a local or
-external compatible endpoint; without an override it is the external DeepSeek
-default, and the application does not determine endpoint locality. This payload
-is bounded but is not request-scoped opt-in or pre-transmission redacted in the
-current release, and no content-free provider-call audit is stored. T111 owns
-those protections; until then, a sensitive workspace must leave the key unset or
-use an approved endpoint.
+`GET /api/session/:id/diagnosis?semantic=opt_in` invokes the configured
+Anthropic-native or OpenAI-compatible provider when the Session has captured
+thinking or tool-call evidence. The request payload is bounded to one Session
+title, at most five thinking excerpts (500 characters each), and at most twenty
+tool calls (200-character tool names/inputs), then passes through the shared
+common-secret redaction utility before construction of the Provider body. The
+response exposes only semantic status, Provider name, payload counts, redaction
+count, and limitations; it does not return the payload. `LLM_BASE_URL` may target
+a local or external compatible endpoint; without an override it is the external
+DeepSeek default, and the application does not determine endpoint locality.
+Each explicit request records a bounded process-local audit entry containing only
+Session ID, timestamps, status, Provider, and payload counts. Raw source content
+and Provider response content are not stored. Redaction is not a guarantee
+against every secret, so sensitive workspaces still need an approved endpoint.
 
 ### Session evidence report contract
 

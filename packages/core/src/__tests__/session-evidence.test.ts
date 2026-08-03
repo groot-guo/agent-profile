@@ -2,11 +2,25 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSessionEvidenceReport,
   MAX_EVIDENCE_PREVIEW_CHARACTERS,
+  redactSensitiveText,
   SESSION_EVIDENCE_SCHEMA_VERSION,
 } from '../session-evidence';
 import type { SessionSummary, Span } from '../types';
 
 describe('session evidence report', () => {
+  it('redacts common credentials before applying the content bound', () => {
+    const secret = 'sk-supersecret123456789';
+    const result = redactSensitiveText(
+      `api_key=${secret} Bearer ${'a'.repeat(24)} ${'x'.repeat(80)}`,
+      40,
+    );
+
+    expect(result.text).not.toContain(secret);
+    expect(result.text).not.toContain('Bearer aaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(result.text.length).toBeLessThanOrEqual(41);
+    expect(result.redactions).toBeGreaterThanOrEqual(2);
+  });
+
   it('orders every normalized span once and preserves relationships and lanes', () => {
     const spans = [
       makeSpan({
