@@ -22,6 +22,7 @@ and comparability boundary in this system, not its sole purpose.
 local source histories
   -> normalized Spans and Sessions
   -> Session analysis and diagnosis
+  -> Project Profile
   -> Agent Process Profile
   -> Task + Configuration Snapshot + Outcome
   -> Task Profile
@@ -38,10 +39,11 @@ better.
 | --- | --- | --- |
 | **Span / Event evidence** | One normalized LLM turn, tool call, thinking block, or answer block. This is the structural evidence layer. | Implemented as stored Spans and `session-evidence/v1`. It is not a complete original transcript. |
 | **Session analysis** | One continuous observed Agent run. Explains resource use, context, tools, chain relationships, diagnosis, and process efficiency. | Implemented. It does not prove task success. |
+| **Project Profile** | Coverage-aware process evidence for one project key across primary Sessions: resources, source coverage, tool reliability, and time trends. | Implemented as `project-profile/v1`. File evidence remains `not_captured`; it does not establish code quality or causality. |
 | **Agent Process Profile** | Distributional runtime fingerprint for one observed Agent across current Sessions: resource, context, reliability, collaboration, coverage, and neutral peer-relative characteristics. | Implemented as `agent-profile/v1`. It is Session-scoped and does not yet group by Task, Configuration Snapshot, or Outcome. |
 | **Task Profile** | One explicit delivery unit, its linked primary/continuation/subagent/verification Sessions, associated configuration snapshots, outcome fields, coverage, and aggregated process evidence. | Implemented as `task-profile/v1`. It is not a cross-Task configuration comparison. |
-| **Cohort / Experiment definition** | A persisted declaration of what Tasks are comparable and which control/candidate configurations should be evaluated. | Implemented as guarded local records and editable in the Task workspace. They do not yet calculate distributions, regressions, or causal winners. |
-| **Cohort/Configuration Runtime Profile** | A distributional comparison of comparable Tasks for a specific runtime/configuration, with Outcome guardrails and explicit scope. | Future work. Do not present it as an existing report or API. |
+| **Cohort / Experiment definition** | A persisted declaration of what Tasks are comparable and which control/candidate configurations should be evaluated. | Implemented as guarded local records and editable in the Task workspace. |
+| **Cohort/Configuration Runtime Profile** | A distributional comparison of comparable Tasks for a specific runtime/configuration, with Outcome guardrails and explicit scope. | Implemented as `cohort-runtime-profile/v1` at `GET /api/experiments/:id/profile`; minimum samples, metric coverage, and unsupported guardrails remain explicit. It does not produce a universal or causal winner. |
 
 The product name “Agent Profile” refers to the system as a whole. When naming a
 specific implemented report, use the precise term above rather than implying
@@ -63,6 +65,8 @@ single score, describe process behavior.
   cohort evaluation has sufficient samples and explicit Outcome guardrails.
 - Observed tool non-error is not verified success; unknown pricing and absent
   source fields remain visible as coverage limits.
+- A Project Profile is a bounded observation of one project key, not a complete
+  repository inventory; file-level evidence can remain `not_captured`.
 
 ## Current feedback loop
 
@@ -82,19 +86,19 @@ and bounded structured evidence; a later UI Task must expose any additional
 fields before the workspace alone can produce fully verified Outcome coverage.
 
 The product does not automatically rewrite prompts, rules, model settings, or
-tool policy. It also does not yet compute cohort-level configuration winners,
-regressions, or Runtime-consumable live hints. Those are future layers that
-require their own Tasks, statistical rules, privacy review, and validation.
+tool policy. It computes only the bounded `cohort-runtime-profile/v1` report;
+Runtime-consumable live hints and automatic configuration mutation remain
+future layers.
 
 ## Deferred implementation boundaries
 
 The following are deliberate future boundaries, not current product claims:
 
-- aggregate comparable Tasks into a cohort/configuration Runtime Profile with
-  explicit task-type, complexity, project, time, and coverage scope;
-- calculate minimum-sample distributions, Outcome guardrails, regressions, and
-  evidence-sufficient experiment decisions rather than merely persisting their
-  definitions;
+- extend the bounded cohort/configuration Runtime Profile with broader time,
+  project, and statistical regression contracts beyond the current Experiment
+  and Cohort definition scope;
+- make verified post-run findings and evidence-sufficient experiment decisions
+  more broadly consumable rather than limiting them to the current report;
 - make verified post-run findings and, later, bounded in-run hints consumable by
   an Agent Runtime without transmitting raw prompts or chain-of-thought;
 - add optional code-quality evidence integrations such as CI, static analysis,

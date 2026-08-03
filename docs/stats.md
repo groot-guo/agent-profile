@@ -8,10 +8,10 @@ contract. The statistics are descriptive process telemetry; source coverage,
 missing pricing, and calculation provenance must be considered before comparing
 agents.
 
-The statistics page and the Agent Profile page serve different purposes:
-`/stats` describes aggregate volume and trends; `/profiles` describes each
-Agent's observed per-session runtime signature and makes comparison eligibility
-and coverage explicit.
+The statistics page now has two layers. The aggregate sections describe volume
+and trends; the Project Profile section describes one selected project key
+across primary Sessions. `/profiles` describes each Agent's observed per-session
+runtime signature and makes comparison eligibility and coverage explicit.
 
 ## Current overview
 
@@ -76,6 +76,24 @@ times the project median (with a non-trivial median).
 Daily trends aggregate tokens, cost, session count, and average cache hit.
 These are correlations over observed sessions; they do not establish that a
 configuration caused the change.
+
+## Project Profile v1
+
+`GET /api/projects/profile?project=...&from=...&to=...` and the Project Profile
+section in `/stats` expose `project-profile/v1` for one normalized project key.
+The optional `from`/`to` values are millisecond timestamps, with `to` exclusive.
+
+The report includes linked and available primary Session counts, requested range,
+Agent/source coverage, sampling state, token totals, trusted cost coverage,
+cache/context/duration coverage, normalized tool-call/error rates, tool
+frequencies, and UTC day trends. File evidence is currently `not_captured`; no
+complete repository inventory is inferred.
+
+The Server bounds the response to 1,000 newest matching Sessions and 10,000
+tool events. A sampled response says so in `scope.sampled` and `limitations`.
+Unknown pricing, missing source kinds, unavailable Sessions, and missing tool
+evidence remain visible as coverage limits. The report is process telemetry,
+not a delivery-quality verdict or a causal comparison.
 
 Price recomputation does not mean “apply today's price to all history”. Each LLM
 span selects the latest price whose effective time is not later than the span
@@ -144,6 +162,19 @@ GET /api/profiles/agents
       scope,
       comparison,
       profiles[],
+      limitations[]
+    }
+
+GET /api/projects/profile?project=...
+  → {
+      schemaVersion: "project-profile/v1",
+      generatedAt,
+      project,
+      scope,
+      metrics,
+      tools[],
+      trends[],
+      coverage,
       limitations[]
     }
 ```

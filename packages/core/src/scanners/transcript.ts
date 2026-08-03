@@ -4,6 +4,12 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { TranscriptEntry } from '../types';
 
+export interface TranscriptTextResult {
+  entries: TranscriptEntry[];
+  malformedLines: number;
+  untypedLines: number;
+}
+
 function expandHome(p: string): string {
   if (p === '~' || p.startsWith('~/')) return homedir() + p.slice(1);
   return p;
@@ -59,7 +65,13 @@ export async function findTranscriptFiles(root: string): Promise<string[]> {
 // 异步读取 transcript NDJSON，逐行解析；跳过坏行，只保留带 type 的事件
 export async function readTranscript(filePath: string): Promise<TranscriptEntry[]> {
   const raw = await readFile(filePath, 'utf8');
+  return parseTranscriptText(raw).entries;
+}
+
+export function parseTranscriptText(raw: string): TranscriptTextResult {
   const out: TranscriptEntry[] = [];
+  let malformedLines = 0;
+  let untypedLines = 0;
   for (const line of raw.split('\n')) {
     const t = line.trim();
     if (!t) continue;
@@ -67,12 +79,14 @@ export async function readTranscript(filePath: string): Promise<TranscriptEntry[
       const obj = JSON.parse(t);
       if (obj && typeof obj === 'object' && 'type' in obj) {
         out.push(obj as TranscriptEntry);
+      } else {
+        untypedLines++;
       }
     } catch {
-      /* 跳过坏行 */
+      malformedLines++;
     }
   }
-  return out;
+  return { entries: out, malformedLines, untypedLines };
 }
 
 // 保留同步版本供兼容（不推荐新代码使用）
@@ -107,18 +121,5 @@ function walkSync(dir: string, out: string[]) {
 
 export function readTranscriptSync(filePath: string): TranscriptEntry[] {
   const raw = readFileSync(filePath, 'utf8');
-  const out: TranscriptEntry[] = [];
-  for (const line of raw.split('\n')) {
-    const t = line.trim();
-    if (!t) continue;
-    try {
-      const obj = JSON.parse(t);
-      if (obj && typeof obj === 'object' && 'type' in obj) {
-        out.push(obj as TranscriptEntry);
-      }
-    } catch {
-      /* 跳过坏行 */
-    }
-  }
-  return out;
+  return parseTranscriptText(raw).entries;
 }

@@ -6,49 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T85 append-only JSONL import for Claude Code and Codex
-
-- status: planned
-- estimated size/risk: extra-large / high; source mutation patterns and parser
-  equivalence make a safe fallback/checkpoint design mandatory
-- purpose: reduce repeated parsing work for growing transcript sources without
-  weakening the cross-source revision and atomic-replacement guarantees
-- dependencies: T82, T87's stable relationship/replacement contract, and a
-  source-specific design review for Claude Code and Codex JSONL append,
-  truncation, rewrite, sidechain, and legacy-ID behavior
-- scope: add safe per-source append checkpoints with full-parse fallback; measure
-  unchanged, appended, rewritten, truncated, and malformed histories; do not
-  apply JSONL assumptions to Zed, MiMo, or OpenCode SQLite adapters
-- acceptance: appended histories produce the same normalized Session/Span result
-  as a clean full parse; rewrites/truncations safely fall back; failed parsing
-  retains last good generated data; annotations and revision fingerprints remain
-  correct
-- verification: parser/ingestion equivalence fixtures, recovery/retry tests,
-  benchmark comparison against T82, type/build checks, and local sync inspection
-- documentation: update source-adapter contracts, recovery behavior, scale
-  boundaries, and roadmap verification evidence
-
-### T86 project-level cross-Session evidence
-
-- status: planned
-- estimated size/risk: large / medium-high; project identity and heterogeneous
-  source coverage require a new aggregation/report contract
-- purpose: provide a coverage-aware Project Profile for observed file/tool,
-  resource, reliability, and trend evidence without relabelling it as code
-  quality or configuration causality
-- dependencies: T73 source-faithful attribution, T83 data-access contract, and
-  T87 source-native relationship coverage
-- scope: define project identity/scope, cross-Session aggregation, time range,
-  sample and source coverage, file/tool trend semantics, and a Project analysis
-  surface; retain missing evidence as not captured
-- acceptance: every project conclusion exposes Sessions, time range, source and
-  metric coverage; no derived file/tool trend claims a complete repository or
-  delivery-quality verdict; different source coverage remains visible
-- verification: Core aggregation tests with coverage gaps, API/UI scope tests,
-  production build, and representative local read-only inspection
-- documentation: update Profile taxonomy, architecture, stats/multi-agent
-  guidance, README/Chinese overview as appropriate, and roadmap
-
 ### T88 conditional non-local access safety
 
 - status: planned
@@ -67,26 +24,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   smoke checks, and updated operational documentation
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
-
-### T89 comparable cohort/configuration Runtime Profile evaluation
-
-- status: planned
-- estimated size/risk: extra-large / high; statistical, Outcome, privacy, storage,
-  API, and interpretation contracts must agree before implementation
-- purpose: calculate distributional, Outcome-guarded comparisons for comparable
-  Tasks rather than treating a persisted Experiment definition as an outcome
-- dependencies: T80, T81, representative Outcome data, and an approved minimum
-  sample/coverage/statistical decision design
-- scope: define comparable-task constraints, coverage thresholds, distribution
-  statistics, regressions, evidence-sufficient/insufficient decisions, and
-  neutral report/API semantics; no universal Agent ranking
-- acceptance: missing Outcome remains missing; one Task cannot establish a
-  configuration effect; every decision shows sample, scope, coverage, guardrail,
-  and limitations
-- verification: synthetic statistical fixtures, Core/API tests, privacy review,
-  and documentation/model consistency review
-- documentation: promote only actually implemented cohort evaluation behavior
-  from proposal to current-state documents and record remaining limits
 
 ### T90 bounded verified post-run feedback
 
@@ -167,6 +104,9 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T79](roadmap-archive/2026-q3.md#t79) | roadmap decomposition and local performance/memory assessment | completed |
 | [T80](roadmap-archive/2026-q3.md#t80) | Task Outcome evidence workspace completion | completed |
 | [T81](roadmap-archive/2026-q3.md#t81) | Cohort and Experiment definition workspace | completed |
+| [T85](roadmap-archive/2026-q3.md#t85) | append-only JSONL import for Claude Code and Codex | completed |
+| [T86](roadmap-archive/2026-q3.md#t86) | project-level cross-Session evidence | completed |
+| [T89](roadmap-archive/2026-q3.md#t89) | comparable cohort/configuration Runtime Profile evaluation | completed |
 | [T87](roadmap-archive/2026-q3.md#t87) | source-native parent and child Session evidence | completed |
 | [T82](roadmap-archive/2026-q3.md#t82) | representative scale fixtures and performance budgets | completed |
 | [T83](roadmap-archive/2026-q3.md#t83) | bounded Session discovery and statistics data contract | completed |
@@ -221,15 +161,13 @@ longer-term dependency order remains:
    standalone or a static SPA.
 3. T99 Model Catalog Runtime extraction/data contracts are complete; T100 is
    the optional Web configuration workspace over that public contract.
-4. T80 Task Outcome evidence, T81 guarded Cohort/Experiment definitions, and T87
-   source-native relationship evidence are complete; none imply calculated
-   winners or combined resource attribution.
-5. T87 source-native parent/child evidence before T86 project-level aggregation,
-   so Project Profile accounting is designed against proven relationship
-   coverage rather than the temporary primary-only boundary.
-6. T85 append-only JSONL import after the normalized relationship/replacement
-   contract is stable.
-7. T89 comparable cohort evaluation, followed by T90 verified post-run feedback.
+4. T80 Task Outcome evidence, T81 guarded Cohort/Experiment definitions, T86
+   Project Profile aggregation, and T87 source-native relationship evidence are
+   complete; none imply calculated winners or combined resource attribution.
+5. T85 append-only JSONL import is complete with a process-local checkpoint and
+   full-parse fallback for unsafe suffixes.
+6. T89 comparable cohort evaluation is complete; T90 verified post-run feedback
+   is the next normal implementation candidate.
 
 T88 is conditional on a product decision to support non-local access and is not
 part of the default local-first sequence. Mobile dashboard navigation remains

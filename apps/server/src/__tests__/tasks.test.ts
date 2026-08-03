@@ -261,6 +261,62 @@ describe('Task/Outcome foundations', () => {
     });
     await app.close();
   });
+
+  it('exposes an Outcome-guarded cohort profile with descriptive distributions', async () => {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    for (let index = 1; index <= 6; index++) seedSession(database, `profile-session-${index}`);
+    const repository = new TaskRepository(database);
+    const control = repository.createConfiguration({ agent: 'codex', sourceHash: 'control' });
+    const candidate = repository.createConfiguration({ agent: 'codex', sourceHash: 'candidate' });
+    const cohort = repository.createCohort({
+      title: 'Feature tasks',
+      definition: { type: 'feature' },
+    });
+    const experiment = repository.createExperiment({
+      title: 'Runtime profile',
+      cohortId: cohort.id,
+      controlConfigId: control.id,
+      candidateConfigId: candidate.id,
+      primaryMetric: 'duration_ms',
+      guardrails: [{ metric: 'duration_ms', maxRelativeRegression: 0.2 }],
+    });
+    for (let index = 1; index <= 6; index++) {
+      const task = repository.createTask({ title: `Feature ${index}`, type: 'feature' });
+      repository.attachSession(task.id, {
+        sessionId: `profile-session-${index}`,
+        configSnapshotId: index <= 3 ? control.id : candidate.id,
+      });
+      repository.upsertOutcome(task.id, {
+        buildStatus: 'passed',
+        testStatus: 'passed',
+        lintStatus: 'passed',
+        gitCommit: `commit-${index}`,
+        humanRating: 4,
+      });
+    }
+
+    const report = repository.buildExperimentProfile(experiment.id);
+    expect(report).toMatchObject({
+      schemaVersion: 'cohort-runtime-profile/v1',
+      evaluationStatus: 'ready',
+      sample: { totalTasks: 6, outcomeEligibleTasks: 6 },
+      groups: {
+        control: { eligibleTasks: 3 },
+        candidate: { eligibleTasks: 3 },
+      },
+    });
+
+    const app = Fastify();
+    registerTaskRoutes(app, { database });
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/experiments/${experiment.id}/profile`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ schemaVersion: 'cohort-runtime-profile/v1' });
+    await app.close();
+  });
 });
 
 function seedSession(database: ReturnType<typeof createDatabase>, id: string) {

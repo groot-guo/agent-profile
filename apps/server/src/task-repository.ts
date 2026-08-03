@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
+  buildCohortRuntimeProfile,
   buildTaskProfile,
+  type CohortRuntimeProfileReport,
   type TaskOutcomeEvidence,
   type TaskProfileConfiguration,
   type TaskProfileOutcome,
@@ -560,6 +562,85 @@ export class TaskRepository {
     });
   }
 
+  buildExperimentProfile(experimentId: string): CohortRuntimeProfileReport {
+    const experiment = this.requireExperiment(experimentId);
+    const cohort = this.requireCohort(experiment.cohortId);
+    const rows = this.database
+      .prepare(
+        `SELECT t.id as taskId, t.project_id as projectId, t.type,
+          t.complexity, ts.config_snapshot_id as configSnapshotId,
+          CASE WHEN o.build_status IS NOT NULL AND o.test_status IS NOT NULL
+            AND o.lint_status IS NOT NULL AND o.git_commit IS NOT NULL
+            AND o.human_rating IS NOT NULL THEN 1 ELSE 0 END as outcomeVerified,
+          COUNT(s.id) as sessionCount,
+          SUM(CASE WHEN s.start_time IS NOT NULL AND s.end_time IS NOT NULL
+            THEN 1 ELSE 0 END) as durationSessions,
+          SUM(CASE WHEN s.start_time IS NOT NULL AND s.end_time IS NOT NULL
+            THEN s.end_time - s.start_time ELSE 0 END) as durationMs,
+          SUM(COALESCE(s.input_tokens, 0) + COALESCE(s.cache_creation_tokens, 0)
+            + COALESCE(s.cache_read_tokens, 0) + COALESCE(s.output_tokens, 0)) as totalTokens,
+          SUM(COALESCE(s.total_cost, 0)) as totalCost,
+          SUM(COALESCE(s.cost_unknown_count, 0)) as costUnknownCount,
+          MAX(s.peak_context_tokens) as peakContextTokens,
+          SUM(COALESCE(s.cache_read_tokens, 0)) as cacheReadTokens,
+          SUM(COALESCE(s.input_tokens, 0) + COALESCE(s.cache_creation_tokens, 0)
+            + COALESCE(s.cache_read_tokens, 0)) as contextTokens,
+          SUM(COALESCE(sp.toolCalls, 0)) as toolCalls,
+          SUM(COALESCE(sp.toolErrors, 0)) as toolErrors
+         FROM tasks t
+         JOIN task_sessions ts ON ts.task_id = t.id
+         LEFT JOIN sessions s ON s.id = ts.session_id
+         LEFT JOIN task_outcomes o ON o.task_id = t.id
+         LEFT JOIN (
+           SELECT session_id,
+             SUM(CASE WHEN type = 'tool_call' THEN 1 ELSE 0 END) as toolCalls,
+             SUM(CASE WHEN type = 'tool_call' AND is_error = 1 THEN 1 ELSE 0 END) as toolErrors
+           FROM spans GROUP BY session_id
+         ) sp ON sp.session_id = s.id
+         WHERE ts.config_snapshot_id IN (?, ?)
+         GROUP BY t.id, ts.config_snapshot_id`,
+      )
+      .all(experiment.controlConfigId, experiment.candidateConfigId) as ExperimentProfileRow[];
+    const configsByTask = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const configs = configsByTask.get(row.taskId) ?? new Set<string>();
+      configs.add(row.configSnapshotId);
+      configsByTask.set(row.taskId, configs);
+    }
+    const tasks = rows
+      .filter((row) => configsByTask.get(row.taskId)?.size === 1 && cohortMatches(cohort, row))
+      .map((row) => ({
+        id: row.taskId,
+        configGroup:
+          row.configSnapshotId === experiment.controlConfigId
+            ? ('control' as const)
+            : ('candidate' as const),
+        outcomeVerified: row.outcomeVerified === 1,
+        metrics: {
+          duration_ms:
+            row.sessionCount > 0 && row.durationSessions === row.sessionCount
+              ? row.durationMs
+              : null,
+          total_tokens: row.sessionCount > 0 ? row.totalTokens : null,
+          total_cost: row.costUnknownCount === 0 ? row.totalCost : null,
+          tool_error_rate: row.toolCalls > 0 ? row.toolErrors / row.toolCalls : 0,
+          peak_context_tokens: row.peakContextTokens,
+          cache_hit_rate: row.contextTokens > 0 ? row.cacheReadTokens / row.contextTokens : null,
+        },
+      }));
+    return buildCohortRuntimeProfile({
+      experimentId: experiment.id,
+      title: experiment.title,
+      cohortId: experiment.cohortId,
+      controlConfigId: experiment.controlConfigId,
+      candidateConfigId: experiment.candidateConfigId,
+      primaryMetric: experiment.primaryMetric,
+      guardrails: experiment.guardrails,
+      persistedDecision: experiment.decision,
+      tasks,
+    });
+  }
+
   private requireConfiguration(id: string): TaskProfileConfiguration {
     const row = this.database.prepare('SELECT * FROM config_snapshots WHERE id = ?').get(id) as
       | ConfigRow
@@ -676,6 +757,26 @@ interface ProfileSessionRow {
   tool_errors: number | null;
 }
 
+interface ExperimentProfileRow {
+  taskId: string;
+  projectId: string | null;
+  type: string;
+  complexity: TaskRecord['complexity'] | null;
+  configSnapshotId: string;
+  outcomeVerified: number;
+  sessionCount: number;
+  durationSessions: number;
+  durationMs: number;
+  totalTokens: number;
+  totalCost: number;
+  costUnknownCount: number;
+  peakContextTokens: number | null;
+  cacheReadTokens: number;
+  contextTokens: number;
+  toolCalls: number;
+  toolErrors: number;
+}
+
 function mapTask(row: TaskRow): TaskRecord {
   return {
     id: row.id,
@@ -783,7 +884,14 @@ function mapProfileSession(row: ProfileSessionRow): TaskProfileSessionSample {
   };
 }
 
-function cohortMatches(cohort: CohortRecord, task: TaskRecord): boolean {
+function cohortMatches(
+  cohort: CohortRecord,
+  task: {
+    projectId?: string | null;
+    type: string;
+    complexity?: TaskRecord['complexity'] | null;
+  },
+): boolean {
   const projectId = cohort.definition.projectId;
   const type = cohort.definition.type;
   const complexity = cohort.definition.complexity;

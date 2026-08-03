@@ -13,6 +13,12 @@ export interface LoadedSourceSession {
     size: number;
     lines: number;
   };
+  append?: {
+    baseRevision: SourceRevision;
+    closeSpanIds: string[];
+    closeAt: number;
+    fallback: () => Promise<LoadedSourceSession | ExcludedSourceSession | null>;
+  };
 }
 
 export interface ExcludedSourceSession {
@@ -20,6 +26,10 @@ export interface ExcludedSourceSession {
   sessionId: string;
   reason: 'non_actionable_external_history';
 }
+
+export type AppendedSourceSession = LoadedSourceSession & {
+  append: NonNullable<LoadedSourceSession['append']>;
+};
 
 export type SourceLoadResult = LoadedSourceSession | ExcludedSourceSession | null;
 

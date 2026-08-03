@@ -146,6 +146,17 @@ Advancing a database parser-contract revision refreshes that source's derived
 rows through the same atomic path without touching unrelated sources. A legacy
 row with no fingerprint refreshes once.
 
+Claude Code and Codex JSONL adapters also keep a bounded process-local
+append checkpoint containing only a prefix digest, line/byte boundary, Session
+identity, and final-turn structural IDs. A strictly appended, complete suffix
+with monotonic timestamps and an independent turn is parsed incrementally and
+appended transactionally; Claude tool results crossing the checkpoint, Codex
+events that continue the previous turn, malformed or truncated lines, rewrites,
+cache misses, and forced rebuilds fall back to full parsing. The checkpoint is
+never persisted to SQLite and does not retain raw transcript or prompt content.
+The resulting Session revision, annotations, cost calculation, and atomic
+replacement/append guarantees remain authoritative.
+
 All adapters emit lazy source items to one import coordinator. The coordinator
 reports scanned/imported/updated/skipped/removed/failed counts and isolates an
 item failure from unrelated items. Its `skipReasons` distinguish

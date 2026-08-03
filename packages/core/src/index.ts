@@ -8,6 +8,20 @@ export {
   analyzeToolParams,
   calcEfficiencyScore,
 } from './analyzer';
+export {
+  buildCohortRuntimeProfile,
+  COHORT_RUNTIME_PROFILE_SCHEMA_VERSION,
+  type CohortRuntimeProfileInput,
+  type CohortRuntimeProfileReport,
+  MIN_RUNTIME_PROFILE_COVERAGE,
+  MIN_RUNTIME_PROFILE_TASKS,
+  type RuntimeProfileComparison,
+  type RuntimeProfileDistribution,
+  type RuntimeProfileGroup,
+  type RuntimeProfileGuardrail,
+  type RuntimeProfileMetric,
+  type RuntimeProfileTaskInput,
+} from './cohort-runtime-profile';
 export type {
   DiagnoseOptions,
   DiagnosisFinding,
@@ -59,6 +73,15 @@ export {
   isSessionRecordsProject,
   sessionRecordsProjectAgent,
 } from './project';
+export {
+  buildProjectProfile,
+  PROJECT_PROFILE_SCHEMA_VERSION,
+  type ProjectEvidenceStatus,
+  type ProjectProfileInput,
+  type ProjectProfileReport,
+  type ProjectProfileSessionSample,
+  type ProjectProfileToolSample,
+} from './project-profile';
 export type {
   HintSource,
   IterationHint,
@@ -76,9 +99,11 @@ export {
   PROMPT_REVIEW_SCHEMA_VERSION,
   reviewPromptStructure,
 } from './prompt-review';
+export type { TranscriptTextResult } from './scanners/transcript';
 export {
   findTranscriptFiles,
   findTranscriptFilesSync,
+  parseTranscriptText,
   readTranscript,
   readTranscriptSync,
 } from './scanners/transcript';

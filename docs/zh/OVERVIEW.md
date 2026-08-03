@@ -22,6 +22,8 @@ Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度�
 
 - **Span/Event 证据**与 **Session 分析**：描述一次已观察到的运行过程，不保证是完整
   原始 transcript，也不证明交付成功。
+- **Project Profile**（`project-profile/v1`）：按一个项目 key 聚合 primary Session 的
+  资源、来源覆盖、工具可靠性和日趋势；文件级证据保持“未采集”时不会被推断。
 - **Agent Process Profile**（`agent-profile/v1`）：按 Agent 聚合当前 Session 的资源、
   上下文、可靠性、协作、覆盖度和中性相对特征；它尚未按 Task、配置或 Outcome 分组。
 - **Task Profile**（`task-profile/v1`）：描述一个交付单元的关联 Session、配置快照、
@@ -61,7 +63,7 @@ transcript 标识。
 `sessions` 通过同一查询服务读取当前主链 Session 的安全摘要页，默认 20 条、最多 100 条，
 按开始时间和 ID 排序，并使用不透明 cursor 继续翻页；它不返回本地路径、transcript 标识、
 Span metadata 或内容。详细 Session 分析和 cursor 分页证据时间线仍以 Web/API 为主。
-`stats`、`profiles` 与 `task-profile <id>` 只读取已有的汇总统计、Agent Process Profile
+`stats`、`profiles` 与 `task-profile <id>` 读取已有的汇总统计、Project Profile、Agent Process Profile
 和 Task Profile，并保留覆盖度与 limitations；不新增指标公式、Outcome 结论或配置质量判断。
 
 各来源提供的字段覆盖度可能不同。“未采集”不能被解释为数值为零或执行失败。
@@ -147,6 +149,8 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   没有配置时，启发式分析与整个服务仍可正常使用。
 - 展示过程效率、综合过程分、项目内相对位置、趋势、分布，以及按 Agent/项目/模型的
   消耗统计。
+- 在“统计”页面按项目查看 `project-profile/v1`：展示 Session、来源和指标覆盖，资源汇总、工具
+  错误率与日趋势；有界采样和未采集的文件证据会明确显示。
 - 生成 `agent-profile/v1` Agent Process Profile，从资源、上下文、工具可靠性和
   sidechain 协作维度比较 Agent；每项均包含样本量、覆盖度和解释边界。
 - 生成 `prompt-review/v1` 和 `iteration-hints/v1`：确定性检查目标、范围、验收、

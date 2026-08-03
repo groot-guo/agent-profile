@@ -32,7 +32,7 @@ export async function importFromSource(
         continue;
       }
 
-      const loaded = await item.load();
+      let loaded = await item.load();
       if (!loaded) {
         skip('not_importable');
         continue;
@@ -50,6 +50,28 @@ export async function importFromSource(
         if (cleanup === 'removed') result.removed++;
         skip('excluded_non_actionable');
         continue;
+      }
+
+      if (loaded.append) {
+        const current = repository.getRevision(loaded.parsed.sessionId);
+        if (
+          !options.force &&
+          current.exists &&
+          current.kind === loaded.append.baseRevision.kind &&
+          current.fingerprint === loaded.append.baseRevision.fingerprint
+        ) {
+          if (repository.append(loaded, item.revision)) {
+            result.updated++;
+            result.sessionIds.push(loaded.parsed.sessionId);
+            continue;
+          }
+        }
+        const fallback = await loaded.append.fallback();
+        if (!fallback || 'excluded' in fallback || fallback.append) {
+          skip('not_importable');
+          continue;
+        }
+        loaded = fallback;
       }
 
       const sessionId = loaded.parsed.sessionId;

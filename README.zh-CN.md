@@ -102,10 +102,11 @@ HTTP，但会把派生的本地 Session/Span 数据导入所选数据库；详�
 本地路径、transcript 标识、Span metadata 或内容；详细 Session 分析、cursor 分页证据时间线和
 按需脱敏预览仍以 Web/API 为主。
 
-`stats`、`profiles` 与 `task-profile <id>` 分别输出已经实现的汇总统计、Agent Process
+`stats`、`profiles` 与 `task-profile <id>` 分别输出已经实现的汇总统计、Project Profile、Agent Process
 Profile 和显式 Task Profile。JSON 会保留原报告的指标覆盖度与 limitations。过程证据不能证明
-交付质量；Agent Profile 的相对观察不是通用质量排名，Task Profile 只覆盖其显式关联的 Session
-与本地记录的 Outcome 证据。
+交付质量；`/api/experiments/:id/profile` 在 Outcome 和指标覆盖达到最低门槛时输出有界的
+cohort/configuration 分布与 guardrail 结果，但不推断通用或因果赢家。Agent Profile 的相对观察
+不是通用质量排名，Task Profile 只覆盖其显式关联的 Session 与本地记录的 Outcome 证据。
 
 ## 第一次导入数据
 
@@ -174,6 +175,8 @@ Experiment API 可保存比较定义与证据状态，但目前不会自动计�
 - **Session 分析**解释一次已观察到的运行；它是过程证据，不是交付成功证明。
 - **Agent Process Profile**（`agent-profile/v1`）展示一个 Agent 当前 Session 集合上的
   资源、上下文、可靠性、协作、覆盖度和中性同类相对特征。
+- **Project Profile**（`project-profile/v1`）展示一个项目 key 下 primary Session 的
+  资源汇总、来源/指标覆盖、工具可靠性和日趋势；它是有界过程证据，文件覆盖可能保持“未采集”。
 - **Task Profile**（`task-profile/v1`）展示一个交付单元的关联 Session/配置、Outcome
   覆盖度与聚合过程证据。
 - 按 cohort/configuration 聚合的 Runtime Profile、自动实验结论、回归决策和运行时反馈
@@ -194,7 +197,8 @@ cost 当作可移植的计费证据。
   表示观察到的行为差异，不代表谁更好。
 - **迭代**：本地检查任务提示词的目标、范围、验收、约束、上下文和验证结构。结合运行
   画像得到的建议是待验证假设，不会自动改写提示词。
-- **统计**：查看 Token、成本、上下文，以及项目、Agent、模型的汇总和分布。
+- **统计**：查看 Token、成本、上下文，以及项目、Agent、模型的汇总和分布；选择项目后还可查看
+  有界的 Project Profile。
 
 会话证据页通过与查询绑定的 `(开始时间, ID)` cursor 可到达所有**已存储并归一化的 Span**，
 但不等同于完整原始 transcript。默认每页 80 条，类型、主链/Sidechain 和结果筛选在服务端
@@ -307,8 +311,9 @@ pnpm dev
   自动 cohort 统计、回归检测、因果实验结论和 Runtime feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化
   任务树仍是后续能力。
-- 历史很大时，仍需发现文件并整体替换发生变化的 Session；append-only 解析和超大 Session
-  虚拟化尚未完成。
+- 历史很大时仍需发现文件；Claude Code/Codex 的安全 JSONL 尾部追加可复用进程内结构化
+  checkpoint，重写、坏行、不完整回合和强制 rebuild 会回退到完整解析与替换。超大 Session
+  虚拟化仍是后续工作。
 - 产品设计为本地使用。不要把 API 暴露到不可信网络；如要这样做，需要先补认证和目录访问
   控制。设置 `HOST=0.0.0.0` 会显式把无认证 API 暴露到回环地址之外；只能在可信网络中
   使用，并通过 `WEB_ORIGIN` 严格限制浏览器来源。

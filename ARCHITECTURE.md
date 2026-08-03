@@ -21,6 +21,10 @@ The product has distinct evidence layers:
 
 - **Span/Event evidence** and **Session analysis** describe observed runtime
   process; they do not prove delivery success.
+- **Project Profile** is the implemented `project-profile/v1` report over a
+  selected project key and its primary Session sample. It aggregates observed
+  resources, source coverage, tool reliability, and time trends while keeping
+  file evidence and missing fields explicit.
 - **Agent Process Profile** is the implemented `agent-profile/v1` report over
   Session distributions. Its scope is currently Agent plus available Session
   evidence; it is not grouped by Configuration Snapshot, Task type, or Outcome.
@@ -28,10 +32,11 @@ The product has distinct evidence layers:
   delivery unit, its linked Sessions/configurations, and its explicit Outcome
   coverage.
 - **Cohort/Experiment definitions** persist comparison scope and guardrails.
-  The local Task workspace can create and edit those definitions, but does not
-  calculate outcomes or causal winners.
-- A cohort/configuration-level **Runtime Profile** is future work. It requires
-  comparable Task samples, Outcome guardrails, coverage, and statistical rules.
+  The local Task workspace can create and edit those definitions. The bounded
+  `cohort-runtime-profile/v1` report evaluates comparable samples and guardrails
+  without calculating a universal or causal winner.
+- Broader time-window/statistical regression policies and Runtime feedback remain
+  future work beyond the current bounded Experiment report.
 
 All reports expose their scope and limitations. Process metrics may form a
 diagnostic or iteration hypothesis; they are not a universal Agent ranking or a
@@ -266,6 +271,13 @@ set-based queries instead of loading all Session rows into JavaScript. The
 legacy `/api/sessions` full-array route remains available for compatibility and
 is still measured as a regression baseline.
 
+The Stats workspace exposes `project-profile/v1` for one selected `project_key`
+and optional millisecond time range. The Server keeps at most 1,000 newest
+matching primary Sessions and 10,000 normalized tool events; the report marks
+sampled scopes and lists the resulting limitations. File-level evidence is
+explicitly `not_captured` because the normalized Session contract does not
+prove complete repository file coverage.
+
 The Session page now starts from `session-analysis/v1`, which retains complete
 diagnosis, score, and aggregate semantics without returning the complete Span
 array. Context is sampled to at most 240 points while retaining the first, last,
@@ -285,12 +297,17 @@ relevant fields. The compatibility `/api/session/:id/analysis`,
 their complete-Span behavior and remain explicit full-detail/export surfaces.
 
 The source import coordinator discovers all source items but skips an unchanged
-item before loading/parsing it. When a source revision changes, the complete
-normalized Session is parsed and atomically replaces its stored Spans. This
-preserves revision and annotation guarantees, but transcript append-only parsing
-is not implemented. Source observation therefore rate-limits complete parsing of
-one changed Claude/Codex JSONL Session; T85 remains responsible for safe append
-checkpoints and parser-equivalence fallback.
+item before loading/parsing it. When a source revision changes, Claude Code and
+Codex JSONL adapters may use a process-local checkpoint when the previous file
+prefix is unchanged, the file ends at a complete line, timestamps remain
+monotonic, and the suffix is an independent turn. The suffix is parsed and
+atomically appended to the existing Session; the previous final turn's end time
+and Session aggregates are refreshed in the same transaction. Checkpoints retain
+only structural state and digests, never raw transcript content. Rewrites,
+truncations, malformed suffixes, cross-boundary tool results, incomplete Codex
+turns, cache misses, forced rebuilds, and append conflicts use the existing full
+parse and atomic replacement path. This preserves revision, annotation, privacy,
+and metric semantics while reducing repeated JSONL parsing for safe append cases.
 
 The reproducible T82–T84 benchmark in `docs/performance.md` fixes a content-free
 desktop workload at 500 Sessions, 75,000 Spans, one 3,000-Span detail Session,
@@ -604,6 +621,19 @@ through `nextCursor`, and resets the window when filters or content mode change.
 It does not request evidence while the user remains in the overview, context/cost,
 or tools/chain views.
 
+### Project Profile report contract
+
+`project-profile/v1` describes one project key across its primary Sessions. Its
+scope contains the requested time range, linked/available Session counts,
+sampling state, Agent distribution, and source-kind coverage. Resource metrics
+include token totals, trusted cost coverage, cache/context/duration coverage,
+and normalized tool-call error rates. Tool frequencies and UTC day trends are
+observed process evidence, not repository or delivery-quality evidence.
+
+Unknown pricing is excluded from trusted cost totals, absent source fields are
+reported as partial coverage, and file evidence remains `not_captured`. The
+report never labels a project better, complete, correct, or causally improved.
+
 ### Agent Process Profile report contract
 
 `agent-profile/v1` is the implemented Agent Process Profile: a stable derived
@@ -651,8 +681,10 @@ field and reports the same observed/total count as `task-profile/v1`. Structured
 evidence is limited to 50 entries with required kind and optional verification
 status/reference; malformed arrays or entries are rejected with a model error
 instead of being stored or converted into success/failure. A missing field
-never becomes a failure. The report does not compute cross-Task cohort
-distributions, configuration winners, regression decisions, or causal effects.
+never becomes a failure. `task-profile/v1` remains a single-Task report;
+cross-Task distributions are exposed separately by the bounded
+`cohort-runtime-profile/v1` Experiment report, which does not infer universal
+configuration winners or causal effects.
 
 ### Prompt review and iteration-hint contract
 
@@ -713,6 +745,7 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/sessions/compare` | Selected-session comparison |
 | `GET` | `/api/home-statistics` | Bounded `home-statistics/v1` overview, recent tools, and cost/token highlights |
 | `GET` | `/api/stats` | Compatibility aggregate statistics and distributions, computed with set-based Session aggregation |
+| `GET` | `/api/projects/profile?project=...&from=...&to=...` | Bounded `project-profile/v1` cross-Session project evidence |
 | `GET` | `/api/profiles/agents` | Versioned process profiles for all observed Agents |
 | `GET` | `/api/profiles/agents/:agent` | One observed Agent profile with peer-relative context |
 | `POST` | `/api/prompt-review` | Ephemeral deterministic prompt review and guarded iteration hints |
@@ -724,6 +757,7 @@ page exposes the same contract and privacy boundaries.
 | `GET/POST` | `/api/config-snapshots` | List or create version/hash-only Configuration Snapshots |
 | `GET/POST` | `/api/cohorts` | List or create cohort definitions |
 | `GET/POST` | `/api/experiments` | List or create guarded experiment records |
+| `GET` | `/api/experiments/:id/profile` | Outcome-guarded `cohort-runtime-profile/v1` distributions and bounded guardrail results |
 | `PATCH` | `/api/cohorts/:id`, `/api/experiments/:id` | Update comparison lifecycle/evidence state within database guardrails |
 | `GET/PUT` | `/api/pricing` | Model pricing |
 | `GET/PUT` | `/api/model-context` | Model context-window configuration |

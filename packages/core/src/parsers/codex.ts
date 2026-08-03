@@ -133,6 +133,10 @@ function makeSpan(p: {
 
 export interface CodexParseOptions {
   filePath: string;
+  sessionId?: string;
+  cwd?: string;
+  claudeVersion?: string;
+  sourceParentSessionId?: string;
 }
 
 // 解析 Codex rollout JSONL → ParsedSession
@@ -156,25 +160,24 @@ export function parseCodexTranscript(
     .map(({ entry }) => entry);
 
   // 1. 提取 session_meta
-  const meta = sorted.find((e) => e.type === 'session_meta')?.payload;
-  if (!meta) return null;
+  const meta = sorted.find((e) => e.type === 'session_meta')?.payload ?? {};
   const sessionId =
     typeof meta.id === 'string'
       ? meta.id
       : typeof meta.session_id === 'string'
         ? meta.session_id
-        : undefined;
+        : opts.sessionId;
   if (!sessionId) return null;
 
   const hasTurnContexts = sorted.some((entry) => entry.type === 'turn_context');
-  const cwd = meta.cwd as string | undefined;
-  const claudeVersion = meta.cli_version as string | undefined;
+  const cwd = (meta.cwd as string | undefined) ?? opts.cwd;
+  const claudeVersion = (meta.cli_version as string | undefined) ?? opts.claudeVersion;
   const sourceParentSessionId =
     typeof meta.parent_thread_id === 'string' &&
     meta.parent_thread_id.trim() &&
     meta.parent_thread_id !== sessionId
       ? meta.parent_thread_id
-      : undefined;
+      : opts.sourceParentSessionId;
   const isSidechain = sourceParentSessionId !== undefined;
 
   // 2. 收集 reasoning 文本构建 session name

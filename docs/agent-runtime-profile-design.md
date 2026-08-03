@@ -1,8 +1,8 @@
 # Agent Runtime Profile 设计方案
 
 > 状态：Proposal；Task/Outcome/Configuration、Cohort/Experiment 定义与单 Task 的
-> `task-profile/v1` 已由 T49 实现。自动 cohort/configuration 比较、回归检测与 Runtime
-> feedback 仍未实现。
+> `task-profile/v1` 已由 T49 实现，T89 已实现有界的
+> `cohort-runtime-profile/v1`。更广泛的回归策略与 Runtime feedback 仍未实现。
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
 ## 文档地位
@@ -60,9 +60,9 @@ flowchart LR
 | Outcome | 可验证的任务结果与人工反馈 | 已实现显式可空字段与结构化证据 |
 | Agent Process Profile | 基于当前 Session 分布的 Agent 运行过程画像 | 已实现为 `agent-profile/v1`；不含 Task/Configuration/Outcome 聚合 |
 | Task Profile | 一个 Task 的关联 Session、Configuration 和 Outcome 覆盖度画像 | 已实现为 `task-profile/v1` |
-| Cohort/Configuration Runtime Profile | 基于可比较 Task、配置和 Outcome 的运行画像 | 未来；不得由当前报告暗示 |
-| Cohort | 可公平比较的任务集合，如同项目的“功能实现”任务 | 已实现定义与生命周期模型，统计比较未实现 |
-| Experiment | 对同类任务比较不同配置版本的受控试验 | 已实现受护栏记录模型，自动评估未实现 |
+| Cohort/Configuration Runtime Profile | 基于可比较 Task、配置和 Outcome 的运行画像 | 已实现 `cohort-runtime-profile/v1`；最低样本、覆盖与 guardrail 限制必须显式展示 |
+| Cohort | 可公平比较的任务集合，如同项目的“功能实现”任务 | 已实现定义与生命周期模型；有界统计比较由 `cohort-runtime-profile/v1` 提供 |
+| Experiment | 对同类任务比较不同配置版本的受控试验 | 已实现受护栏记录模型与有界 `cohort-runtime-profile/v1` 评估 |
 
 **Session 是原始过程，Profile 是可行动的解释。** 原始调用记录只能作为证据层，不能替代结果评价或建议。
 
@@ -264,8 +264,9 @@ Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，�
 
 ### Phase 2：Cohort 与 Experiment
 
-当前进度：T49 已实现 cohort/experiment 定义、证据状态和因果决策护栏；自动分布比较、
-最低样本、guardrail 计算和回归检测仍未实现。
+当前进度：T49 已实现 cohort/experiment 定义、证据状态和因果决策护栏；T89 已实现
+`cohort-runtime-profile/v1` 的 Outcome-guarded 分布、最低样本与有限 guardrail 计算。
+通用回归策略和 Runtime feedback 仍未实现。
 
 - 定义 cohort：项目、任务类型、复杂度区间、Agent/模型。
 - 支持控制组/候选配置对比，展示主要指标与 guardrail。

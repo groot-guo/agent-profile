@@ -126,7 +126,8 @@ content. Detailed Session analysis, cursor-paged evidence timelines, and opt-in
 redacted previews remain in the Web/API.
 
 `stats`, `profiles`, and `task-profile <id>` expose the already implemented
-aggregate statistics, Agent Process Profile, and explicit Task Profile reports.
+aggregate statistics, Project Profile, Agent Process Profile, and explicit Task
+Profile reports.
 Their JSON reports retain the existing metric coverage and limitations. Process
 evidence does not establish delivery quality; the Agent Profile's relative
 observations are not universal quality rankings, and a Task Profile only covers
@@ -216,8 +217,9 @@ invalid entries are rejected rather than converted into a result. Missing
 fields remain visibly uncollected rather than failed. `task-profile/v1`
 aggregates available linked Sessions with explicit coverage and limitations;
 its five-field verified coverage is build, test, lint, Git commit, and human
-rating. Cohort and experiment APIs persist comparison definitions and evidence
-state, but do not yet calculate a causal winner from process metrics.
+rating. `GET /api/experiments/:id/profile` provides Outcome-guarded,
+minimum-sample distributions and bounded guardrail results; it does not infer
+a universal or causal winner from process metrics.
 
 ## How to read a Profile
 
@@ -226,12 +228,16 @@ state, but do not yet calculate a causal winner from process metrics.
 - **Agent Process Profile** (`agent-profile/v1`) describes distributions across
   an Agent’s current Sessions: resources, context, reliability, collaboration,
   coverage, and neutral peer-relative characteristics.
+- **Project Profile** (`project-profile/v1`) describes one project key across
+  primary Sessions: resource totals, source/metric coverage, tool reliability,
+  and time trends. It is bounded process evidence; file coverage may remain
+  `not_captured`.
 - **Task Profile** (`task-profile/v1`) describes one delivery unit, its linked
   Sessions/configurations, explicit Outcome coverage, and aggregated process
   evidence.
-- A cohort/configuration-level Runtime Profile, automated experiment result,
-  regression decision, and live Runtime feedback are future work. They are not
-  current product claims.
+- `cohort-runtime-profile/v1` provides a bounded cohort/configuration comparison
+  when Outcome and metric coverage meet minimum thresholds; live Runtime
+  feedback and automatic configuration mutation remain future work.
 
 ## What the main views do
 
@@ -245,7 +251,7 @@ state, but do not yet calculate a causal winner from process metrics.
   constraints, context, and verification structure. Optional runtime-profile
   hints are hypotheses to validate, not automatic prompt rewrites.
 - **统计** — inspect aggregate token, cost, context, project, Agent, and model
-  distributions.
+  distributions, then select a project for its bounded Project Profile.
 
 The Session evidence view can reach every *stored normalized Span* through a
 query-bound `(start time, ID)` cursor, but it is not every line of the original
@@ -401,9 +407,10 @@ pnpm dev
   captures `parent_thread_id`, the Session detail page shows the source-native
   link (including an unavailable parent); a universal task graph and combined
   resource attribution remain future work.
-- Very large session histories still use file discovery and full changed-session
-  replacement; append-only parsing and large-session virtualisation are planned
-  improvements.
+- Very large session histories still use file discovery. Safe Claude Code/Codex
+  JSONL appends can reuse a process-local structural checkpoint; rewrites,
+  malformed or incomplete suffixes, and forced rebuilds fall back to full
+  changed-session replacement. Large-session virtualisation remains future work.
 - The application is designed for local use. Do not expose its API to an
   untrusted network without adding authentication and directory-access controls.
   Setting `HOST=0.0.0.0` is an explicit opt-in that exposes the unauthenticated

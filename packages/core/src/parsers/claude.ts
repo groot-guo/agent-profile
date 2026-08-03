@@ -93,6 +93,7 @@ function makeSpan(p: MakeSpanInput): Span {
 export interface ParseOptions {
   filePath: string;
   agent?: string;
+  sessionId?: string;
 }
 
 // 解析一个 transcript 的所有行 → sessionId + 元信息 + spans
@@ -106,11 +107,14 @@ export function parseTranscript(
   const sorted = [...entries].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
 
   // sessionId：取第一个非空（sessionId / session_id / uuid）；全空则跳过该文件
-  let sid = '';
-  for (const e of sorted) {
-    sid = e.sessionId || e.session_id || e.uuid || '';
-    if (sid) break;
+  let sid = opts.sessionId || '';
+  if (!sid) {
+    for (const e of sorted) {
+      sid = e.sessionId || e.session_id || e.uuid || '';
+      if (sid) break;
+    }
   }
+  if (!sid) sid = opts.sessionId || '';
   if (!sid) return null;
 
   // 时间范围只取有 timestamp 的行（mode/permission-mode 等元数据行无 timestamp）

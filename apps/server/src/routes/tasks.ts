@@ -91,6 +91,10 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
 
   app.get('/api/experiments', async () => ({ experiments: repository.listExperiments() }));
 
+  app.get<{ Params: { id: string } }>('/api/experiments/:id/profile', async (request, reply) =>
+    respond(reply, 200, () => repository.buildExperimentProfile(request.params.id)),
+  );
+
   app.post('/api/experiments', async (request, reply) =>
     respond(reply, 201, () =>
       repository.createExperiment(

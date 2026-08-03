@@ -1,12 +1,13 @@
 'use client';
 
+import type { ProjectProfileReport } from '@agent-profile/core';
 import { isSessionRecordsProject } from '@agent-profile/core/project';
 import { useEffect, useState } from 'react';
 import { API } from '../config';
 import { AgentMark, getModelIcon } from '../icons';
 import { projectLabel } from '../project-label';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtTokens, R, SP } from '../theme';
-import { BarRow, Card, Empty, Notice, SectionTitle, StatCard } from '../ui';
+import { BarRow, Card, Chip, Empty, Notice, SectionTitle, StatCard } from '../ui';
 
 interface StatsData {
   overview: {
@@ -67,6 +68,10 @@ interface StatsData {
 
 export default function StatsPage() {
   const [data, setData] = useState<StatsData | null>(null);
+  const [selectedProject, setSelectedProject] = useState('');
+  const [projectProfile, setProjectProfile] = useState<ProjectProfileReport | null>(null);
+  const [projectProfileError, setProjectProfileError] = useState('');
+  const [projectProfileLoading, setProjectProfileLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -77,6 +82,32 @@ export default function StatsPage() {
       .catch((e) => setError(e instanceof Error ? e.message : 'failed'))
       .finally(() => setLoading(false));
   }, []);
+
+  const activeProject = selectedProject || data?.byProject[0]?.cwd || '';
+
+  useEffect(() => {
+    if (!activeProject) return;
+    const controller = new AbortController();
+    setProjectProfileLoading(true);
+    setProjectProfileError('');
+    fetch(`${API}/projects/profile?project=${encodeURIComponent(activeProject)}`, {
+      signal: controller.signal,
+    })
+      .then((response) =>
+        response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)),
+      )
+      .then((report: ProjectProfileReport) => setProjectProfile(report))
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setProjectProfile(null);
+          setProjectProfileError(reason instanceof Error ? reason.message : '项目画像加载失败');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setProjectProfileLoading(false);
+      });
+    return () => controller.abort();
+  }, [activeProject]);
 
   if (loading) return <Empty text="加载统计中…" />;
   if (error || !data)
@@ -214,6 +245,15 @@ export default function StatsPage() {
         ))}
       </Card>
 
+      <ProjectProfileCard
+        projects={byProject}
+        selectedProject={activeProject}
+        profile={projectProfile}
+        loading={projectProfileLoading}
+        error={projectProfileError}
+        onProjectChange={setSelectedProject}
+      />
+
       {data.baseline && Object.keys(data.baseline.projects).length > 0 && (
         <Card title="项目基线与异常">
           {Object.entries(data.baseline.projects)
@@ -307,6 +347,156 @@ export default function StatsPage() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function ProjectProfileCard({
+  projects,
+  selectedProject,
+  profile,
+  loading,
+  error,
+  onProjectChange,
+}: {
+  projects: StatsData['byProject'];
+  selectedProject: string;
+  profile: ProjectProfileReport | null;
+  loading: boolean;
+  error: string;
+  onProjectChange: (project: string) => void;
+}) {
+  return (
+    <Card title="Project Profile" meta="跨 Session 过程证据">
+      <div style={{ display: 'grid', gap: SP.md }}>
+        <label style={{ display: 'grid', gap: 6, color: C.sub, fontSize: FS.cap }}>
+          项目范围
+          <select
+            value={selectedProject}
+            onChange={(event) => onProjectChange(event.target.value)}
+            style={{
+              width: '100%',
+              minHeight: 44,
+              padding: '0 10px',
+              border: `1px solid ${C.border}`,
+              borderRadius: R.md,
+              background: C.bg,
+              color: C.text,
+              font: 'inherit',
+            }}
+          >
+            {projects.map((project) => (
+              <option key={project.cwd} value={project.cwd}>
+                {isSessionRecordsProject(project.cwd) ? projectLabel(project.cwd) : project.cwd}
+              </option>
+            ))}
+          </select>
+        </label>
+        {loading && <Empty text="项目画像加载中…" />}
+        {error && <Notice kind="err">项目画像加载失败：{error}</Notice>}
+        {!loading && !error && profile && <ProjectProfileSummary profile={profile} />}
+        {!loading && !error && !profile && <Empty text="暂无项目 Profile" />}
+      </div>
+    </Card>
+  );
+}
+
+function ProjectProfileSummary({ profile }: { profile: ProjectProfileReport }) {
+  const status = (value: string) =>
+    value === 'observed' ? '已观察' : value === 'partial' ? '部分覆盖' : '未采集';
+  return (
+    <div style={{ display: 'grid', gap: SP.md }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: SP.md,
+        }}
+      >
+        <StatCard
+          value={`${profile.scope.availableSessions}/${profile.scope.linkedSessions}`}
+          label="Session 可用"
+          tip={profile.scope.sampled ? '当前结果为有界采样' : '当前项目范围内的 primary Session'}
+        />
+        <StatCard value={fmtTokens(profile.metrics.totalTokens)} label="项目 Token" />
+        <StatCard
+          value={`${(profile.metrics.costCoverage.ratio * 100).toFixed(0)}%`}
+          label="成本覆盖"
+          warn={profile.metrics.costCoverage.ratio < 1}
+          tip="未知定价 Session 不计入可信成本总额"
+        />
+        <StatCard
+          value={
+            profile.metrics.toolErrorRate == null
+              ? '未采集'
+              : `${(profile.metrics.toolErrorRate * 100).toFixed(1)}%`
+          }
+          label="工具错误率"
+          warn={profile.metrics.toolErrors > 0}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Chip color={C.medium}>
+          来源 {profile.coverage.sources.observed}/{profile.coverage.sources.total}
+        </Chip>
+        <Chip color={profile.coverage.tools.status === 'observed' ? C.cr : C.medium}>
+          工具 {status(profile.coverage.tools.status)}
+        </Chip>
+        <Chip color={C.medium}>文件 {status(profile.coverage.files.status)}</Chip>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: SP.xl }}>
+        <div>
+          <SectionTitle meta={`${profile.tools.length} 类工具`}>工具可靠性</SectionTitle>
+          {profile.tools.slice(0, 8).map((tool) => (
+            <div
+              key={tool.name}
+              className="ap-row"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: SP.md,
+                padding: '6px 8px',
+                color: C.text,
+                fontSize: FS.sm,
+              }}
+            >
+              <span className="clamp1" title={tool.name}>
+                {tool.name}
+              </span>
+              <span className="tnum" style={{ color: C.sub, flexShrink: 0 }}>
+                {tool.calls} 次 · {tool.errors} 错误
+              </span>
+            </div>
+          ))}
+          {profile.tools.length === 0 && <Empty text="未采集工具调用" />}
+        </div>
+        <div>
+          <SectionTitle meta={`${profile.trends.length} 天`}>日趋势</SectionTitle>
+          {profile.trends.slice(-7).map((trend) => (
+            <div
+              key={trend.day}
+              className="ap-row"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: SP.md,
+                padding: '6px 8px',
+                color: C.sub,
+                fontSize: FS.cap,
+              }}
+            >
+              <span>{trend.day}</span>
+              <span className="tnum">
+                {trend.sessions} 会话 · {fmtTokens(trend.tokens)} · {trend.toolErrors} 工具错误
+              </span>
+            </div>
+          ))}
+          {profile.trends.length === 0 && <Empty text="缺少可用日期证据" />}
+        </div>
+      </div>
+      {profile.limitations.length > 0 && (
+        <Notice kind="info">{profile.limitations.slice(0, 3).join('；')}</Notice>
+      )}
     </div>
   );
 }

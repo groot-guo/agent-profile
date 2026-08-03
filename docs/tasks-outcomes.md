@@ -67,6 +67,19 @@ guardrails, lifecycle, evidence status, and an optional decision. A `keep` or
 the record is user/Runtime-supplied evidence state; Agent Profile does not infer
 a causal winner from process metrics alone.
 
-The current implementation does not yet calculate cohort distributions,
-minimum-sample experiment statistics, regression detection, or Runtime feedback
-hints. Those remain later work.
+## Cohort Runtime Profile
+
+`GET /api/experiments/:id/profile` returns `cohort-runtime-profile/v1`. It
+matches Tasks against the persisted Cohort definition and requires exactly one
+linked control or candidate Configuration Snapshot per Task. Only Tasks with
+all five tracked Outcome fields contribute to guarded distributions. Each
+group needs at least three Outcome-eligible Tasks and 50% metric coverage;
+otherwise the report returns `insufficient_evidence`.
+
+The report includes task-level distributions for duration, total tokens, known
+cost, tool-error rate, peak context, and cache hit rate. Guardrails are
+evaluated only when they use `{ metric, maxRelativeRegression }`; arbitrary
+stored guardrail values remain `not_evaluable`. Relative differences are
+descriptive observations and never become a universal Agent/configuration
+winner or an automatic keep/rollback mutation. Runtime feedback hints remain
+future work.

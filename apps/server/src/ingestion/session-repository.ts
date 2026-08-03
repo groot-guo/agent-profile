@@ -10,8 +10,35 @@ import type { LoadedSourceSession, SourceRevision, StoredSessionRevision } from 
 
 type PricingLookup = (model?: string, at?: number) => Pricing | undefined;
 
+interface StoredSessionAggregate {
+  id: string;
+  name: string | null;
+  filePath: string;
+  agent: string;
+  startTime: number;
+  endTime: number | null;
+  cwd: string | null;
+  gitBranch: string | null;
+  claudeVersion: string | null;
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  costUnknownCount: number;
+  costCurrency: string | null;
+  costCalculatedAt: number | null;
+  costCalculatorVersion: string | null;
+  peakContextTokens: number;
+  avgContextTokens: number;
+  cacheHitRate: number;
+  messageCount: number;
+}
+
 export class SessionRepository {
   private readonly getRevisionStatement;
+  private readonly getAggregateStatement;
+  private readonly hasSpanStatement;
   private readonly getAnnotationsStatement;
   private readonly upsertSessionStatement;
   private readonly deleteSpansStatement;
@@ -19,7 +46,11 @@ export class SessionRepository {
   private readonly insertSourceParentRelationshipStatement;
   private readonly deleteSessionStatement;
   private readonly insertSpanStatement;
+  private readonly updateSpanEndStatement;
   private readonly replaceTransaction;
+  private readonly appendTransaction;
+  private readonly appendSessionStatement;
+  private readonly refreshAverageContextStatement;
   private readonly removeTransaction;
   private readonly resetTransaction;
 
@@ -33,6 +64,22 @@ export class SessionRepository {
       FROM sessions
       WHERE id = ?
     `);
+    this.getAggregateStatement = database.prepare(`
+      SELECT id, name, file_path as filePath, agent, start_time as startTime,
+        end_time as endTime, cwd, git_branch as gitBranch,
+        claude_version as claudeVersion, input_tokens as inputTokens,
+        cache_creation_tokens as cacheCreationTokens,
+        cache_read_tokens as cacheReadTokens, output_tokens as outputTokens,
+        total_cost as totalCost, cost_unknown_count as costUnknownCount,
+        cost_currency as costCurrency, cost_calculated_at as costCalculatedAt,
+        cost_calculator_version as costCalculatorVersion,
+        peak_context_tokens as peakContextTokens, avg_context_tokens as avgContextTokens,
+        cache_hit_rate as cacheHitRate, message_count as messageCount
+      FROM sessions WHERE id = ?
+    `);
+    this.hasSpanStatement = database.prepare(
+      'SELECT 1 as present FROM spans WHERE session_id = ? AND id = ? LIMIT 1',
+    );
     this.getAnnotationsStatement = database.prepare(
       'SELECT source_kind as sourceKind, tags, notes FROM sessions WHERE id = ?',
     );
@@ -112,6 +159,33 @@ export class SessionRepository {
         @stopReason, @isError, @isSidechain, @metadata
       )
     `);
+    this.updateSpanEndStatement = database.prepare(
+      'UPDATE spans SET end_time = ? WHERE session_id = ? AND id = ?',
+    );
+    this.appendSessionStatement = database.prepare(`
+      UPDATE sessions SET
+        name = @name, file_mtime = @fileMtime, file_size = @fileSize,
+        file_lines = @fileLines, source_kind = @sourceKind,
+        source_updated_at = @sourceUpdatedAt, source_fingerprint = @sourceFingerprint,
+        end_time = @endTime, cwd = @cwd, git_branch = @gitBranch,
+        claude_version = @claudeVersion, input_tokens = @inputTokens,
+        cache_creation_tokens = @cacheCreationTokens,
+        cache_read_tokens = @cacheReadTokens, output_tokens = @outputTokens,
+        total_cost = @totalCost, cost_unknown_count = @costUnknownCount,
+        cost_currency = @costCurrency, cost_calculated_at = @costCalculatedAt,
+        cost_calculator_version = @costCalculatorVersion,
+        peak_context_tokens = @peakContextTokens,
+        avg_context_tokens = @avgContextTokens, cache_hit_rate = @cacheHitRate,
+        message_count = @messageCount, imported_at = @importedAt
+      WHERE id = @id
+    `);
+    this.refreshAverageContextStatement = database.prepare(`
+      UPDATE sessions
+      SET avg_context_tokens = COALESCE(
+        (SELECT CAST(ROUND(AVG(context_tokens)) AS INTEGER)
+         FROM spans WHERE session_id = ? AND type = 'llm_turn'), 0)
+      WHERE id = ?
+    `);
     this.replaceTransaction = database.transaction(
       (
         summary: SessionSummary,
@@ -165,6 +239,61 @@ export class SessionRepository {
             importedAt,
           );
         }
+      },
+    );
+    this.appendTransaction = database.transaction(
+      (
+        existing: StoredSessionAggregate,
+        summary: SessionSummary,
+        spans: Span[],
+        closeSpanIds: string[],
+        closeAt: number,
+        revision: SourceRevision,
+        importedAt: number,
+      ) => {
+        for (const span of spans) this.insertSpanStatement.run(toSpanRow(span));
+        for (const spanId of closeSpanIds) {
+          this.updateSpanEndStatement.run(closeAt, existing.id, spanId);
+        }
+        const inputTokens = existing.inputTokens + summary.inputTokens;
+        const cacheCreationTokens = existing.cacheCreationTokens + summary.cacheCreationTokens;
+        const cacheReadTokens = existing.cacheReadTokens + summary.cacheReadTokens;
+        const outputTokens = existing.outputTokens + summary.outputTokens;
+        const totalInput = inputTokens + cacheCreationTokens + cacheReadTokens;
+        const endTime =
+          summary.endTime !== undefined &&
+          (existing.endTime === null || summary.endTime > existing.endTime)
+            ? summary.endTime
+            : existing.endTime;
+        this.appendSessionStatement.run({
+          id: existing.id,
+          name: summary.name ?? existing.name,
+          fileMtime: summary.fileMtime ?? null,
+          fileSize: summary.fileSize ?? null,
+          fileLines: summary.fileLines ?? null,
+          sourceKind: revision.kind,
+          sourceUpdatedAt: revision.updatedAt,
+          sourceFingerprint: revision.fingerprint,
+          endTime,
+          cwd: summary.cwd ?? existing.cwd,
+          gitBranch: summary.gitBranch ?? existing.gitBranch,
+          claudeVersion: summary.claudeVersion ?? existing.claudeVersion,
+          inputTokens,
+          cacheCreationTokens,
+          cacheReadTokens,
+          outputTokens,
+          totalCost: existing.totalCost + summary.totalCost,
+          costUnknownCount: existing.costUnknownCount + summary.costUnknownCount,
+          costCurrency: summary.costCurrency ?? existing.costCurrency,
+          costCalculatedAt: summary.costCalculatedAt ?? existing.costCalculatedAt,
+          costCalculatorVersion: summary.costCalculatorVersion ?? existing.costCalculatorVersion,
+          peakContextTokens: Math.max(existing.peakContextTokens, summary.peakContextTokens),
+          avgContextTokens: existing.avgContextTokens,
+          cacheHitRate: totalInput > 0 ? cacheReadTokens / totalInput : 0,
+          messageCount: existing.messageCount + summary.messageCount,
+          importedAt,
+        });
+        this.refreshAverageContextStatement.run(existing.id, existing.id);
       },
     );
     this.removeTransaction = database.transaction((sessionId: string) => {
@@ -232,6 +361,38 @@ export class SessionRepository {
       normalizedSourceParentSessionId(loaded.parsed.meta.sourceParentSessionId, summary.id),
       importedAt,
     );
+  }
+
+  append(loaded: LoadedSourceSession, revision: SourceRevision, importedAt = Date.now()): boolean {
+    const append = loaded.append;
+    if (!append) return false;
+    const existing = this.getAggregateStatement.get(loaded.parsed.sessionId) as
+      | StoredSessionAggregate
+      | undefined;
+    if (!existing || !this.isCurrent(loaded.parsed.sessionId, append.baseRevision)) return false;
+    if (
+      loaded.parsed.spans.some(
+        (span) => this.hasSpanStatement.get(existing.id, span.id) !== undefined,
+      )
+    ) {
+      return false;
+    }
+    const { summary, spans } = analyzeSession(
+      loaded.parsed,
+      this.pricingLookup,
+      loaded.fileMeta,
+      importedAt,
+    );
+    this.appendTransaction(
+      existing,
+      summary,
+      spans,
+      append.closeSpanIds,
+      append.closeAt,
+      revision,
+      importedAt,
+    );
+    return true;
   }
 
   removeGeneratedIfUnannotated(

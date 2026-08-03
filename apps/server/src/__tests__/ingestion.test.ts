@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ParsedSession, Span } from '@agent-profile/core';
@@ -429,6 +429,159 @@ describe('session ingestion boundary', () => {
     target.close();
   });
 
+  it('reuses a validated Claude suffix and falls back on rewrites or malformed lines', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-transcript-append-'));
+    tempDirectories.push(directory);
+    const transcriptPath = join(directory, 'session.jsonl');
+    writeFileSync(transcriptPath, `${createClaudeLine('turn-1', 10)}\n`);
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const adapter = new TranscriptSourceAdapter(directory, 'claude-code');
+    await expect(importFromSource(adapter, repository)).resolves.toMatchObject({ imported: 1 });
+
+    appendFileSync(
+      transcriptPath,
+      `${createClaudeLine('turn-2', 20).replace('"sessionId":"claude-session",', '')}\n`,
+    );
+    const [appendItem] = await adapter.discover();
+    const appendCandidate = await appendItem.load();
+    expect(appendCandidate && 'append' in appendCandidate).toBe(true);
+    expect(await importFromSource(adapter, repository)).toMatchObject({
+      imported: 0,
+      updated: 1,
+      failed: 0,
+    });
+    expect(
+      target
+        .prepare(
+          `SELECT id, type, parent_id as parentId, start_time as startTime,
+            end_time as endTime, input_tokens as inputTokens, output_tokens as outputTokens
+           FROM spans WHERE session_id = ? ORDER BY start_time, id`,
+        )
+        .all('claude-session'),
+    ).toEqual([
+      {
+        id: 'turn-1',
+        type: 'llm_turn',
+        parentId: null,
+        startTime: Date.parse('2026-07-26T00:00:00.000Z'),
+        endTime: Date.parse('2026-07-26T00:00:01.000Z'),
+        inputTokens: 10,
+        outputTokens: 10,
+      },
+      {
+        id: 'turn-2',
+        type: 'llm_turn',
+        parentId: null,
+        startTime: Date.parse('2026-07-26T00:00:01.000Z'),
+        endTime: null,
+        inputTokens: 10,
+        outputTokens: 20,
+      },
+    ]);
+
+    writeFileSync(
+      transcriptPath,
+      `${createClaudeLine('turn-1', 99)}\n${createClaudeLine('turn-2', 20)}\n`,
+    );
+    const [rewrittenItem] = await adapter.discover();
+    const rewritten = await rewrittenItem.load();
+    expect(rewritten && 'append' in rewritten).toBe(false);
+    expect(await importFromSource(adapter, repository)).toMatchObject({ updated: 1, failed: 0 });
+    expect(
+      target.prepare('SELECT output_tokens as outputTokens FROM spans WHERE id = ?').get('turn-1'),
+    ).toEqual({ outputTokens: 99 });
+
+    appendFileSync(transcriptPath, `not-json\n${createClaudeLine('turn-3', 30)}\n`);
+    const [malformedItem] = await adapter.discover();
+    const malformed = await malformedItem.load();
+    expect(malformed && 'append' in malformed).toBe(false);
+    expect(await importFromSource(adapter, repository)).toMatchObject({ updated: 1, failed: 0 });
+    expect(
+      target
+        .prepare('SELECT message_count as messageCount FROM sessions WHERE id = ?')
+        .get('claude-session'),
+    ).toEqual({ messageCount: 3 });
+    target.close();
+  });
+
+  it('appends an independent Codex turn only when its boundary is complete', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-codex-append-'));
+    tempDirectories.push(directory);
+    const transcriptPath = join(directory, 'session.jsonl');
+    writeFileSync(transcriptPath, `${createModernCodexTranscript()}\n`);
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const adapter = new TranscriptSourceAdapter(directory, 'codex');
+    await expect(importFromSource(adapter, repository)).resolves.toMatchObject({ imported: 1 });
+
+    appendFileSync(transcriptPath, `${createCodexTurn('modern-turn-2', '12:01')}\n`);
+    const [appendItem] = await adapter.discover();
+    const appendCandidate = await appendItem.load();
+    expect(appendCandidate && 'append' in appendCandidate).toBe(true);
+    await expect(importFromSource(adapter, repository)).resolves.toMatchObject({
+      updated: 1,
+      failed: 0,
+    });
+    expect(
+      target
+        .prepare(
+          `SELECT id, model, input_tokens as inputTokens, output_tokens as outputTokens
+           FROM spans WHERE session_id = ? AND type = 'llm_turn' ORDER BY start_time`,
+        )
+        .all('modern-codex-session'),
+    ).toEqual([
+      { id: 'modern-turn', model: 'gpt-5.6-sol', inputTokens: 100, outputTokens: 15 },
+      { id: 'modern-turn-2', model: 'gpt-5.6-sol', inputTokens: 100, outputTokens: 15 },
+    ]);
+
+    appendFileSync(
+      transcriptPath,
+      `${JSON.stringify({
+        timestamp: '2026-07-28T12:02:00.000Z',
+        type: 'event_msg',
+        payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 1 } } },
+      })}\n`,
+    );
+    const [partialItem] = await adapter.discover();
+    const partial = await partialItem.load();
+    expect(partial && 'append' in partial).toBe(false);
+    target.close();
+  });
+
+  it('keeps an already closed Claude turn end time unchanged during append', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-transcript-end-time-'));
+    tempDirectories.push(directory);
+    const transcriptPath = join(directory, 'session.jsonl');
+    const interveningUser = JSON.stringify({
+      type: 'user',
+      sessionId: 'claude-session',
+      uuid: 'user-1',
+      timestamp: '2026-07-26T00:00:01.000Z',
+      message: { role: 'user', content: 'continuation' },
+    });
+    writeFileSync(transcriptPath, `${createClaudeLineAt('turn-1', 10, 0)}\n${interveningUser}\n`);
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const adapter = new TranscriptSourceAdapter(directory, 'claude-code');
+    await importFromSource(adapter, repository);
+    appendFileSync(transcriptPath, `${createClaudeLineAt('turn-2', 20, 2)}\n`);
+    expect(await importFromSource(adapter, repository)).toMatchObject({ updated: 1, failed: 0 });
+    expect(
+      target.prepare('SELECT end_time as endTime FROM spans WHERE id = ?').get('turn-1'),
+    ).toEqual({ endTime: Date.parse('2026-07-26T00:00:01.000Z') });
+    target.close();
+  });
+
   it('excludes migrated external history and safely removes prior generated data', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-profile-codex-revision-'));
     tempDirectories.push(directory);
@@ -766,12 +919,16 @@ function createZedFixture(path: string): void {
 }
 
 function createClaudeLine(uuid: string, outputTokens: number): string {
+  return createClaudeLineAt(uuid, outputTokens, uuid === 'turn-1' ? 0 : 1);
+}
+
+function createClaudeLineAt(uuid: string, outputTokens: number, second: number): string {
   return JSON.stringify({
     type: 'assistant',
     sessionId: 'claude-session',
     uuid,
     parentUuid: null,
-    timestamp: `2026-07-26T00:00:${uuid === 'turn-1' ? '00' : '01'}.000Z`,
+    timestamp: `2026-07-26T00:00:${String(second).padStart(2, '0')}.000Z`,
     cwd: '/tmp/project',
     message: {
       model: 'fixture-model',
@@ -860,6 +1017,35 @@ function createModernCodexTranscript(): string {
     },
     {
       timestamp: '2026-07-28T12:00:02.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: {
+            input_tokens: 100,
+            cached_input_tokens: 20,
+            output_tokens: 10,
+            reasoning_output_tokens: 5,
+            total_tokens: 135,
+          },
+        },
+      },
+    },
+  ]
+    .map((entry) => JSON.stringify(entry))
+    .join('\n');
+}
+
+function createCodexTurn(turnId: string, time: string): string {
+  const timestamp = `2026-07-28T${time}:00.000Z`;
+  return [
+    {
+      timestamp,
+      type: 'turn_context',
+      payload: { turn_id: turnId, model: 'gpt-5.6-sol' },
+    },
+    {
+      timestamp: `2026-07-28T${time}:01.000Z`,
       type: 'event_msg',
       payload: {
         type: 'token_count',
