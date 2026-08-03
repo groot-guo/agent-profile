@@ -18,11 +18,13 @@ export function ProjectPicker({
   totalCount,
   value,
   onChange,
+  allowAll = true,
 }: {
   options: ProjectPickerOption[];
   totalCount: number;
   value: string;
   onChange: (project: string) => void;
+  allowAll?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -40,11 +42,18 @@ export function ProjectPicker({
     [filtered],
   );
   const optionIndex = useMemo(
-    () => new Map(filtered.map((option, index) => [option.project, index + 1])),
-    [filtered],
+    () => new Map(filtered.map((option, index) => [option.project, index + (allowAll ? 1 : 0)])),
+    [allowAll, filtered],
   );
-  const optionCount = filtered.length + 1;
-  const activeId = activeIndex === 0 ? 'project-option-all' : `project-option-${activeIndex}`;
+  const optionOffset = allowAll ? 1 : 0;
+  const optionCount = Math.max(1, filtered.length + optionOffset);
+  const activeOption = filtered[activeIndex - optionOffset];
+  const activeId =
+    allowAll && activeIndex === 0
+      ? 'project-option-all'
+      : activeOption
+        ? `project-option-${activeIndex}`
+        : undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -63,13 +72,20 @@ export function ProjectPicker({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !activeId) return;
     document.getElementById(activeId)?.scrollIntoView({ block: 'nearest' });
   }, [activeId, open]);
 
   const openPicker = () => {
     setQuery('');
-    setActiveIndex(value ? (options.findIndex((option) => option.project === value) ?? -1) + 1 : 0);
+    setActiveIndex(
+      value
+        ? Math.max(
+            0,
+            options.findIndex((option) => option.project === value),
+          ) + optionOffset
+        : 0,
+    );
     setOpen(true);
   };
 
@@ -97,7 +113,11 @@ export function ProjectPicker({
       moveActive(-1);
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      selectProject(activeIndex === 0 ? '' : (filtered[activeIndex - 1]?.project ?? ''));
+      if (allowAll && activeIndex === 0) {
+        selectProject('');
+      } else {
+        if (activeOption) selectProject(activeOption.project);
+      }
     } else if (event.key === 'Escape') {
       event.preventDefault();
       closePicker();
@@ -159,21 +179,23 @@ export function ProjectPicker({
           </label>
 
           <div id="project-picker-options" className="project-picker-options" role="listbox">
-            <button
-              id="project-option-all"
-              type="button"
-              role="option"
-              aria-selected={!value}
-              data-active={activeIndex === 0 ? 'true' : 'false'}
-              onMouseEnter={() => setActiveIndex(0)}
-              onClick={() => selectProject('')}
-            >
-              <span className="project-picker-option-copy">
-                <strong>全部项目</strong>
-                <small>不限制项目范围</small>
-              </span>
-              <span className="project-picker-option-count tnum">{totalCount}</span>
-            </button>
+            {allowAll && (
+              <button
+                id="project-option-all"
+                type="button"
+                role="option"
+                aria-selected={!value}
+                data-active={activeIndex === 0 ? 'true' : 'false'}
+                onMouseEnter={() => setActiveIndex(0)}
+                onClick={() => selectProject('')}
+              >
+                <span className="project-picker-option-copy">
+                  <strong>全部项目</strong>
+                  <small>不限制项目范围</small>
+                </span>
+                <span className="project-picker-option-count tnum">{totalCount}</span>
+              </button>
+            )}
 
             {grouped.map((entry) => (
               <section key={entry.group} className="project-picker-group">

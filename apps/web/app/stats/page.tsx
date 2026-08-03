@@ -2,10 +2,12 @@
 
 import type { ProjectProfileReport } from '@agent-profile/core';
 import { isSessionRecordsProject } from '@agent-profile/core/project';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { API } from '../config';
 import { AgentMark, getModelIcon } from '../icons';
 import { projectLabel } from '../project-label';
+import { ProjectPicker } from '../project-picker';
+import { projectPickerOptionsFromSummaries } from '../session-navigation';
 import { AGENT_COLORS, AGENT_LABELS, C, FS, fmtTokens, R, SP } from '../theme';
 import { BarRow, Card, Chip, Empty, Notice, SectionTitle, StatCard } from '../ui';
 
@@ -366,36 +368,40 @@ function ProjectProfileCard({
   error: string;
   onProjectChange: (project: string) => void;
 }) {
+  const options = useMemo(
+    () =>
+      projectPickerOptionsFromSummaries(
+        projects.map((project, index) => ({
+          project: project.cwd,
+          count: project.sessions,
+          lastUsedAt: projects.length - index,
+        })),
+        0,
+      ),
+    [projects],
+  );
+  const totalCount = projects.reduce((total, project) => total + project.sessions, 0);
+
   return (
     <Card title="Project Profile" meta="跨 Session 过程证据">
       <div style={{ display: 'grid', gap: SP.md }}>
-        <label style={{ display: 'grid', gap: 6, color: C.sub, fontSize: FS.cap }}>
-          项目范围
-          <select
-            value={selectedProject}
-            onChange={(event) => onProjectChange(event.target.value)}
-            style={{
-              width: '100%',
-              minHeight: 44,
-              padding: '0 10px',
-              border: `1px solid ${C.border}`,
-              borderRadius: R.md,
-              background: C.bg,
-              color: C.text,
-              font: 'inherit',
-            }}
-          >
-            {projects.map((project) => (
-              <option key={project.cwd} value={project.cwd}>
-                {isSessionRecordsProject(project.cwd) ? projectLabel(project.cwd) : project.cwd}
-              </option>
-            ))}
-          </select>
-        </label>
-        {loading && <Empty text="项目画像加载中…" />}
-        {error && <Notice kind="err">项目画像加载失败：{error}</Notice>}
-        {!loading && !error && profile && <ProjectProfileSummary profile={profile} />}
-        {!loading && !error && !profile && <Empty text="暂无项目 Profile" />}
+        {options.length === 0 ? (
+          <Empty text="暂无可分析项目" hint="导入带项目目录的 Session 后即可查看 Project Profile" />
+        ) : (
+          <>
+            <ProjectPicker
+              options={options}
+              totalCount={totalCount}
+              value={selectedProject}
+              onChange={onProjectChange}
+              allowAll={false}
+            />
+            {loading && <Empty text="项目画像加载中…" />}
+            {error && <Notice kind="err">项目画像加载失败：{error}</Notice>}
+            {!loading && !error && profile && <ProjectProfileSummary profile={profile} />}
+            {!loading && !error && !profile && <Empty text="暂无项目 Profile" />}
+          </>
+        )}
       </div>
     </Card>
   );

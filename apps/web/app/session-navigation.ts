@@ -25,6 +25,12 @@ export interface ProjectPickerOption {
   group: ProjectPickerGroup;
 }
 
+export interface ProjectPickerSummary {
+  project: string;
+  count: number;
+  lastUsedAt: number;
+}
+
 export interface SessionNavigationState {
   agent: string;
   project: string;
@@ -140,10 +146,20 @@ export function projectPickerOptions(
       projects.set(project, { count: 1, lastUsedAt: session.startTime });
     }
   }
+  return projectPickerOptionsFromSummaries(
+    [...projects.entries()].map(([project, summary]) => ({ project, ...summary })),
+    recentLimit,
+  );
+}
 
+export function projectPickerOptionsFromSummaries(
+  summaries: readonly ProjectPickerSummary[],
+  recentLimit = 6,
+): ProjectPickerOption[] {
   const records: ProjectPickerOption[] = [];
   const filesystem: ProjectPickerOption[] = [];
-  for (const [project, summary] of projects) {
+  for (const summary of summaries) {
+    const project = summary.project;
     const option = {
       project,
       name: projectLabel(project),
@@ -177,35 +193,7 @@ export function projectPickerOptionsFromFacets(
   facets: SessionDiscoveryPage['facets']['projects'],
   recentLimit = 6,
 ): ProjectPickerOption[] {
-  const records: ProjectPickerOption[] = [];
-  const filesystem: ProjectPickerOption[] = [];
-  for (const facet of facets) {
-    const option = {
-      project: facet.project,
-      name: projectLabel(facet.project),
-      parentPath: projectParentPath(facet.project),
-      count: facet.count,
-      lastUsedAt: facet.lastUsedAt,
-      group: 'other' as ProjectPickerGroup,
-    };
-    if (isSessionRecordsProject(facet.project)) {
-      records.push({ ...option, parentPath: '', group: 'records' });
-    } else {
-      filesystem.push(option);
-    }
-  }
-  records.sort((a, b) => b.lastUsedAt - a.lastUsedAt || b.count - a.count);
-  filesystem.sort(
-    (a, b) =>
-      b.lastUsedAt - a.lastUsedAt || b.count - a.count || a.project.localeCompare(b.project),
-  );
-  return [
-    ...records,
-    ...filesystem.map<ProjectPickerOption>((option, index) => ({
-      ...option,
-      group: index < Math.max(0, recentLimit) ? 'recent' : 'other',
-    })),
-  ];
+  return projectPickerOptionsFromSummaries(facets, recentLimit);
 }
 
 export function filterProjectPickerOptions(

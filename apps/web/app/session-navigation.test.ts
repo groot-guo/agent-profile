@@ -11,6 +11,7 @@ import {
   projectOptions,
   projectPickerOptions,
   projectPickerOptionsFromFacets,
+  projectPickerOptionsFromSummaries,
   serializeSessionNavigation,
   sessionDisplayTitle,
   sessionProject,
@@ -229,6 +230,16 @@ describe('flat Session navigation', () => {
         2,
       ),
     ).toEqual(options);
+    expect(
+      projectPickerOptionsFromSummaries(
+        options.map((option) => ({
+          project: option.project,
+          count: option.count,
+          lastUsedAt: option.lastUsedAt,
+        })),
+        0,
+      ).map((option) => option.group),
+    ).toEqual(['records', 'other', 'other', 'other']);
   });
 
   it('groups recent Sessions by time and bounds a 400-row render', () => {

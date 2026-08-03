@@ -29,6 +29,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
 | [T6](roadmap-archive/2026-q3.md#t6) | Codex parser | completed |
 | [T7](roadmap-archive/2026-q3.md#t7) | Zed parser | completed |
