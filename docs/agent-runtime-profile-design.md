@@ -183,13 +183,15 @@ task-feedback <task-id> --opt-in --json
 
 诊断与证据命令默认只返回 finding/event references、Span ID 和 coverage；Outcome 命令必须显式
 确认，并复用 Task repository 校验；feedback 命令必须 opt-in。它们不返回 prompt、thinking、
-answer 或工具输入/输出内容，也不改变 Agent 配置。T116/T117 才定义 Runtime 可选接入的
-事件协议和运行中反馈。
+answer 或工具输入/输出内容，也不改变 Agent 配置。T116 已提供本地
+`runtime-event/v1` HTTP collector；T117 才定义运行中反馈。
 
 ### 5.2 运行时反馈（Phase 3，Proposal）
 
-T116/T117 才会定义 Runtime 可选接入的轻量 SDK/事件协议；当前来源监听只是源文件或
-数据库变更后的导入，不是 live Runtime tracing。目标协议不要求上传思维链：
+T116 已定义并实现 Runtime 可选接入的本地 `runtime-event/v1` HTTP collector；它只接收
+Task/Run 生命周期 metadata，处理 identity、sequence、duplicate、partial coverage 和
+failure isolation，不接收原始思维链，也不替代 transcript import。T117 才会在此基础上
+定义 live hint policy：
 
 ```text
 profile.start(task, configuration)
@@ -319,9 +321,9 @@ keep/rollback 仍必须是显式、可审计的用户/Runtime 决定，而非自
 - 已实现前置的 post-run feedback：本地 Task 工作区可在显式 opt-in 后读取
   `post-run-feedback/v1`；它只引用 Experiment/Cohort ID、报告版本、指标、guardrail
   与 limitations，并在证据不足或过期时抑制。
-- T115 将先提供本地、内容受限的 Agent 读取与显式 Outcome 写入工作流。
-- T116 才会提供 Runtime SDK/HTTP 事件适配器；T117 才会提供 `hint` 接口和
-  预算/上下文/失败策略。
+- T115 已提供本地、内容受限的 Agent 读取与显式 Outcome 写入工作流。
+- T116 已提供本地 Runtime SDK/HTTP 事件适配器；T117 才会提供 `hint` 接口和预算、
+  上下文、失败策略。
 - Agent 在下一次或执行中消费 Profile Report 仍是目标，不是当前能力。
 
 验收目标：Runtime 能在不上传原始思维链的情况下接收 opt-in、有界、可抑制的建议；

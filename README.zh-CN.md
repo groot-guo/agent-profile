@@ -203,6 +203,12 @@ project key 与七天本地时间窗口；每个 Session 关联和 Git 证据都
 不执行任意命令或 build/test/lint，不上传内容，也不自动写入 Outcome；远程 CI/review connector
 尚未启用。
 
+本地 loopback Runtime collector 通过 `POST /api/runtime/events` 接收 `runtime-event/v1` metadata，
+并通过 `GET /api/runtime/runs/:runId/events` 返回有界、按 sequence 排序的引用。事件只包含
+Task/Run identity、sequence、parent reference、生命周期 kind、时间和白名单 metadata；精确重复
+幂等处理，sequence 冲突拒绝且不覆盖已有事件，乱序到达会保留并标记 ordering coverage。它只是
+本地观测来源，不是 live hint、自动配置控制，也不替代 transcript 导入。
+
 ## 如何理解 Profile
 
 - **Session 分析**解释一次已观察到的运行；它是过程证据，不是交付成功证明。

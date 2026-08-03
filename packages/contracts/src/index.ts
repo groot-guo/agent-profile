@@ -68,6 +68,22 @@ export {
   type ModelCatalogSourceKind,
 } from './model-catalog';
 export {
+  RUNTIME_EVENT_BATCH_SCHEMA_VERSION,
+  RUNTIME_EVENT_PAGE_SCHEMA_VERSION,
+  RUNTIME_EVENT_SCHEMA_VERSION,
+  type RuntimeEvent,
+  type RuntimeEventAppendReport,
+  type RuntimeEventBatch,
+  type RuntimeEventCoverage,
+  type RuntimeEventKind,
+  type RuntimeEventPage,
+  type RuntimeEventPayload,
+  type RuntimeEventReference,
+  type RuntimeEventRejection,
+  type RuntimeEventRejectionReason,
+  type RuntimeEventStatus,
+} from './runtime-events';
+export {
   SESSION_ACTIVITY_RECENT_WINDOW_MS,
   SESSION_ACTIVITY_UPDATING_WINDOW_MS,
   SESSION_DISCOVERY_SCHEMA_VERSION,

@@ -7,6 +7,7 @@ import { registerPricingRoutes } from './pricing';
 import { registerProfileRoutes } from './profiles';
 import { registerProjectProfileRoutes } from './project-profile';
 import { registerPromptReviewRoutes } from './prompt-review';
+import { registerRuntimeEventRoutes } from './runtime-events';
 import { registerScanRoutes } from './scan';
 import { registerSessionEvidenceRoutes } from './session-evidence';
 import { registerSessionUpdateRoutes } from './session-updates';
@@ -25,6 +26,7 @@ export function registerRoutes(app: FastifyInstance, runtime: AppRuntime): void 
   registerModelCatalogRoutes(app, runtime);
   registerProfileRoutes(app, runtime);
   registerPromptReviewRoutes(app, runtime);
+  registerRuntimeEventRoutes(app, runtime);
   registerHealthRoutes(app);
   registerStatsRoutes(app, runtime);
   registerTaskRoutes(app, runtime);

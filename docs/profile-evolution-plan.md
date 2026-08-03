@@ -42,8 +42,8 @@ Agent ranking, or automatic prompt/configuration mutation.
 | --- | --- | --- |
 | Can a person locate runtime problems and performance hotspots? | Yes, usually for observed Sessions. | It identifies evidence-backed patterns, not arbitrary code-root causes. |
 | Can a person or offline Agent form a next-step hypothesis? | Yes, through findings, Profiles, prompt review, and explicit Task/Outcome records. | The hypothesis remains human-mediated and must be verified by a Task Outcome. |
-| Can an Agent consume findings and write a bounded result? | Partly, through existing local APIs/limited CLI reports and the opt-in post-run report. | There is no unified diagnose/evidence/Outcome Agent protocol yet; T115 owns it. |
-| Can the tool solve or prevent a problem during execution? | No. | There is no Runtime event collector, live hint channel, or automatic configuration mutation; T116/T117 are proposals. |
+| Can an Agent consume findings and write a bounded result? | Yes, through the versioned local CLI/API reports, explicit Outcome write, and opt-in post-run report. | It remains local/content-free and does not mutate Agent configuration. |
+| Can the tool solve or prevent a problem during execution? | No. | T116 now collects local lifecycle metadata, but there is no live hint channel or automatic configuration mutation; T117 owns that policy. |
 | Can it prove one Agent/configuration is better? | No. | Current cohort output is descriptive and bounded; task difficulty, coverage, uncertainty, and attribution remain limits; T118/T119 extend them. |
 
 ### Material gaps mapped to Tasks
@@ -52,9 +52,10 @@ The highest-impact gap is the missing last mile from a finding to a safe action:
 semantic diagnosis now has request-scoped consent, common-secret redaction, and
 bounded content-free audit metadata (T111), while findings with stored Span IDs
 now have direct bounded evidence navigation (T112). Outcome evidence needs
-confirmation and a producer contract (T113/T114), and an Agent needs content-free local reports and
-an explicit write path (T115). Only then should the product add a local Runtime
-event protocol (T116) and bounded in-run advice (T117). Comparison rigor (T118),
+confirmation and a producer contract (T113/T114), and the Agent now has
+content-free local reports and an explicit write path (T115). T116 adds the
+local Runtime event protocol/collector; bounded in-run advice remains T117.
+Comparison rigor (T118),
 typed multi-Agent attribution (T119), pricing governance (T120), and large-history
 ergonomics (T121) are parallel or later tracks. Non-local use remains conditional
 T88 work.

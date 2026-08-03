@@ -6,9 +6,10 @@ outcome-evaluation system for AI coding agents. Its canonical current-state
 terminology is in `docs/profile-model.md`. Task/Outcome/Configuration
 persistence, Task-Session links, cohort/experiment definitions,
 `task-profile/v1`, `cohort-runtime-profile/v1`, and bounded
-`post-run-feedback/v1` are implemented foundations. Broader automated cohort
-statistics, causal experiment evaluation, automatic regression decisions, and
-live Runtime feedback remain proposals. Their dependency plan is
+`post-run-feedback/v1` are implemented foundations. The local
+`runtime-event/v1` protocol and metadata-only collector are also implemented;
+broader automated cohort statistics, causal experiment evaluation, automatic
+regression decisions, and live Runtime feedback remain proposals. Their dependency plan is
 `docs/profile-evolution-plan.md`; the future Runtime design is in
 `docs/agent-runtime-profile-design.md`. The prompt-review surface remains
 ephemeral and does not automatically create or modify those persisted records.
@@ -42,7 +43,8 @@ The product has distinct evidence layers:
   to the current cohort report, decision, guardrails, and limitations; it does
   not mutate configuration or transmit raw Task/transcript content.
 - Broader time-window/statistical regression policies and live Runtime feedback
-  remain future work beyond the current bounded reports.
+  remain future work beyond the current bounded reports and local event
+  collector.
 
 All reports expose their scope and limitations. Process metrics may form a
 diagnostic or iteration hypothesis; they are not a universal Agent ranking or a
@@ -134,8 +136,9 @@ cannot run during an import job, deletes `spans` and `sessions` in one
 transaction, and retains `pricing`, `pricing_history`, `pricing_aliases`,
 `model_context`, `cost_recalculation_runs`, and `schema_migrations`.
 Task, Outcome, Configuration Snapshot, cohort, experiment, and logical
-Task-Session records are also retained so imported runtime evidence can be
-restored later without losing delivery context.
+Task-Session records, plus locally collected `runtime_events`, are also retained
+so imported runtime evidence can be restored later without losing delivery
+context.
 
 Scan results also expose structured `skipReasons`: `unchanged_revision` means a
 matching source fingerprint required no work, while `not_importable` means the
@@ -153,8 +156,8 @@ as requiring manual action instead of presenting them as retryable parse errors.
 | Component | Current responsibility |
 | --- | --- |
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
-| `packages/contracts` (`@agent-profile/contracts`) | Framework-neutral public contracts for implemented cross-package vertical slices; currently import/data-management responses and `agent-profile-cli/v1` reports |
-| `packages/cli` (`@agent-profile/cli`) | Source-workspace `agent-profile` binary, argument/data-path resolution, human/JSON help, version, and Runtime doctor output |
+| `packages/contracts` (`@agent-profile/contracts`) | Framework-neutral public contracts for implemented cross-package vertical slices; currently import/data-management responses, `agent-profile-cli/v1` reports, and `runtime-event/v1` collector/page contracts |
+| `packages/cli` (`@agent-profile/cli`) | Source-workspace `agent-profile` binary, argument/data-path resolution, human/JSON reports, Runtime doctor, and content-free local Agent workflow |
 | `packages/core/src/scanners/transcript.ts` | Source-neutral async JSONL discovery and NDJSON reading shared by Claude Code and Codex, with compatibility sync helpers |
 | `apps/server/src/runtime.ts` | Explicit application lifecycle for one database connection, pricing/context resolvers, import state, clock, and shutdown |
 | `apps/server/src/app.ts` | Fastify composition adapter over an explicitly supplied Runtime and HTTP options |
@@ -164,6 +167,7 @@ as requiring manual action instead of presenting them as retryable parse errors.
 | `apps/server/src/ingestion/import-job-manager.ts` | Deduplicated startup/manual sync and rebuild state, availability, progress, failure isolation, and bounded public status |
 | `apps/server/src/ingestion/session-repository.ts` | Normalized analysis, atomic session/span replacement, and transactional generated-data reset |
 | `apps/server/src/task-repository.ts` | Task/configuration/Outcome/cohort/experiment persistence boundary and Task Profile aggregation inputs |
+| `apps/server/src/runtime-event-collector.ts` | Metadata-only local Runtime event validation, idempotent append, ordering/coverage, and bounded references |
 | `apps/server/src/routes/scan.ts` | Thin HTTP import/data-management adapter over the Runtime import service; contains no import persistence SQL or production fallback |
 | `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
 | `apps/server/src/db.ts` | Pricing/model-context default seeding and database-scoped model-context lookup helpers; it does not own a process-global connection |
@@ -405,7 +409,7 @@ stale provider-labelled rows once; no generated-data reset is required.
 
 ## Persistence model
 
-`apps/server/src/database.ts` owns fifteen current internal tables:
+`apps/server/src/database.ts` owns sixteen current internal tables:
 
 - `sessions` — source identity and revision metadata (`source_kind`,
   `source_updated_at`, `source_fingerprint`); agent/model fields plus the
@@ -440,6 +444,10 @@ stale provider-labelled rows once; no generated-data reset is required.
 - `task_sessions` — multi-Session Task links, role, timing, optional
   Configuration Snapshot, and optional accepted-assistance provenance. Session
   IDs remain logical references across reset.
+- `runtime_events` — bounded local Runtime lifecycle metadata keyed by run/event
+  identity and sequence. It stores no prompt, answer, thinking, tool input, or
+  tool output content; duplicate event IDs are idempotent and sequence conflicts
+  are isolated as rejected input.
 - `task_outcomes` — nullable build/test/lint/Git/rating/rework/completion-time/
   bounded-evidence fields; null means not collected and explicit `failed` means
   failed. The Tasks workspace validates optional evidence before its existing
@@ -826,6 +834,8 @@ page exposes the same contract and privacy boundaries.
 | `PUT` | `/api/tasks/:id/outcome` | Upsert explicit nullable Outcome fields |
 | `GET` | `/api/tasks/:id/profile` | Export coverage-aware `task-profile/v1` |
 | `GET` | `/api/tasks/:id/feedback?optIn=true` | Explicitly requested bounded `post-run-feedback/v1` records |
+| `POST` | `/api/runtime/events` | Append local `runtime-event/v1` metadata batches with idempotency and coverage report |
+| `GET` | `/api/runtime/runs/:runId/events` | Read bounded `runtime-event-page/v1` references in sequence order |
 | `GET/POST` | `/api/config-snapshots` | List or create version/hash-only Configuration Snapshots |
 | `GET/POST` | `/api/cohorts` | List or create cohort definitions |
 | `GET/POST` | `/api/experiments` | List or create guarded experiment records |
@@ -863,6 +873,12 @@ page exposes the same contract and privacy boundaries.
   validation; `task-feedback <task-id> --opt-in` reads bounded post-run
   feedback. JSON uses `agent-profile-cli/v1`; no command exposes raw prompt,
   answer, thinking, tool input/output, or local path content by default.
+- The loopback Runtime collector accepts only `runtime-event/v1` lifecycle
+  metadata through `/api/runtime/events`. Migration v12 stores event identity,
+  task/run scope, sequence, timing, parent reference, and allowlisted payload
+  field values. The collector is idempotent for exact duplicates, accepts
+  out-of-order arrivals while preserving sequence reads, isolates event ID and
+  sequence conflicts, and keeps imported transcript evidence independent.
 - `agent-profile serve` composes Next standalone, the shared Runtime, and
   Fastify behind one loopback origin. The release archive keeps mutable data
   outside its installation tree and closes all three layers on signals.

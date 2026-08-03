@@ -112,6 +112,13 @@ explicit repository-validated evidence entry, and `task-feedback <task-id>
 mutate Agent configuration, infer verification success, or turn process metrics
 into delivery claims.
 
+The local `runtime-event/v1` collector is a separate observed evidence source.
+It accepts only bounded Task/Run lifecycle metadata, keeps event identity and
+sequence explicit, is idempotent for exact duplicates, and reports partial
+coverage for rejected or out-of-order input. Its reference page omits payload
+values and raw process content. It does not replace imported Session evidence or
+provide live hints; those policy decisions remain in T117.
+
 The product does not automatically rewrite prompts, rules, model settings, or
 tool policy. It can expose an explicit, bounded post-run finding linked to the
 current `cohort-runtime-profile/v1`, but Runtime-consumable live hints and
@@ -120,8 +127,8 @@ automatic configuration mutation remain future layers.
 Source-change observation refreshes imported evidence after local history files
 or databases change. Its updating/recent state is a revision-recency signal, not
 proof that an Agent is live or a Task is complete. Current CLI/API consumers can
-read bounded reports, but an external Runtime SDK and in-run feedback contract
-are not implemented.
+read bounded reports, but an external Runtime SDK and in-run hint/feedback
+policy are not implemented; T116's collector is local metadata ingestion only.
 
 ## Deferred implementation boundaries
 

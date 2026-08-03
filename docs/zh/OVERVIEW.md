@@ -28,6 +28,11 @@ T115 还提供 `diagnosis`、`evidence`、显式确认的 `task-outcome` 和 opt
 有界 finding/event references、Span ID、Outcome coverage 和 limitations，不返回原始过程内容，
 也不自动修改 Agent 配置。
 
+T116 已提供本地 `runtime-event/v1` collector：`POST /api/runtime/events` 接收有界生命周期
+metadata，`GET /api/runtime/runs/:runId/events` 返回按 sequence 排序的引用。它处理精确重复、
+乱序到达、sequence 冲突和 partial coverage，不接收 prompt/answer/thinking/tool input/output，
+也不提供运行中 hint 或自动配置修改。
+
 当前还提供显式来源选择的只读 `outcome-evidence/v1` 本地 Git adapter：
 `GET /api/tasks/:id/outcome-evidence?source=local_git`。它只读取关联 Session 工作目录或绝对 Task
 项目中的固定 Git metadata，保留 producer、时间、来源引用、采集限制和 limitation；缺失来源是
@@ -40,11 +45,11 @@ build/test/lint，不上传内容、不自动写 Outcome，远程 CI/review 证�
   上下文膨胀、缓存损失、工具失败、重复探索与来源覆盖缺口；finding 保留关联 Span ID。
 - 带 Span 引用的 finding 可直接定位到 Session 的有界证据页；定位缺失或被筛选排除时
   会明确提示，不会用相邻事件替代，也不会默认展开内容。
-- **辅助 Agent 复盘：有限但可用。** Agent 可通过现有本地 API、有限 CLI 报告和显式
-  opt-in 的 post-run feedback 获取有界过程证据，再由人确认 Task/Outcome。统一的
-  diagnose -> evidence -> Outcome 写入协议仍是 T115，不能把当前接口误称为执行中控制回路。
+- **辅助 Agent 复盘：有限但可用。** Agent 可通过现有本地 API、CLI 报告、Runtime event
+  references 和显式 opt-in 的 post-run feedback 获取有界过程证据，再由人确认 Task/Outcome。
+  这些接口仍不能被误称为执行中控制回路。
 - **自动解决：尚不具备。** 系统不会在 Agent 运行时暂停、修改提示词/规则/模型/工具策略，
-  也不会仅凭指标宣称问题已解决；运行中事件与受限 hint 分别属于 T116/T117。
+  也不会仅凭指标宣称问题已解决；受限运行中 hint 仍属于 T117。
 
 ## Profile 分层
 

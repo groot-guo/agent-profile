@@ -263,6 +263,15 @@ Git metadata queries only, does not execute arbitrary, build, test, or lint
 commands, does not upload or write Outcome data, and does not enable remote CI
 evidence.
 
+The local loopback Runtime collector accepts `runtime-event/v1` metadata through
+`POST /api/runtime/events` and returns bounded sequence-ordered references from
+`GET /api/runtime/runs/:runId/events`. Events carry task/run identity, sequence,
+parent references, lifecycle kind, timing, and allowlisted metadata only.
+Exact duplicates are idempotent; sequence conflicts are rejected without
+replacing existing events; out-of-order arrivals remain visible as partial
+ordering coverage. This collector is an observed local source, not live hints,
+automatic configuration control, or a replacement for transcript imports.
+
 ## How to read a Profile
 
 - **Session analysis** explains one observed run. It is process evidence, not

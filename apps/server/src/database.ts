@@ -337,6 +337,31 @@ const MIGRATIONS: Migration[] = [
       addColumn(database, 'task_sessions', 'link_provenance_json', 'TEXT');
     },
   },
+  {
+    version: 12,
+    name: 'runtime_event_collector',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS runtime_events (
+          event_id         TEXT NOT NULL,
+          task_id          TEXT NOT NULL,
+          run_id           TEXT NOT NULL,
+          sequence         INTEGER NOT NULL CHECK (sequence >= 0),
+          captured_at      INTEGER NOT NULL,
+          kind             TEXT NOT NULL,
+          parent_event_id  TEXT,
+          payload_json     TEXT NOT NULL CHECK (json_valid(payload_json)),
+          received_at      INTEGER NOT NULL,
+          PRIMARY KEY (run_id, event_id),
+          UNIQUE (run_id, sequence)
+        );
+        CREATE INDEX IF NOT EXISTS idx_runtime_events_task_time
+          ON runtime_events(task_id, captured_at, run_id, sequence);
+        CREATE INDEX IF NOT EXISTS idx_runtime_events_run_sequence
+          ON runtime_events(run_id, sequence);
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {

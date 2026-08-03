@@ -25,32 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T116 runtime event protocol and local collector foundation
-
-- status: planned
-- estimated size/risk: large / high; it adds a new observed-event source and
-  may require additive schema migration
-- purpose: define a source-neutral, local Runtime event protocol so an Agent
-  can emit bounded structured execution evidence during a Task rather than
-  relying only on transcript-file observation
-- scope: publish an event schema for Task/run/turn/tool/subagent/verification
-  lifecycle evidence, define identity/order/coverage/privacy rules, implement a
-  local collector and one adapter only after protocol review, and retain source
-  transcript import as the independent historical path
-- dependencies: T111 privacy boundary, T114 Outcome-evidence semantics, T115
-  local Agent report contracts, and an approved migration/backfill design; it
-  does not authorize remote ingestion
-- risks and assumptions: no raw prompt or chain-of-thought is required; an
-  event stream can be partial or unavailable and must never replace existing
-  imported source evidence without explicit provenance
-- acceptance: contract version, local lifecycle, failure/isolation behavior,
-  duplicate/event-order handling, and coverage semantics are documented and
-  tested; no live hint or automatic strategy change is included yet
-- verification: protocol fixtures, migration/integration tests, concurrency and
-  restart tests, privacy review, and local collector smoke test
-- documentation: add/update runtime proposal, architecture, source-adapter
-  contract, privacy, API/CLI, and roadmap documents
-
 ### T117 bounded in-run feedback and policy guardrails
 
 - status: planned
@@ -194,6 +168,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T112](roadmap-archive/2026-q3.md#t112) | diagnosis-to-evidence navigation | completed |
 | [T114](roadmap-archive/2026-q3.md#t114) | Outcome-evidence adapter contract | completed |
 | [T115](roadmap-archive/2026-q3.md#t115) | Agent-consumable local reports and CLI workflow | completed |
+| [T116](roadmap-archive/2026-q3.md#t116) | Runtime event protocol and local collector foundation | completed |
 | [T113](roadmap-archive/2026-q3.md#t113) | Task discovery and local Outcome-assistance workflow | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
@@ -294,8 +269,9 @@ The next implementation order is intentionally trust- and evidence-first:
    read-only local Git adapter.
 3. T115 now provides the content-free Agent-readable local report and explicit
    Outcome-write workflow on those contracts.
-4. T116 adds a local Runtime event protocol/collector; T117 may add bounded,
-   opt-in in-run hints only after the event and Outcome contracts are stable.
+4. T116 now provides the local Runtime event protocol/collector; T117 may add
+   bounded, opt-in in-run hints only after the event and Outcome contracts are
+   stable.
 
 T118 is a comparison-rigor track after T89 and the improved Task/Outcome
 provenance; T119 is a multi-Agent graph/attribution track after T87 and explicit
