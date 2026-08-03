@@ -39,6 +39,11 @@ export type {
 export { DEFAULT_THRESHOLDS, diagnoseSession, diagnoseSessionSync } from './diagnosis';
 export type { ModelIdentity, ModelIdentityKind } from './model-identity';
 export { identifyModel } from './model-identity';
+export {
+  OUTCOME_EVIDENCE_SCHEMA_VERSION,
+  type OutcomeEvidenceAdapterReport,
+  type OutcomeEvidenceCaptureLimits,
+} from './outcome-evidence';
 export type { ParseOptions } from './parsers/claude';
 export { parseTranscript } from './parsers/claude';
 export type { CodexEntry, CodexParseOptions } from './parsers/codex';
@@ -166,6 +171,7 @@ export {
 } from './task-assistance';
 export {
   buildTaskProfile,
+  type OutcomeEvidenceStatus,
   TASK_PROFILE_SCHEMA_VERSION,
   type TaskEvidenceProvenance,
   type TaskEvidenceSource,

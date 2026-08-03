@@ -185,6 +185,13 @@ project key 与七天本地时间窗口；每个 Session 关联和 Git 证据都
 关联会保留 producer/时间/来源 provenance，Git 候选只进入 Outcome 草稿，仍需显式保存；任何
 候选都不会把 build/test/lint 或交付标记为成功，也不读取 prompt 或 transcript 原文。
 
+已批准的只读 `outcome-evidence/v1` 本地 Git adapter 只能在显式选择来源后调用：
+`GET /api/tasks/:id/outcome-evidence?source=local_git`。报告保留 producer、采集时间、来源引用、
+采集限制和 limitation；`not_captured`、`observed` 与 `passed`、`failed`、`skipped`、`not_run`
+明确区分，观测到 Git metadata 不等于验证通过。该 adapter 只执行固定的 Git metadata 查询，
+不执行任意命令或 build/test/lint，不上传内容，也不自动写入 Outcome；远程 CI/review connector
+尚未启用。
+
 ## 如何理解 Profile
 
 - **Session 分析**解释一次已观察到的运行；它是过程证据，不是交付成功证明。

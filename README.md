@@ -238,6 +238,16 @@ provenance, while Git candidates enter the Outcome draft and require an explicit
 save. No candidate marks build, test, lint, or delivery success, and raw prompt
 or transcript content is not used.
 
+The approved read-only `outcome-evidence/v1` local Git adapter is available only
+after an explicit source selection through
+`GET /api/tasks/:id/outcome-evidence?source=local_git`. It reports bounded
+metadata with visible producer, capture time, source reference, limits, and
+limitations. `not_captured` and `observed` are distinct from verification
+statuses; observed Git metadata is not a passing result. The adapter uses fixed
+Git metadata queries only, does not execute arbitrary, build, test, or lint
+commands, does not upload or write Outcome data, and does not enable remote CI
+evidence.
+
 ## How to read a Profile
 
 - **Session analysis** explains one observed run. It is process evidence, not

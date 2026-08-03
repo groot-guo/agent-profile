@@ -1,4 +1,6 @@
+import { isAbsolute } from 'node:path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { collectLocalGitOutcomeEvidence } from '../local-git-outcome-adapter';
 import { getTaskProfileReport } from '../reports-service';
 import type { AppRuntime } from '../runtime';
 import { buildTaskAssistanceReport } from '../task-assistance';
@@ -37,6 +39,45 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
       throw error;
     }
   });
+
+  app.get<{ Params: { id: string }; Querystring: { source: 'local_git' } }>(
+    '/api/tasks/:id/outcome-evidence',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['source'],
+          properties: { source: { type: 'string', enum: ['local_git'] } },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        if (request.query.source !== 'local_git') {
+          return reply.code(400).send({ error: 'unsupported_outcome_evidence_source' });
+        }
+        const task = repository.requireTask(request.params.id);
+        const linkedCwd = database
+          .prepare(
+            `SELECT s.cwd FROM task_sessions ts
+             JOIN sessions s ON s.id = ts.session_id
+             WHERE ts.task_id = ? AND s.cwd IS NOT NULL
+             ORDER BY ts.created_at, ts.session_id LIMIT 1`,
+          )
+          .get(request.params.id) as { cwd: string } | undefined;
+        const cwd =
+          linkedCwd?.cwd ??
+          (task.projectId && isAbsolute(task.projectId) ? task.projectId : undefined);
+        return reply.code(200).send(await collectLocalGitOutcomeEvidence(task.id, cwd));
+      } catch (error) {
+        if (error instanceof TaskModelError) {
+          return reply.code(error.statusCode).send({ error: error.code });
+        }
+        throw error;
+      }
+    },
+  );
 
   app.patch<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) =>
     respond(reply, 200, () =>

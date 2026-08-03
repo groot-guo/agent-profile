@@ -22,6 +22,12 @@ Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度�
 同项目、七天时间窗口候选。每个 Session/Git 建议都要单独确认；确认数据保留 producer、
 时间、来源和相关性依据，Git 建议只进入未保存的 Outcome 草稿，不代表验证通过。
 
+当前还提供显式来源选择的只读 `outcome-evidence/v1` 本地 Git adapter：
+`GET /api/tasks/:id/outcome-evidence?source=local_git`。它只读取关联 Session 工作目录或绝对 Task
+项目中的固定 Git metadata，保留 producer、时间、来源引用、采集限制和 limitation；缺失来源是
+`not_captured`，观测 metadata 是 `observed`，二者都不等于验证通过。它不执行任意命令或
+build/test/lint，不上传内容、不自动写 Outcome，远程 CI/review 证据仍未接入。
+
 ## 作为 Profile 工具的适用边界
 
 - **辅助定位：可以。** 人可以从 Session、Span、诊断和覆盖度中定位慢回合、高成本输出、

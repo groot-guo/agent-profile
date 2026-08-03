@@ -1,6 +1,10 @@
 'use client';
 
-import type { TaskProfileOutcome, VerificationStatus } from '@agent-profile/core';
+import type {
+  OutcomeEvidenceStatus,
+  TaskProfileOutcome,
+  VerificationStatus,
+} from '@agent-profile/core';
 import { useState } from 'react';
 import { C, FS } from '../theme';
 import { SoftButton } from '../ui';
@@ -13,6 +17,14 @@ import {
 import styles from './tasks.module.css';
 
 const statusOptions: VerificationStatus[] = ['passed', 'failed', 'skipped', 'not_run'];
+const evidenceStatusOptions: OutcomeEvidenceStatus[] = [
+  'not_captured',
+  'observed',
+  'passed',
+  'failed',
+  'skipped',
+  'not_run',
+];
 const statusFields = [
   ['buildStatus', 'Build'],
   ['testStatus', 'Test'],
@@ -189,7 +201,7 @@ export function OutcomeEditor({
                 }}
               >
                 <option value="">未采集</option>
-                {statusOptions.map((value) => (
+                {evidenceStatusOptions.map((value) => (
                   <option key={value}>{value}</option>
                 ))}
               </select>

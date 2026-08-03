@@ -94,6 +94,15 @@ evidence retains producer/time/provenance. `verified` Outcome
 coverage means the five tracked coverage fields are present; it does not mean
 that every recorded check passed.
 
+The approved local `outcome-evidence/v1` adapter is read-only and explicit:
+`GET /api/tasks/:id/outcome-evidence?source=local_git` reports bounded Git
+metadata from a linked local working directory or absolute Task project. Its
+records distinguish `not_captured`, `observed`, `passed`, `failed`, `skipped`,
+and `not_run`; observed Git metadata is not a verification pass. Producer,
+capture time, source reference, limits, and limitations remain visible. The
+adapter does not execute arbitrary commands or build/test/lint checks, upload
+content, or write Outcome fields, and remote CI evidence is not enabled.
+
 The product does not automatically rewrite prompts, rules, model settings, or
 tool policy. It can expose an explicit, bounded post-run finding linked to the
 current `cohort-runtime-profile/v1`, but Runtime-consumable live hints and

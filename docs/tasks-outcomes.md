@@ -78,6 +78,26 @@ acceptance adds a provenance-bearing reference to the unsaved Outcome draft; the
 user must review and save it. Suggestions are correlation aids, not membership
 proof, verification results, or delivery-quality conclusions.
 
+## Outcome-evidence adapter contract
+
+`outcome-evidence/v1` is the versioned boundary for a producer that reports
+structured delivery evidence without silently writing an Outcome. A report
+identifies its producer, capture time, source, bounded records, capture limits,
+and limitations. Record status is explicit: `not_captured` means the source did
+not provide evidence; `observed` means bounded metadata was seen without a
+pass/fail claim; `passed`, `failed`, `skipped`, and `not_run` remain available
+when an authorized source explicitly records those verification results.
+
+The first approved producer is the read-only local Git adapter at
+`GET /api/tasks/:id/outcome-evidence?source=local_git`. It uses only fixed Git
+metadata queries against a linked Session working directory or an absolute Task
+project, returns metadata-only local references, and preserves producer/time/
+source provenance. It never executes build, test, or lint commands, accepts no
+arbitrary command, uploads no content, and does not overwrite human Outcome
+fields. Missing Git access is returned as `not_captured` with a limitation;
+`observed` Git metadata is not a passing verification result. Remote CI and
+review connectors are not enabled by this contract.
+
 ## Experiment guardrail
 
 The Task workspace creates and edits local Cohort scopes (project, Task type,
@@ -135,10 +155,10 @@ post-run observation, not a causal guarantee or live Runtime instruction.
 - T113 implements bounded local Task/Session/Git candidates and explicit
   per-item confirmation. Correlation by time, project, or commit is not proof of
   Task membership or success.
-- T114 will define a versioned Outcome-evidence adapter contract and implement
-  one approved local producer only after its authority and privacy boundary are
-  chosen. It must preserve producer, timestamp, local reference, capture limits,
-  and the distinction between coverage and result.
+- T114 implements `outcome-evidence/v1` and one approved read-only local Git
+  producer. It preserves producer, timestamp, local reference, capture limits,
+  and the distinction between coverage and result; arbitrary commands and
+  remote connectors remain outside the boundary.
 - T118 will strengthen comparability strata and uncertainty reporting around the
   current bounded cohort report. It must not turn descriptive process metrics
   into a causal or universal configuration winner.

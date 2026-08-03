@@ -4,6 +4,7 @@ export type TaskStatus = 'planned' | 'in_progress' | 'completed' | 'failed' | 'c
 export type VerificationStatus = 'passed' | 'failed' | 'skipped' | 'not_run';
 
 export type TaskEvidenceSource = 'local_session' | 'local_git';
+export type OutcomeEvidenceStatus = 'not_captured' | 'observed' | VerificationStatus;
 
 export interface TaskEvidenceProvenance {
   producer: string;
@@ -15,7 +16,7 @@ export interface TaskEvidenceProvenance {
 
 export interface TaskOutcomeEvidence {
   kind: string;
-  status?: VerificationStatus;
+  status?: OutcomeEvidenceStatus;
   reference?: string;
   provenance?: TaskEvidenceProvenance;
 }

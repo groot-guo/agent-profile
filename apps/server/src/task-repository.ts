@@ -4,6 +4,7 @@ import {
   buildPostRunFeedback,
   buildTaskProfile,
   type CohortRuntimeProfileReport,
+  type OutcomeEvidenceStatus,
   type PostRunFeedbackReport,
   type TaskEvidenceProvenance,
   type TaskOutcomeEvidence,
@@ -981,7 +982,9 @@ function validateOutcomeEvidence(value: unknown): TaskOutcomeEvidence {
   if (
     evidence.status !== undefined &&
     (typeof evidence.status !== 'string' ||
-      !['passed', 'failed', 'skipped', 'not_run'].includes(evidence.status))
+      !['not_captured', 'observed', 'passed', 'failed', 'skipped', 'not_run'].includes(
+        evidence.status,
+      ))
   ) {
     throw new TaskModelError('invalid_outcome_evidence');
   }
@@ -990,7 +993,7 @@ function validateOutcomeEvidence(value: unknown): TaskOutcomeEvidence {
   }
   return {
     kind: requiredText(evidence.kind, 'invalid_outcome_evidence', 80),
-    status: evidence.status as VerificationStatus | undefined,
+    status: evidence.status as OutcomeEvidenceStatus | undefined,
     reference: optionalText(evidence.reference as string | null | undefined, 500) ?? undefined,
     ...(evidence.provenance === undefined
       ? {}

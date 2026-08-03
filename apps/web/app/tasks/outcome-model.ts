@@ -1,4 +1,5 @@
 import type {
+  OutcomeEvidenceStatus,
   TaskEvidenceProvenance,
   TaskOutcomeEvidence,
   TaskProfileOutcome,
@@ -8,11 +9,12 @@ import type {
 export const MAX_OUTCOME_EVIDENCE = 50;
 
 type DraftStatus = VerificationStatus | '';
+type EvidenceDraftStatus = OutcomeEvidenceStatus | '';
 
 export interface OutcomeEvidenceDraft {
   id: string;
   kind: string;
-  status: DraftStatus;
+  status: EvidenceDraftStatus;
   reference: string;
   provenance?: TaskEvidenceProvenance;
 }

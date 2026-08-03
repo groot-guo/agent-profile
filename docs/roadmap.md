@@ -25,33 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T114 Outcome-evidence adapter contract
-
-- status: planned
-- estimated size/risk: large / high; it introduces explicit producer contracts
-  for local or approved verification evidence
-- purpose: make build/test/lint and related delivery evidence machine-readable
-  without equating a missing field, a command exit code, or an external record
-  with universal quality
-- scope: design a versioned Outcome-evidence adapter contract with producer,
-  timestamp, reference, verification status, capture limits, and local storage
-  semantics; implement one approved local adapter only after its source is
-  selected; defer remote CI/review connectors until their authority and privacy
-  model are approved
-- dependencies: T113 confirmation/provenance workflow and an explicit decision
-  for every external evidence source
-- risks and assumptions: adapters cannot execute arbitrary commands, upload
-  source content, or overwrite human Outcome evidence; `verified` must remain a
-  coverage state and be distinguished from all-positive verification results
-- acceptance: a documented contract distinguishes not-captured, observed,
-  passed, failed, skipped, and not-run; producer provenance is visible; one
-  chosen local adapter has fixtures and failure handling; remote integration is
-  not silently enabled
-- verification: contract tests, adapter fixtures, migration/backfill plan if
-  storage changes, Task Profile coverage tests, and security review
-- documentation: update task/outcome, profile, architecture, API, privacy, and
-  roadmap documents before implementation closes
-
 ### T115 Agent-consumable local reports and CLI workflow
 
 - status: planned
@@ -245,6 +218,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T110](roadmap-archive/2026-q3.md#t110) | profile-evolution documentation and roadmap decomposition | completed |
 | [T111](roadmap-archive/2026-q3.md#t111) | semantic-diagnosis consent, redaction, and audit boundary | completed |
 | [T112](roadmap-archive/2026-q3.md#t112) | diagnosis-to-evidence navigation | completed |
+| [T114](roadmap-archive/2026-q3.md#t114) | Outcome-evidence adapter contract | completed |
 | [T113](roadmap-archive/2026-q3.md#t113) | Task discovery and local Outcome-assistance workflow | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
@@ -341,7 +315,8 @@ The next implementation order is intentionally trust- and evidence-first:
 1. T111 and T112 establish the consent, redaction, audit, and
    finding-to-evidence boundaries.
 2. T113 now provides local Task/Outcome candidates for explicit human review;
-   T114 follows with one versioned Outcome-evidence producer contract.
+   T114 now provides one versioned Outcome-evidence producer contract and a
+   read-only local Git adapter.
 3. T115 builds the content-free Agent-readable local report and explicit write
    workflow on those contracts.
 4. T116 adds a local Runtime event protocol/collector; T117 may add bounded,

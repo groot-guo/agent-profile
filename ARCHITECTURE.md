@@ -723,6 +723,20 @@ cross-Task distributions are exposed separately by the bounded
 `cohort-runtime-profile/v1` Experiment report, which does not infer universal
 configuration winners or causal effects.
 
+### Outcome-evidence adapter contract
+
+`outcome-evidence/v1` is a read-only producer boundary. Each report exposes the
+producer, capture time, source, bounded records, capture limits, and limitations;
+record statuses distinguish `not_captured`, `observed`, `passed`, `failed`,
+`skipped`, and `not_run`. `not_captured` is unavailable source coverage, while
+`observed` is metadata without a verification claim. The approved local Git
+producer is `agent-profile/local-git-outcome-adapter`, exposed through
+`GET /api/tasks/:id/outcome-evidence?source=local_git`. It runs only fixed Git
+metadata queries against a linked Session cwd or absolute Task project, returns
+metadata-only local references, and never executes arbitrary commands,
+build/test/lint checks, uploads content, or writes Outcome fields. No remote CI
+or review connector is enabled.
+
 ### Post-run feedback contract
 
 `GET /api/tasks/:id/feedback?optIn=true` returns zero or more
@@ -808,6 +822,7 @@ page exposes the same contract and privacy boundaries.
 | `GET/PATCH` | `/api/tasks/:id` | Read Task detail or update metadata/lifecycle |
 | `GET/POST` | `/api/tasks/:id/sessions` | List or attach Session/configuration links |
 | `GET` | `/api/tasks/:id/assistance` | Bounded `task-assistance/v1` local Session/Git candidates; acceptance remains explicit |
+| `GET` | `/api/tasks/:id/outcome-evidence?source=local_git` | Read-only bounded `outcome-evidence/v1` local Git metadata; no automatic Outcome write |
 | `PUT` | `/api/tasks/:id/outcome` | Upsert explicit nullable Outcome fields |
 | `GET` | `/api/tasks/:id/profile` | Export coverage-aware `task-profile/v1` |
 | `GET` | `/api/tasks/:id/feedback?optIn=true` | Explicitly requested bounded `post-run-feedback/v1` records |
