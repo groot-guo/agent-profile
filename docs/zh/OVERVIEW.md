@@ -2,8 +2,9 @@
 
 > 本文描述当前已经实现的能力，并与 [中文 README](../../README.zh-CN.md)、
 > `README.md`、`ARCHITECTURE.md` 和 [Profile 模型](../profile-model.md) 保持一致。
-> Task、Outcome、Configuration Snapshot、Cohort、Experiment、Task Profile 与有界
-> post-run feedback 已实现本地能力；外部/运行中 Runtime feedback 仍是未来方案，依赖图见
+> Task、Outcome、Configuration Snapshot、Cohort、Experiment、Task Profile、有界
+> post-run feedback 与 T115 Agent 可消费的本地 CLI 工作流已实现；外部/运行中 Runtime
+> feedback 仍是未来方案，依赖图见
 > [演进方案](../profile-evolution-plan.md)。
 
 ## 定位
@@ -21,6 +22,11 @@ Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度�
 任务页还可从观测 Session 显式预填新 Task 的标题/项目，并读取 `task-assistance/v1` 的
 同项目、七天时间窗口候选。每个 Session/Git 建议都要单独确认；确认数据保留 producer、
 时间、来源和相关性依据，Git 建议只进入未保存的 Outcome 草稿，不代表验证通过。
+
+T115 还提供 `diagnosis`、`evidence`、显式确认的 `task-outcome` 和 opt-in 的
+`task-feedback` CLI workflow。它们在 `--json` 下输出 `agent-profile-cli/v1`，默认只返回
+有界 finding/event references、Span ID、Outcome coverage 和 limitations，不返回原始过程内容，
+也不自动修改 Agent 配置。
 
 当前还提供显式来源选择的只读 `outcome-evidence/v1` 本地 Git adapter：
 `GET /api/tasks/:id/outcome-evidence?source=local_git`。它只读取关联 Session 工作目录或绝对 Task
@@ -266,6 +272,9 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
 - 能持久化 Task、Configuration Snapshot、Outcome、Cohort 和 Experiment，并生成
   `task-profile/v1`；缺失 Outcome 与失败严格区分，并可为符合条件的 candidate Task 显式
   读取有界 `post-run-feedback/v1`。
+- CLI 已提供 `diagnosis`、`evidence`、显式确认的 `task-outcome` 和 opt-in 的
+  `task-feedback`；JSON wrapper 为 `agent-profile-cli/v1`，默认只返回 bounded references、
+  coverage 和 limitations，不返回原始过程内容。
 - 能运行 `agent-profile help/version/doctor/sources/sync/sessions/stats/profiles/serve`
   与 `task-profile <id>`；详细 Session/证据 CLI 查询仍未实现。当前可在本机生成未签名、
   仅限同平台/架构的 Node 发行归档，尚无公开 package、签名安装器或跨平台 CI matrix。

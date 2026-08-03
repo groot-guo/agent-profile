@@ -3,8 +3,9 @@
 > 状态：Proposal；Task/Outcome/Configuration、Cohort/Experiment 定义与单 Task 的
 > `task-profile/v1` 已由 T49/T80 实现，T89 已实现有界的
 > `cohort-runtime-profile/v1`，T90 已实现只读、显式 opt-in 的
-> `post-run-feedback/v1`。更广泛的回归策略、Agent 可消费的本地接口和 live Runtime
-> feedback 仍未实现，依赖顺序见 `profile-evolution-plan.md` 与 T111-T121。
+> `post-run-feedback/v1`。T115 已实现内容受限的 Agent 可消费本地 CLI 接口；更广泛的
+> 回归策略和 live Runtime feedback 仍未实现，依赖顺序见 `profile-evolution-plan.md`
+> 与 T111-T121。
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
 ## 文档地位
@@ -157,7 +158,8 @@ experiments
 ### 5.1 事后反馈（Phase 1）
 
 当前 UI/API 已允许记录显式 Task、Configuration 与 Outcome，并聚合已有
-Session/Span。面向外部 Agent 的统一内容受限读写合同仍是 T115 的未来工作。
+Session/Span。T115 已在此基础上提供面向本地 Agent 的统一、内容受限 CLI 读写合同；它
+仍不是远程控制平面或 live Runtime feedback。
 
 当前已实现的相关本地 API：
 
@@ -170,8 +172,19 @@ GET  /api/tasks/:id/feedback?optIn=true
 GET  /api/experiments/:id/profile
 ```
 
-T115 才会在这些当前接口之上定义面向 Agent 的版本化、内容受限工作流；它不能假定新的
-路径，也不能默认返回 prompt、thinking、answer 或工具输入/输出内容。
+对应的 `agent-profile-cli/v1` 工作流为：
+
+```text
+diagnosis <session-id> --json
+evidence <session-id> --json
+task-outcome <task-id> --confirm --evidence-kind <kind> [--evidence-status <status>]
+task-feedback <task-id> --opt-in --json
+```
+
+诊断与证据命令默认只返回 finding/event references、Span ID 和 coverage；Outcome 命令必须显式
+确认，并复用 Task repository 校验；feedback 命令必须 opt-in。它们不返回 prompt、thinking、
+answer 或工具输入/输出内容，也不改变 Agent 配置。T116/T117 才定义 Runtime 可选接入的
+事件协议和运行中反馈。
 
 ### 5.2 运行时反馈（Phase 3，Proposal）
 

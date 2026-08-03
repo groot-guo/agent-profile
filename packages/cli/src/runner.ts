@@ -3,10 +3,14 @@ import { parseArgs } from 'node:util';
 import {
   CLI_SCHEMA_VERSION,
   type CliCommand,
+  type CliDiagnosisReport,
   type CliDoctorReport,
   type CliDoctorSource,
+  type CliEvidenceReport,
   type CliHelpReport,
   type CliImportStatus,
+  type CliOutcomeEvidenceSource,
+  type CliOutcomeEvidenceStatus,
   type CliProfilesReport,
   type CliReport,
   type CliServeReport,
@@ -16,6 +20,8 @@ import {
   type CliStatsData,
   type CliStatsReport,
   type CliSyncReport,
+  type CliTaskFeedbackReport,
+  type CliTaskOutcomeReport,
   type CliTaskProfileReport,
   type CliVersionReport,
   type ImportJobStatusResponse,
@@ -43,6 +49,10 @@ Commands:
   stats                Show the existing aggregate statistics report
   profiles             Show the existing Agent Process Profile report
   task-profile <id>    Show the existing Task Profile report
+  diagnosis <id>       Show content-free diagnosis findings and Span references
+  evidence <id>        Show bounded content-free evidence references
+  task-outcome <id>    Record explicitly confirmed Outcome evidence
+  task-feedback <id>  Show bounded post-run feedback with explicit opt-in
 
 Options:
   --json               Write a versioned JSON report
@@ -55,6 +65,13 @@ Options:
   --open                Open the local UI after serve is ready
   --limit <count>      Limit Session discovery to 1-100 records
   --cursor <value>     Continue Session discovery from a prior report
+  --confirm            Confirm the explicit task-outcome write
+  --evidence-kind <k>  Evidence kind for task-outcome
+  --evidence-status <s> Evidence status for task-outcome
+  --evidence-reference <r> Bounded evidence reference for task-outcome
+  --evidence-source <s> Provenance source for task-outcome
+  --evidence-source-id <id> Provenance source ID for task-outcome
+  --opt-in              Explicitly request task-feedback
   --help               Show this help
   --version            Show the CLI version`;
 
@@ -67,6 +84,13 @@ export interface ParsedCliArguments {
   limit: number | undefined;
   cursor: string | undefined;
   taskId: string | undefined;
+  confirmOutcome: boolean;
+  evidenceKind: string | undefined;
+  evidenceStatus: CliOutcomeEvidenceStatus | undefined;
+  evidenceReference: string | undefined;
+  evidenceSource: CliOutcomeEvidenceSource | undefined;
+  evidenceSourceId: string | undefined;
+  feedbackOptIn: boolean;
   host: string | undefined;
   port: number | undefined;
   webPort: number | undefined;
@@ -115,8 +139,38 @@ export interface CliDependencies {
     runtime: CliRuntime,
     taskId: string,
   ) => CliTaskProfileReport['taskProfile'];
+  getSessionDiagnosisReport: (
+    runtime: CliRuntime,
+    sessionId: string,
+  ) => Promise<CliDiagnosisReport['diagnosis']>;
+  getSessionEvidenceReport: (
+    runtime: CliRuntime,
+    sessionId: string,
+  ) => CliEvidenceReport['evidence'];
+  recordTaskOutcomeEvidence: (
+    runtime: CliRuntime,
+    taskId: string,
+    evidence: CliOutcomeEvidenceInput,
+  ) => CliTaskOutcomeReport['saved'];
+  getTaskFeedbackReports: (
+    runtime: CliRuntime,
+    taskId: string,
+  ) => CliTaskFeedbackReport['feedback'];
   writeStdout: (text: string) => void;
   writeStderr: (text: string) => void;
+}
+
+export interface CliOutcomeEvidenceInput {
+  kind: string;
+  status?: CliOutcomeEvidenceStatus;
+  reference?: string;
+  provenance?: {
+    producer: string;
+    capturedAt: number;
+    source: CliOutcomeEvidenceSource;
+    sourceId: string;
+    basis: string;
+  };
 }
 
 class CliUsageError extends Error {}
@@ -135,6 +189,13 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     port?: string;
     'web-port'?: string;
     open?: boolean;
+    confirm?: boolean;
+    'evidence-kind'?: string;
+    'evidence-status'?: string;
+    'evidence-reference'?: string;
+    'evidence-source'?: string;
+    'evidence-source-id'?: string;
+    'opt-in'?: boolean;
   };
   let positionals: string[];
 
@@ -156,6 +217,13 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
         port: { type: 'string' },
         'web-port': { type: 'string' },
         open: { type: 'boolean' },
+        confirm: { type: 'boolean' },
+        'evidence-kind': { type: 'string' },
+        'evidence-status': { type: 'string' },
+        'evidence-reference': { type: 'string' },
+        'evidence-source': { type: 'string' },
+        'evidence-source-id': { type: 'string' },
+        'opt-in': { type: 'boolean' },
       },
     }));
   } catch (error) {
@@ -189,6 +257,8 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
   const limit = parseLimit(values.limit);
   const port = parsePort(values.port, '--port');
   const webPort = parsePort(values['web-port'], '--web-port');
+  const evidenceStatus = parseEvidenceStatus(values['evidence-status']);
+  const evidenceSource = parseEvidenceSource(values['evidence-source']);
 
   const requestedCommand = values.help
     ? 'help'
@@ -199,9 +269,15 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     throw new CliUsageError(`Unknown command: ${requestedCommand}`);
   }
   let taskId: string | undefined;
-  if (requestedCommand === 'task-profile') {
+  if (
+    requestedCommand === 'task-profile' ||
+    requestedCommand === 'diagnosis' ||
+    requestedCommand === 'evidence' ||
+    requestedCommand === 'task-outcome' ||
+    requestedCommand === 'task-feedback'
+  ) {
     if (positionals.length !== 2 || !positionals[1]?.trim()) {
-      throw new CliUsageError('task-profile requires a Task ID');
+      throw new CliUsageError(`${requestedCommand} requires an ID`);
     }
     taskId = positionals[1];
   } else if (positionals.length > 1) {
@@ -212,6 +288,35 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
   }
   if (requestedCommand !== 'sync' && values.source) {
     throw new CliUsageError('--source is only supported by sync');
+  }
+  if (
+    requestedCommand !== 'task-outcome' &&
+    (values.confirm ||
+      values['evidence-kind'] ||
+      values['evidence-status'] ||
+      values['evidence-reference'] ||
+      values['evidence-source'] ||
+      values['evidence-source-id'])
+  ) {
+    throw new CliUsageError('--confirm and --evidence-* are only supported by task-outcome');
+  }
+  if (requestedCommand !== 'task-feedback' && values['opt-in']) {
+    throw new CliUsageError('--opt-in is only supported by task-feedback');
+  }
+  if (requestedCommand === 'task-outcome') {
+    if (values.confirm !== true) throw new CliUsageError('task-outcome requires --confirm');
+    if (!values['evidence-kind']?.trim()) {
+      throw new CliUsageError('task-outcome requires --evidence-kind');
+    }
+    if (evidenceSource !== undefined && !values['evidence-source-id']?.trim()) {
+      throw new CliUsageError('--evidence-source-id is required with --evidence-source');
+    }
+    if (values['evidence-source-id'] !== undefined && evidenceSource === undefined) {
+      throw new CliUsageError('--evidence-source is required with --evidence-source-id');
+    }
+  }
+  if (requestedCommand === 'task-feedback' && values['opt-in'] !== true) {
+    throw new CliUsageError('task-feedback requires --opt-in');
   }
   if (
     requestedCommand !== 'sessions' &&
@@ -247,6 +352,13 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     limit,
     cursor: values.cursor,
     taskId,
+    confirmOutcome: values.confirm === true,
+    evidenceKind: values['evidence-kind']?.trim() || undefined,
+    evidenceStatus,
+    evidenceReference: values['evidence-reference']?.trim() || undefined,
+    evidenceSource,
+    evidenceSourceId: values['evidence-source-id']?.trim() || undefined,
+    feedbackOptIn: values['opt-in'] === true,
     host: requestedCommand === 'serve' ? host : undefined,
     port: requestedCommand === 'serve' ? servePort : undefined,
     webPort: requestedCommand === 'serve' ? serveWebPort : undefined,
@@ -340,6 +452,26 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
     }
     if (options.command === 'task-profile' && options.taskId) {
       const report = await taskProfile(databasePath, options.taskId, dependencies);
+      writeReport(report, options.json, dependencies);
+      return 0;
+    }
+    if (options.command === 'diagnosis' && options.taskId) {
+      const report = await diagnosis(databasePath, options.taskId, dependencies);
+      writeReport(report, options.json, dependencies);
+      return 0;
+    }
+    if (options.command === 'evidence' && options.taskId) {
+      const report = await evidence(databasePath, options.taskId, dependencies);
+      writeReport(report, options.json, dependencies);
+      return 0;
+    }
+    if (options.command === 'task-outcome' && options.taskId && options.evidenceKind) {
+      const report = await taskOutcome(options, databasePath, options.taskId, dependencies);
+      writeReport(report, options.json, dependencies);
+      return 0;
+    }
+    if (options.command === 'task-feedback' && options.taskId) {
+      const report = await taskFeedback(databasePath, options.taskId, dependencies);
       writeReport(report, options.json, dependencies);
       return 0;
     }
@@ -476,6 +608,109 @@ async function taskProfile(
   }
 }
 
+async function diagnosis(
+  databasePath: string,
+  sessionId: string,
+  dependencies: CliDependencies,
+): Promise<CliDiagnosisReport> {
+  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  try {
+    return {
+      schemaVersion: CLI_SCHEMA_VERSION,
+      command: 'diagnosis',
+      sessionId,
+      diagnosis: await dependencies.getSessionDiagnosisReport(runtime, sessionId),
+      limitations: [
+        'This report is content-free by default; use Span IDs to request exact evidence through the Web/API.',
+      ],
+    };
+  } finally {
+    await runtime.close();
+  }
+}
+
+async function evidence(
+  databasePath: string,
+  sessionId: string,
+  dependencies: CliDependencies,
+): Promise<CliEvidenceReport> {
+  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  try {
+    return {
+      schemaVersion: CLI_SCHEMA_VERSION,
+      command: 'evidence',
+      sessionId,
+      evidence: dependencies.getSessionEvidenceReport(runtime, sessionId),
+      limitations: [
+        'This report contains bounded references only; raw prompt, answer, thinking, tool input, and tool output content are omitted.',
+      ],
+    };
+  } finally {
+    await runtime.close();
+  }
+}
+
+async function taskOutcome(
+  options: ParsedCliArguments,
+  databasePath: string,
+  taskId: string,
+  dependencies: CliDependencies,
+): Promise<CliTaskOutcomeReport> {
+  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  try {
+    const evidence: CliOutcomeEvidenceInput = {
+      kind: options.evidenceKind as string,
+      status: options.evidenceStatus,
+      reference: options.evidenceReference,
+      ...(options.evidenceSource && options.evidenceSourceId
+        ? {
+            provenance: {
+              producer: 'agent-profile/cli',
+              capturedAt: Date.now(),
+              source: options.evidenceSource,
+              sourceId: options.evidenceSourceId,
+              basis: 'explicit_cli_confirmation',
+            },
+          }
+        : {}),
+    };
+    return {
+      schemaVersion: CLI_SCHEMA_VERSION,
+      command: 'task-outcome',
+      taskId,
+      saved: dependencies.recordTaskOutcomeEvidence(runtime, taskId, evidence),
+      limitations: [
+        'Only the explicitly confirmed evidence entry was appended; no build, test, lint, or delivery status was inferred.',
+        'A saved evidence entry remains a local record and does not establish Task correctness.',
+      ],
+    };
+  } finally {
+    await runtime.close();
+  }
+}
+
+async function taskFeedback(
+  databasePath: string,
+  taskId: string,
+  dependencies: CliDependencies,
+): Promise<CliTaskFeedbackReport> {
+  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  try {
+    return {
+      schemaVersion: CLI_SCHEMA_VERSION,
+      command: 'task-feedback',
+      taskId,
+      feedback: dependencies.getTaskFeedbackReports(runtime, taskId),
+      limitations: [
+        'Feedback is returned only after explicit --opt-in and remains bounded, read-only, and evidence-scoped.',
+        'Suppressed feedback is an evidence-coverage state, not a quality failure.',
+      ],
+    };
+  } finally {
+    await runtime.close();
+  }
+}
+
 async function doctor(
   databasePath: string,
   dependencies: CliDependencies,
@@ -529,6 +764,10 @@ function helpReport(): CliHelpReport {
       'stats',
       'profiles',
       'task-profile',
+      'diagnosis',
+      'evidence',
+      'task-outcome',
+      'task-feedback',
     ],
   };
 }
@@ -550,6 +789,10 @@ function formatReport(report: CliReport): string {
   if (report.command === 'stats') return formatStatsReport(report);
   if (report.command === 'profiles') return formatProfilesReport(report);
   if (report.command === 'task-profile') return formatTaskProfileReport(report);
+  if (report.command === 'diagnosis') return formatDiagnosisReport(report);
+  if (report.command === 'evidence') return formatEvidenceReport(report);
+  if (report.command === 'task-outcome') return formatTaskOutcomeReport(report);
+  if (report.command === 'task-feedback') return formatTaskFeedbackReport(report);
 
   const sourceLines = report.sources.map((source) => {
     const availability = source.available ? 'available' : 'unavailable';
@@ -641,12 +884,91 @@ function formatTaskProfileReport(report: CliTaskProfileReport): string {
   return [
     'Agent Profile task-profile',
     `Task: ${profile.task.title} (${profile.task.id})`,
+    `State: ${profile.task.status} / ${profile.task.type}`,
     `Sessions: ${profile.profile.availableSessions}/${profile.profile.linkedSessions} available`,
     `Outcome coverage: ${profile.coverage.outcome.status}`,
     ...profile.limitations.map((limitation) => `Report limitation: ${limitation}`),
     ...report.limitations.map((limitation) => `Note: ${limitation}`),
     '',
   ].join('\n');
+}
+
+function formatDiagnosisReport(report: CliDiagnosisReport): string {
+  return [
+    'Agent Profile diagnosis',
+    `Session: ${report.sessionId}`,
+    `Findings: ${report.diagnosis.findings.length}`,
+    `Wasted tokens: ${report.diagnosis.totalWastedTokens}`,
+    ...report.diagnosis.findings.map(
+      (finding) =>
+        `  ${finding.severity} ${finding.type}  spans ${finding.spanIds.join(', ') || 'none'}`,
+    ),
+    ...report.diagnosis.limitations.map((limitation) => `Report limitation: ${limitation}`),
+    ...report.limitations.map((limitation) => `Note: ${limitation}`),
+    '',
+  ].join('\n');
+}
+
+function formatEvidenceReport(report: CliEvidenceReport): string {
+  return [
+    'Agent Profile evidence',
+    `Session: ${report.sessionId}`,
+    `References: ${report.evidence.references.length}/${report.evidence.scope.events}`,
+    ...report.evidence.references.map(
+      (reference) =>
+        `  #${reference.sequence} ${reference.type} ${reference.id} (${reference.outcome})`,
+    ),
+    ...report.evidence.limitations.map((limitation) => `Report limitation: ${limitation}`),
+    ...report.limitations.map((limitation) => `Note: ${limitation}`),
+    '',
+  ].join('\n');
+}
+
+function formatTaskOutcomeReport(report: CliTaskOutcomeReport): string {
+  return [
+    'Agent Profile task-outcome',
+    `Task: ${report.taskId}`,
+    `Saved evidence: ${report.saved.kind}${report.saved.status ? ` (${report.saved.status})` : ''}`,
+    `Evidence count: ${report.saved.evidenceCount}`,
+    `Outcome coverage: ${report.saved.coverage.status}`,
+    ...report.limitations.map((limitation) => `Note: ${limitation}`),
+    '',
+  ].join('\n');
+}
+
+function formatTaskFeedbackReport(report: CliTaskFeedbackReport): string {
+  return [
+    'Agent Profile task-feedback',
+    `Task: ${report.taskId}`,
+    `Reports: ${report.feedback.length}`,
+    ...report.feedback.map((feedback) => `  ${String(feedback.status ?? 'unknown')}`),
+    ...report.limitations.map((limitation) => `Note: ${limitation}`),
+    '',
+  ].join('\n');
+}
+
+function parseEvidenceStatus(value: string | undefined): CliOutcomeEvidenceStatus | undefined {
+  if (value === undefined) return undefined;
+  const statuses: CliOutcomeEvidenceStatus[] = [
+    'not_captured',
+    'observed',
+    'passed',
+    'failed',
+    'skipped',
+    'not_run',
+  ];
+  if (!statuses.includes(value as CliOutcomeEvidenceStatus)) {
+    throw new CliUsageError('--evidence-status must be a supported Outcome evidence status');
+  }
+  return value as CliOutcomeEvidenceStatus;
+}
+
+function parseEvidenceSource(value: string | undefined): CliOutcomeEvidenceSource | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'local_session' && value !== 'local_git') {
+    throw new CliUsageError('--evidence-source must be local_session or local_git');
+  }
+  return value;
 }
 
 function parsePort(value: string | undefined, option: '--port' | '--web-port'): number | undefined {
@@ -700,7 +1022,11 @@ function isCliCommand(value: string): value is CliCommand {
     value === 'sessions' ||
     value === 'stats' ||
     value === 'profiles' ||
-    value === 'task-profile'
+    value === 'task-profile' ||
+    value === 'diagnosis' ||
+    value === 'evidence' ||
+    value === 'task-outcome' ||
+    value === 'task-feedback'
   );
 }
 

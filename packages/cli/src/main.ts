@@ -4,7 +4,15 @@ import { cwd } from 'node:process';
 import { DEFAULT_SCAN_DIR } from 'trace-server/config';
 import { startHttpServer } from 'trace-server/http-server';
 import { getImportStatus, runImport } from 'trace-server/imports';
-import { getAgentProfileReport, getStatsReport, getTaskProfileReport } from 'trace-server/reports';
+import {
+  getAgentProfileReport,
+  getSessionDiagnosisReport,
+  getSessionEvidenceReport,
+  getStatsReport,
+  getTaskFeedbackReports,
+  getTaskProfileReport,
+  recordTaskOutcomeEvidence,
+} from 'trace-server/reports';
 import { createProductionRuntime, defaultDatabasePath } from 'trace-server/runtime';
 import { discoverSessions } from 'trace-server/sessions';
 import { openBrowser } from './open-browser';
@@ -79,6 +87,22 @@ export function createDefaultCliDependencies(): CliDependencies {
     getTaskProfileReport: (runtime, taskId) => {
       const appRuntime = runtime as Parameters<typeof getImportStatus>[0];
       return getTaskProfileReport(appRuntime, taskId);
+    },
+    getSessionDiagnosisReport: (runtime, sessionId) => {
+      const appRuntime = runtime as Parameters<typeof getImportStatus>[0];
+      return getSessionDiagnosisReport(appRuntime, sessionId);
+    },
+    getSessionEvidenceReport: (runtime, sessionId) => {
+      const appRuntime = runtime as Parameters<typeof getImportStatus>[0];
+      return getSessionEvidenceReport(appRuntime, sessionId);
+    },
+    recordTaskOutcomeEvidence: (runtime, taskId, evidence) => {
+      const appRuntime = runtime as Parameters<typeof getImportStatus>[0];
+      return recordTaskOutcomeEvidence(appRuntime, taskId, evidence);
+    },
+    getTaskFeedbackReports: (runtime, taskId) => {
+      const appRuntime = runtime as Parameters<typeof getImportStatus>[0];
+      return getTaskFeedbackReports(appRuntime, taskId);
     },
     writeStdout: (text) => process.stdout.write(text),
     writeStderr: (text) => process.stderr.write(text),

@@ -76,6 +76,10 @@ Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web
 ./packages/cli/bin/agent-profile.mjs stats --json
 ./packages/cli/bin/agent-profile.mjs profiles --json
 ./packages/cli/bin/agent-profile.mjs task-profile <task-id> --json
+./packages/cli/bin/agent-profile.mjs diagnosis <session-id> --json
+./packages/cli/bin/agent-profile.mjs evidence <session-id> --json
+./packages/cli/bin/agent-profile.mjs task-outcome <task-id> --confirm --evidence-kind review --evidence-status observed --json
+./packages/cli/bin/agent-profile.mjs task-feedback <task-id> --opt-in --json
 ./packages/cli/bin/agent-profile.mjs serve --open
 ```
 
@@ -95,8 +99,8 @@ Runtime 失败为 `1`。
 `sources` 会刷新本地来源可用性并输出已存主链 Session 计数，但不会返回本地路径或
 transcript 标识。`sync` 使用与 API 相同的 Runtime 导入服务，等待所选来源进入终态后输出
 逐来源结果。不传 `--source` 时选择全部支持的来源，重复该选项可选择多个来源。它不会启动
-HTTP，但会把派生的本地 Session/Span 数据导入所选数据库；详细 Session/证据 CLI 查询仍在
-开发中，Web/API 已提供有界详情和证据体验。
+HTTP，但会把派生的本地 Session/Span 数据导入所选数据库；`diagnosis` 与 `evidence` CLI
+查询提供无内容、有界的 finding/event references，完整详情和按需预览仍以 Web/API 为主。
 
 `sessions` 返回当前主链 Session 的有界摘要页：默认 20 条、最多 100 条，按开始时间和 ID
 排序。把上一份 JSON 报告中的不透明 `nextCursor` 通过 `--cursor` 传回即可继续翻页。报告不含
@@ -111,6 +115,13 @@ cohort/configuration 分布与 guardrail 结果，但不推断通用或因果赢
 已完成且 Outcome 已验证的 candidate Task 可通过显式
 `GET /api/tasks/:id/feedback?optIn=true` 读取 `post-run-feedback/v1`；它只引用
 Experiment 的有界证据与 limitations，证据不足或过期时会抑制，不会自动修改配置。
+
+`diagnosis <session-id>` 和 `evidence <session-id>` 提供无内容、有限长度的 Agent 可消费报告：诊断只返回
+finding 类型、严重级别、token/cost 影响和精确 Span ID；证据只返回稳定事件引用和覆盖度，不返回
+prompt、answer、thinking、tool input/output、本地路径或 transcript 标识。`task-outcome <task-id>`
+必须带 `--confirm --evidence-kind ...`，只追加显式提供且经过 Task repository 校验的证据，不推断任何
+检查通过；`task-feedback <task-id>` 必须带 `--opt-in`，读取已有的只读、有界 `post-run-feedback/v1`。
+四个命令在 `--json` 下都输出 `agent-profile-cli/v1` wrapper。
 
 ## 第一次导入数据
 

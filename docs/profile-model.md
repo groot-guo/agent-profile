@@ -103,6 +103,15 @@ capture time, source reference, limits, and limitations remain visible. The
 adapter does not execute arbitrary commands or build/test/lint checks, upload
 content, or write Outcome fields, and remote CI evidence is not enabled.
 
+The local CLI exposes the same boundary to an Agent: `diagnosis <session-id>`
+returns content-free finding references, `evidence <session-id>` returns bounded
+Span references and coverage, `task-outcome <task-id> --confirm` appends only an
+explicit repository-validated evidence entry, and `task-feedback <task-id>
+--opt-in` reads bounded post-run feedback. JSON responses use the
+`agent-profile-cli/v1` wrapper. These commands do not expose raw process content,
+mutate Agent configuration, infer verification success, or turn process metrics
+into delivery claims.
+
 The product does not automatically rewrite prompts, rules, model settings, or
 tool policy. It can expose an explicit, bounded post-run finding linked to the
 current `cohort-runtime-profile/v1`, but Runtime-consumable live hints and

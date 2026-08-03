@@ -6,6 +6,8 @@ import type {
 } from './common';
 
 export const CLI_SCHEMA_VERSION = 'agent-profile-cli/v1';
+export const CLI_DIAGNOSIS_SCHEMA_VERSION = 'cli-diagnosis/v1';
+export const CLI_EVIDENCE_SCHEMA_VERSION = 'cli-evidence/v1';
 
 export type CliCommand =
   | 'help'
@@ -17,7 +19,11 @@ export type CliCommand =
   | 'sessions'
   | 'stats'
   | 'profiles'
-  | 'task-profile';
+  | 'task-profile'
+  | 'diagnosis'
+  | 'evidence'
+  | 'task-outcome'
+  | 'task-feedback';
 
 export interface CliHelpReport {
   schemaVersion: typeof CLI_SCHEMA_VERSION;
@@ -204,7 +210,12 @@ export interface CliProfilesReport {
 export interface CliTaskProfileData {
   schemaVersion: string;
   generatedAt: number;
-  task: { id: string; title: string };
+  task: {
+    id: string;
+    title: string;
+    type: string;
+    status: 'planned' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  };
   profile: { linkedSessions: number; availableSessions: number };
   coverage: {
     outcome: { status: 'not_collected' | 'partial' | 'verified' };
@@ -220,6 +231,131 @@ export interface CliTaskProfileReport {
   limitations: string[];
 }
 
+export interface CliDiagnosisFindingReference {
+  type: string;
+  severity: 'high' | 'medium' | 'low';
+  wastedTokens: number;
+  wastedCost: number;
+  costUnknown: boolean;
+  spanIds: string[];
+}
+
+export interface CliDiagnosisReport {
+  schemaVersion: typeof CLI_SCHEMA_VERSION;
+  command: 'diagnosis';
+  sessionId: string;
+  diagnosis: {
+    schemaVersion: typeof CLI_DIAGNOSIS_SCHEMA_VERSION;
+    generatedAt: number;
+    session: { id: string; agent: string; startTime: number; endTime: number | null };
+    findings: CliDiagnosisFindingReference[];
+    totalWastedTokens: number;
+    totalWastedCost: number;
+    costUnknownCount: number;
+    semantic: {
+      requested: boolean;
+      consent: 'not_granted' | 'granted';
+      status: 'not_requested' | 'not_configured' | 'completed' | 'failed';
+      provider: 'anthropic' | 'openai' | null;
+      audit: {
+        recorded: boolean;
+        retention: 'process_bounded_content_free';
+        rawContentStored: false;
+      };
+    };
+    limitations: string[];
+  };
+  limitations: string[];
+}
+
+export type CliEvidenceSpanType = 'llm_turn' | 'tool_call' | 'thinking' | 'answer';
+export type CliEvidenceLane = 'main' | 'sidechain';
+export type CliEvidenceOutcome = 'observed_error' | 'no_error_observed' | 'not_applicable';
+export type CliEvidenceParentLink = 'root' | 'linked' | 'missing_parent';
+
+export interface CliEvidenceCoverage {
+  observed: number;
+  total: number;
+  coverage: number | null;
+  status: 'available' | 'partial' | 'complete' | 'not_captured' | 'not_applicable';
+}
+
+export interface CliEvidenceReference {
+  sequence: number;
+  id: string;
+  parentId: string | null;
+  parentLink: CliEvidenceParentLink;
+  type: CliEvidenceSpanType;
+  lane: CliEvidenceLane;
+  outcome: CliEvidenceOutcome;
+  startTime: number;
+  endTime: number | null;
+  durationMs: number | null;
+}
+
+export interface CliEvidenceReport {
+  schemaVersion: typeof CLI_SCHEMA_VERSION;
+  command: 'evidence';
+  sessionId: string;
+  evidence: {
+    schemaVersion: typeof CLI_EVIDENCE_SCHEMA_VERSION;
+    generatedAt: number;
+    session: { id: string; agent: string; startTime: number; endTime: number | null };
+    scope: { events: number; returnedReferences: number };
+    coverage: {
+      timing: CliEvidenceCoverage;
+      parentLinks: CliEvidenceCoverage;
+      toolInputs: CliEvidenceCoverage;
+      toolOutputs: CliEvidenceCoverage;
+      modelIdentity: CliEvidenceCoverage;
+      content: CliEvidenceCoverage;
+    };
+    privacy: {
+      contentMode: 'none';
+      previewCharacters: 0;
+      secretRedaction: true;
+      rawContentIncluded: false;
+    };
+    references: CliEvidenceReference[];
+    limitations: string[];
+  };
+  limitations: string[];
+}
+
+export type CliOutcomeEvidenceStatus =
+  | 'not_captured'
+  | 'observed'
+  | 'passed'
+  | 'failed'
+  | 'skipped'
+  | 'not_run';
+export type CliOutcomeEvidenceSource = 'local_session' | 'local_git';
+
+export interface CliTaskOutcomeReport {
+  schemaVersion: typeof CLI_SCHEMA_VERSION;
+  command: 'task-outcome';
+  taskId: string;
+  saved: {
+    evidenceCount: number;
+    kind: string;
+    status: CliOutcomeEvidenceStatus | null;
+    coverage: {
+      observedFields: number;
+      totalFields: number;
+      status: 'not_collected' | 'partial' | 'verified';
+    };
+  };
+  limitations: string[];
+}
+
+export interface CliTaskFeedbackReport {
+  schemaVersion: typeof CLI_SCHEMA_VERSION;
+  command: 'task-feedback';
+  taskId: string;
+  feedback: Array<Record<string, unknown>>;
+  limitations: string[];
+}
+
 export type CliReport =
   | CliHelpReport
   | CliVersionReport
@@ -230,4 +366,8 @@ export type CliReport =
   | CliSessionsReport
   | CliStatsReport
   | CliProfilesReport
-  | CliTaskProfileReport;
+  | CliTaskProfileReport
+  | CliDiagnosisReport
+  | CliEvidenceReport
+  | CliTaskOutcomeReport
+  | CliTaskFeedbackReport;

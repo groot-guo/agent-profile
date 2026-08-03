@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
   CliAgentProfilesData,
+  CliDiagnosisReport,
+  CliEvidenceReport,
   CliStatsData,
+  CliTaskOutcomeReport,
   CliTaskProfileData,
   ImportJobStatusResponse,
 } from '@agent-profile/contracts';
@@ -119,10 +122,81 @@ function createDependencies(): {
   const taskProfile: CliTaskProfileData = {
     schemaVersion: 'task-profile/v1',
     generatedAt: 1,
-    task: { id: 'task-1', title: 'Fixture Task' },
+    task: { id: 'task-1', title: 'Fixture Task', type: 'feature', status: 'in_progress' },
     profile: { linkedSessions: 0, availableSessions: 0 },
     coverage: { outcome: { status: 'not_collected' } },
     limitations: [],
+  };
+  const diagnosis: CliDiagnosisReport['diagnosis'] = {
+    schemaVersion: 'cli-diagnosis/v1',
+    generatedAt: 1,
+    session: { id: 'session-1', agent: 'codex', startTime: 1, endTime: 2 },
+    findings: [
+      {
+        type: 'repeated_failure',
+        severity: 'medium',
+        wastedTokens: 10,
+        wastedCost: 0,
+        costUnknown: true,
+        spanIds: ['span-1'],
+      },
+    ],
+    totalWastedTokens: 10,
+    totalWastedCost: 0,
+    costUnknownCount: 1,
+    semantic: {
+      requested: false,
+      consent: 'not_granted',
+      status: 'not_requested',
+      provider: null,
+      audit: {
+        recorded: false,
+        retention: 'process_bounded_content_free',
+        rawContentStored: false,
+      },
+    },
+    limitations: [],
+  };
+  const evidence: CliEvidenceReport['evidence'] = {
+    schemaVersion: 'cli-evidence/v1',
+    generatedAt: 1,
+    session: { id: 'session-1', agent: 'codex', startTime: 1, endTime: 2 },
+    scope: { events: 1, returnedReferences: 1 },
+    coverage: {
+      timing: { observed: 1, total: 1, coverage: 1, status: 'complete' },
+      parentLinks: { observed: 0, total: 0, coverage: null, status: 'not_applicable' },
+      toolInputs: { observed: 0, total: 0, coverage: null, status: 'not_applicable' },
+      toolOutputs: { observed: 0, total: 0, coverage: null, status: 'not_applicable' },
+      modelIdentity: { observed: 0, total: 0, coverage: null, status: 'not_applicable' },
+      content: { observed: 0, total: 0, coverage: null, status: 'not_captured' },
+    },
+    privacy: {
+      contentMode: 'none',
+      previewCharacters: 0,
+      secretRedaction: true,
+      rawContentIncluded: false,
+    },
+    references: [
+      {
+        sequence: 1,
+        id: 'span-1',
+        parentId: null,
+        parentLink: 'root',
+        type: 'llm_turn',
+        lane: 'main',
+        outcome: 'not_applicable',
+        startTime: 1,
+        endTime: 2,
+        durationMs: 1,
+      },
+    ],
+    limitations: [],
+  };
+  const outcome: CliTaskOutcomeReport['saved'] = {
+    evidenceCount: 1,
+    kind: 'review',
+    status: 'observed',
+    coverage: { observedFields: 0, totalFields: 5, status: 'not_collected' },
   };
 
   return {
@@ -143,6 +217,10 @@ function createDependencies(): {
       getStatsReport: vi.fn(() => statistics),
       getAgentProfileReport: vi.fn(() => agentProfiles),
       getTaskProfileReport: vi.fn(() => taskProfile),
+      getSessionDiagnosisReport: vi.fn(async () => diagnosis),
+      getSessionEvidenceReport: vi.fn(() => evidence),
+      recordTaskOutcomeEvidence: vi.fn(() => outcome),
+      getTaskFeedbackReports: vi.fn(() => []),
       startServe: vi.fn(async (options) => ({
         url: `http://${options.host}:${options.port}`,
         apiUrl: `http://${options.host}:${options.port}/api`,
@@ -362,6 +440,60 @@ describe('CLI runner', () => {
       command: 'task-profile',
       taskId: 'task-1',
       taskProfile: { schemaVersion: 'task-profile/v1' },
+    });
+  });
+
+  it('runs content-free diagnosis/evidence and explicit Outcome/feedback workflows', async () => {
+    const diagnosis = createDependencies();
+    const evidence = createDependencies();
+    const outcome = createDependencies();
+    const feedback = createDependencies();
+
+    expect(await runCli(['diagnosis', 'session-1', '--json'], diagnosis.dependencies)).toBe(0);
+    expect(await runCli(['evidence', 'session-1', '--json'], evidence.dependencies)).toBe(0);
+    expect(
+      await runCli(
+        [
+          'task-outcome',
+          'task-1',
+          '--confirm',
+          '--evidence-kind',
+          'review',
+          '--evidence-status',
+          'observed',
+          '--evidence-source',
+          'local_session',
+          '--evidence-source-id',
+          'session-1',
+          '--json',
+        ],
+        outcome.dependencies,
+      ),
+    ).toBe(0);
+    expect(
+      await runCli(['task-feedback', 'task-1', '--opt-in', '--json'], feedback.dependencies),
+    ).toBe(0);
+
+    expect(JSON.parse(diagnosis.output.stdout.join(''))).toMatchObject({
+      command: 'diagnosis',
+      diagnosis: { schemaVersion: 'cli-diagnosis/v1', findings: [{ spanIds: ['span-1'] }] },
+    });
+    expect(JSON.parse(evidence.output.stdout.join(''))).toMatchObject({
+      command: 'evidence',
+      evidence: { schemaVersion: 'cli-evidence/v1', references: [{ id: 'span-1' }] },
+    });
+    expect(outcome.dependencies.recordTaskOutcomeEvidence).toHaveBeenCalledWith(
+      expect.anything(),
+      'task-1',
+      expect.objectContaining({
+        kind: 'review',
+        status: 'observed',
+        provenance: expect.objectContaining({ source: 'local_session', sourceId: 'session-1' }),
+      }),
+    );
+    expect(JSON.parse(feedback.output.stdout.join(''))).toMatchObject({
+      command: 'task-feedback',
+      feedback: [],
     });
   });
 

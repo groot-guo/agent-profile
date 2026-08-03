@@ -857,6 +857,12 @@ page exposes the same contract and privacy boundaries.
 - CLI report commands share the current Statistics/Profile/Task Profile builders
   with their HTTP surfaces. The command layer only wraps the existing results in
   `agent-profile-cli/v1` and preserves report-specific coverage and limitations.
+- CLI `diagnosis <session-id>` and `evidence <session-id>` expose bounded,
+  content-free finding/event references; `task-outcome <task-id> --confirm`
+  appends only an explicitly supplied evidence entry through TaskRepository
+  validation; `task-feedback <task-id> --opt-in` reads bounded post-run
+  feedback. JSON uses `agent-profile-cli/v1`; no command exposes raw prompt,
+  answer, thinking, tool input/output, or local path content by default.
 - `agent-profile serve` composes Next standalone, the shared Runtime, and
   Fastify behind one loopback origin. The release archive keeps mutable data
   outside its installation tree and closes all three layers on signals.

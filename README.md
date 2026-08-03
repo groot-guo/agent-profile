@@ -92,6 +92,10 @@ The source workspace also provides the first `agent-profile` CLI entry point:
 ./packages/cli/bin/agent-profile.mjs stats --json
 ./packages/cli/bin/agent-profile.mjs profiles --json
 ./packages/cli/bin/agent-profile.mjs task-profile <task-id> --json
+./packages/cli/bin/agent-profile.mjs diagnosis <session-id> --json
+./packages/cli/bin/agent-profile.mjs evidence <session-id> --json
+./packages/cli/bin/agent-profile.mjs task-outcome <task-id> --confirm --evidence-kind review --evidence-status observed --json
+./packages/cli/bin/agent-profile.mjs task-feedback <task-id> --opt-in --json
 ./packages/cli/bin/agent-profile.mjs serve --open
 ```
 
@@ -134,6 +138,17 @@ Their JSON reports retain the existing metric coverage and limitations. Process
 evidence does not establish delivery quality; the Agent Profile's relative
 observations are not universal quality rankings, and a Task Profile only covers
 its explicitly linked Sessions and locally recorded Outcome evidence.
+
+`diagnosis <session-id>` and `evidence <session-id>` add content-free, bounded
+Agent-readable reports. Diagnosis returns finding types, severity, cost/token
+impact, and exact Span IDs; evidence returns stable event references and
+coverage without prompt, answer, thinking, tool input, tool output, local paths,
+or transcript identifiers. `task-outcome <task-id>` requires `--confirm
+--evidence-kind ...` and appends only the explicitly supplied,
+repository-validated evidence entry; it never infers a passing check.
+`task-feedback <task-id>` requires `--opt-in` and returns bounded, read-only
+`post-run-feedback/v1` reports. All four commands emit `agent-profile-cli/v1`
+wrappers in JSON mode.
 
 ## First import
 

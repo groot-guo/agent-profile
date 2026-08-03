@@ -98,6 +98,15 @@ fields. Missing Git access is returned as `not_captured` with a limitation;
 `observed` Git metadata is not a passing verification result. Remote CI and
 review connectors are not enabled by this contract.
 
+The local `agent-profile-cli/v1` workflow consumes these boundaries without
+opening a remote control plane: `diagnosis` cites content-free finding and Span
+references, `evidence` cites bounded event references and coverage,
+`task-outcome --confirm` appends one explicitly supplied evidence entry through
+the repository validator, and `task-feedback --opt-in` reads bounded feedback.
+The CLI defaults omit prompt, answer, thinking, tool input/output, local paths,
+and transcript identifiers; no command infers a passing Outcome or mutates
+Agent configuration.
+
 ## Experiment guardrail
 
 The Task workspace creates and edits local Cohort scopes (project, Task type,
@@ -159,6 +168,10 @@ post-run observation, not a causal guarantee or live Runtime instruction.
   producer. It preserves producer, timestamp, local reference, capture limits,
   and the distinction between coverage and result; arbitrary commands and
   remote connectors remain outside the boundary.
+- T115 implements the local `agent-profile-cli/v1` inspect/cite/write/read
+  workflow with explicit `--confirm` and `--opt-in` gates. It remains a local,
+  content-free consumer of existing diagnosis, evidence, Task, Outcome, and
+  feedback contracts; it is not a live Runtime control loop.
 - T118 will strengthen comparability strata and uncertainty reporting around the
   current bounded cohort report. It must not turn descriptive process metrics
   into a causal or universal configuration winner.

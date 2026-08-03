@@ -25,32 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T115 Agent-consumable local reports and CLI workflow
-
-- status: planned
-- estimated size/risk: medium / medium; it expands local read/write ergonomics
-  without creating a remote control plane
-- purpose: give an Agent a bounded, versioned way to inspect diagnostics,
-  evidence references, Task state, and eligible post-run feedback, then write
-  only explicitly confirmed Outcome evidence
-- scope: add content-free CLI/API report commands for diagnosis and evidence
-  references, document request/response contracts, and expose an explicit
-  Outcome-write workflow that uses the Task repository validations
-- dependencies: T111 semantic-disclosure boundary, T112 stable
-  finding-to-evidence navigation, T90 bounded feedback, T102 CLI foundation,
-  and T113/T114 confirmed Task/Outcome provenance; it remains loopback/local
-  only
-- risks and assumptions: commands must not expose raw prompt/answer/thinking/
-  tool content by default, mutate Agent configuration, or claim a Task passed
-  from process metrics alone
-- acceptance: an Agent can complete `inspect -> cite evidence -> propose or
-  record confirmed Outcome -> read bounded feedback` using versioned local
-  interfaces; no automatic configuration mutation is introduced
-- verification: CLI parser/report tests, Server contract tests, end-to-end
-  local Runtime fixture, and documentation examples
-- documentation: update CLI README sections, architecture/API surface, profile
-  model, runtime proposal, Chinese overview, and roadmap
-
 ### T116 runtime event protocol and local collector foundation
 
 - status: planned
@@ -219,6 +193,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T111](roadmap-archive/2026-q3.md#t111) | semantic-diagnosis consent, redaction, and audit boundary | completed |
 | [T112](roadmap-archive/2026-q3.md#t112) | diagnosis-to-evidence navigation | completed |
 | [T114](roadmap-archive/2026-q3.md#t114) | Outcome-evidence adapter contract | completed |
+| [T115](roadmap-archive/2026-q3.md#t115) | Agent-consumable local reports and CLI workflow | completed |
 | [T113](roadmap-archive/2026-q3.md#t113) | Task discovery and local Outcome-assistance workflow | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
@@ -317,8 +292,8 @@ The next implementation order is intentionally trust- and evidence-first:
 2. T113 now provides local Task/Outcome candidates for explicit human review;
    T114 now provides one versioned Outcome-evidence producer contract and a
    read-only local Git adapter.
-3. T115 builds the content-free Agent-readable local report and explicit write
-   workflow on those contracts.
+3. T115 now provides the content-free Agent-readable local report and explicit
+   Outcome-write workflow on those contracts.
 4. T116 adds a local Runtime event protocol/collector; T117 may add bounded,
    opt-in in-run hints only after the event and Outcome contracts are stable.
 
