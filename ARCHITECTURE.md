@@ -8,7 +8,8 @@ persistence, Task-Session links, cohort/experiment definitions,
 `task-profile/v1`, `cohort-runtime-profile/v1`, and bounded
 `post-run-feedback/v1` are implemented foundations. Broader automated cohort
 statistics, causal experiment evaluation, automatic regression decisions, and
-live Runtime feedback remain proposals in
+live Runtime feedback remain proposals. Their dependency plan is
+`docs/profile-evolution-plan.md`; the future Runtime design is in
 `docs/agent-runtime-profile-design.md`. The prompt-review surface remains
 ephemeral and does not automatically create or modify those persisted records.
 
@@ -200,8 +201,9 @@ discovery reads a safe primary-Session summary page (default 20, maximum 100),
 ordered by `start_time` and ID with an opaque cursor. It omits Session names,
 local paths, transcript identifiers, Span metadata, and content. The
 compatibility `GET /api/sessions` route retains its existing full-array response
-through the same query service; detailed Session/evidence CLI commands and
-reports remain T102 work.
+through the same query service; detailed Session/evidence CLI commands and an
+Outcome-write workflow are not implemented. T115 stages those content-free,
+versioned local Agent interfaces.
 
 The default database is outside application files:
 `~/Library/Application Support/agent-profile/trace.db` on macOS,
@@ -230,10 +232,11 @@ completion.
 `end_time` as a completion signal. A revision updated within 30 seconds is
 `updating`; one updated within five minutes is `recent`; older observed revisions
 are `settled`; unavailable or unobserved sources are `unknown`. These states are
-provisional recency classifications, not process-liveness guarantees. In the
-default chronological view, updating/recent Sessions are grouped first and
-labelled in the row. Other sorts preserve their Server order. The Web advances
-the classification locally as time passes between source changes.
+provisional recency classifications after a source history changed and was
+imported, not a Runtime event stream or process-liveness guarantee. In the default
+chronological view, updating/recent Sessions are grouped first and labelled in the
+row. Other sorts preserve their Server order. The Web advances the classification
+locally as time passes between source changes.
 
 Session discovery uses one flat recent list grouped by today/yesterday/recent
 time boundaries. Project is row metadata and an exact counted selector rather
@@ -403,9 +406,9 @@ stale provider-labelled rows once; no generated-data reset is required.
   `source_updated_at`, `source_fingerprint`); agent/model fields plus the
   migration-backed analytical `project_key`; four
   token totals; context, cache, cost, duration, annotation tags, and notes.
-- `spans` — normalized `llm_turn` and `tool_call` evidence, token/context/cost
-  fields, selected pricing model/revision, timing, parent/sidechain links, tool
-  input/output metadata, and truncation-safe content.
+- `spans` — normalized `llm_turn`, `thinking`, `answer`, and `tool_call`
+  evidence, token/context/cost fields, selected pricing model/revision, timing,
+  parent/sidechain links, tool input/output metadata, and truncation-safe content.
 - `session_relationships` — source-native child-to-parent Session IDs, source
   kind, and update time. It deliberately permits an unavailable parent ID so
   imported child evidence is not discarded.
@@ -524,8 +527,9 @@ model identity or imply a configuration effect on delivery quality.
 Efficiency, diagnosis, and scoring describe execution behavior. A recorded Task
 and Outcome add delivery evidence for that Task, but neither one Task nor an
 unscoped Agent Process Profile establishes a general configuration effect. This
-is the boundary between implemented Session/Task evidence and the future
-cohort/configuration Runtime Profile design.
+is the boundary between implemented Session/Task evidence, the bounded
+descriptive `cohort-runtime-profile/v1`, and future broader or causal
+configuration-evaluation work.
 
 ## Analysis surfaces
 
@@ -573,6 +577,19 @@ recomputed.
 
 LLM diagnosis is optional. Without its API configuration, deterministic
 analysis remains available and the service continues to function.
+
+With `LLM_API_KEY` configured, `GET /api/session/:id/diagnosis` currently
+invokes the configured Anthropic-native or OpenAI-compatible provider whenever
+the Session has at least one captured `thinking` or `tool_call` Span. The request
+includes the captured Session title when present, up to five thinking snippets
+capped at 2,000 characters each, and up to twenty tool calls with name, error
+state, and a 200-character input prefix. `LLM_BASE_URL` may target a local or
+external compatible endpoint; without an override it is the external DeepSeek
+default, and the application does not determine endpoint locality. This payload
+is bounded but is not request-scoped opt-in or pre-transmission redacted in the
+current release, and no content-free provider-call audit is stored. T111 owns
+those protections; until then, a sensitive workspace must leave the key unset or
+use an approved endpoint.
 
 ### Session evidence report contract
 
@@ -667,8 +684,9 @@ status from an observed non-error in every format, so tool-error rates count
 explicit observed errors only. The `/profiles` page presents the same contract
 as a human-readable process fingerprint rather than a leaderboard. Task and
 configuration scope are deliberately absent from this report today; use
-`task-profile/v1` for one delivery unit, and do not imply a cohort/configuration
-Runtime Profile until that future report exists.
+`task-profile/v1` for one delivery unit and the bounded
+`cohort-runtime-profile/v1` for an eligible Experiment. Neither makes an Agent
+Process Profile a configuration-quality ranking or causal comparison.
 
 ### Task Profile report contract
 
@@ -837,6 +855,8 @@ page exposes the same contract and privacy boundaries.
 - `README.md` is the concise user-facing current-state entry point.
 - `docs/roadmap.md` is the source of truth for task status and completion
   evidence.
+- `docs/profile-evolution-plan.md` maps proposal-only dependencies for the
+  future evidence, Agent-interface, Runtime, comparison, and operations work.
 - `docs/performance.md` defines the reproducible content-free scale fixture,
   benchmark method, desktop regression budgets, and known measurement limits.
 - `docs/agent-runtime-profile-design.md` is the future design proposal.

@@ -29,8 +29,11 @@ The current evidence model has distinct layers. Session analysis and
 is an Agent Process Profile over Session distributions; `task-profile/v1`
 combines one explicit Task’s linked Sessions, configuration snapshots, and
 Outcome coverage. Cohort and experiment records persist comparison definitions,
-but cohort/configuration outcome aggregation, automated regression decisions,
-and Runtime feedback remain proposed until their roadmap Tasks are completed.
+and the bounded `cohort-runtime-profile/v1` compares Outcome-eligible Task
+distributions with explicit minimum samples and metric coverage.
+`post-run-feedback/v1` is opt-in and read-only. Broader regression policy,
+causal experiment evaluation, automated decisions, and Runtime feedback remain
+proposed until their roadmap Tasks are completed.
 
 ## Common commands
 
@@ -105,10 +108,11 @@ These rules protect metric correctness and must not change accidentally:
   verifiable Task Outcome they do not prove delivery quality or universal Agent
   superiority.
 - Keep Profile terminology precise. A Session analysis is not an Agent Process
-  Profile; an Agent Process Profile is not a Task Profile; and a future
-  cohort/configuration Runtime Profile must not be claimed by existing reports.
-  Every Profile conclusion must expose its scope, sample/coverage limits, and
-  whether it concerns process evidence, delivery Outcome evidence, or both.
+  Profile; an Agent Process Profile is not a Task Profile or the implemented
+  bounded Cohort/Configuration Runtime Profile; and that bounded report must
+  not be claimed as a causal or universal Runtime Profile. Every Profile
+  conclusion must expose its scope, sample/coverage limits, and whether it
+  concerns process evidence, delivery Outcome evidence, or both.
 - Task is a delivery and comparability boundary, not the product’s only unit of
   value. It connects process evidence to explicit Outcomes but does not itself
   establish configuration causality or universal Agent quality.
@@ -170,6 +174,7 @@ belong to an explicit Task. Do not hide unrelated work inside another Task.
 | `README.md` | Current user-facing positioning, implemented capabilities, setup, and document entry points |
 | `ARCHITECTURE.md` | Current implemented architecture, data flow, storage, APIs, limitations, and operational behavior |
 | `docs/profile-model.md` | Canonical current-state product positioning, Profile taxonomy, evidence layers, and documentation terminology |
+| `docs/profile-evolution-plan.md` | Proposal-only dependency map for future evidence, Agent workflow, Runtime, comparison, and operations Tasks |
 | `docs/roadmap.md` | Current Task definitions, lifecycle status, compact terminal index, and execution order |
 | `docs/roadmap-archive/` | Terminal Task bodies, acceptance criteria, and completion evidence linked from the current register |
 | `docs/agent-runtime-profile-design.md` | Proposed target model and future Agent Runtime Profile design; it must not present unimplemented behavior as current |

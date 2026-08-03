@@ -25,10 +25,296 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
+### T111 semantic-diagnosis consent, redaction, and audit boundary
+
+- status: planned
+- estimated size/risk: medium / high; it changes the disclosure boundary for
+  configured-provider processing of thinking and tool-input evidence
+- purpose: replace the current implicit provider-disclosure path with a safe,
+  explicit semantic-diagnosis contract before any new semantic workflow expands
+- scope: add request-scoped informed opt-in, apply a tested secret-redaction
+  pass before provider payload construction, retain only bounded content-free
+  local audit metadata, expose provider/payload limitations through HTTP/UI and
+  documentation, and preserve heuristic-only fallback. CLI and Agent-workflow
+  disclosure consume this contract in T115 rather than expanding this Task.
+- dependencies: existing deterministic diagnosis and evidence-preview redaction;
+  T110 documents the current external-content disclosure gap, and this Task must
+  not broaden T88 non-local deployment scope
+- risks and assumptions: redaction is not a guarantee against every secret;
+  no raw thinking, tool input, prompt, or provider response may be persisted as
+  an audit record; provider calls remain optional
+- acceptance: a semantic request without explicit opt-in makes no provider
+  call; provider payloads are bounded and redacted before transmission;
+  audit records contain no source content or credentials; diagnostics remain
+  usable without an LLM key; focused privacy and failure tests pass
+- verification: Core redaction/provider-payload tests, Server route tests,
+  focused Web interaction tests, and a manual payload inspection using a fake
+  provider
+- documentation: update README, Chinese overview, architecture, diagnosis,
+  privacy/configuration guidance, and the future-runtime proposal
+
+### T112 diagnosis-to-evidence navigation
+
+- status: planned
+- estimated size/risk: small / low; it reuses stored finding span IDs and the
+  existing bounded evidence timeline
+- purpose: let a person or Agent move from a diagnosis finding to the exact
+  normalized evidence without defaulting to transcript content disclosure
+- scope: define a stable finding-to-evidence navigation state, make every
+  available finding span selectable from Session detail, highlight or explain
+  missing/filtered evidence, and preserve current evidence paging/filtering
+- dependencies: T43 normalized evidence timeline and T84 bounded evidence
+  retrieval; no schema change expected
+- risks and assumptions: a Span may be absent after a rebuild or unavailable
+  after reset, and a link must communicate that state rather than infer content
+- acceptance: selecting a finding opens the bounded evidence view at the
+  relevant event(s), preserves `content=none` by default, and reports an
+  explicit unavailable state; deep-link and regression tests pass
+- verification: Core/UI helper tests, Server evidence-route tests, browser
+  check across filtered and paged evidence, and production Web build
+- documentation: update README, architecture, diagnosis design, UI guidance,
+  and roadmap
+
+### T113 Task discovery and local Outcome-assistance workflow
+
+- status: planned
+- estimated size/risk: medium / medium; it reduces manual evidence collection
+  while retaining a human-confirmed Task boundary
+- purpose: help users create or update a Task from observed Session/project
+  metadata and prefill locally observable Git/verification references without
+  silently attaching Sessions or declaring success
+- scope: propose candidate Session links from bounded local metadata, surface
+  local Git commit candidates, support human confirmation and structured
+  evidence prefill, and record producer/time/provenance for every suggestion
+- dependencies: existing Task repository, Task Profile, and local Git lookup;
+  no remote CI or repository-service credentials are assumed
+- risks and assumptions: time/project correlation is not proof of Task
+  membership; missing evidence remains `not_collected`; suggestions must never
+  change a Task or Outcome without explicit confirmation
+- acceptance: users can review and accept/reject each candidate independently;
+  accepted data preserves source/provenance; no suggestion marks build/test/
+  lint/Git/rating as passed; Task Profile coverage remains accurate
+- verification: repository and route tests for candidate boundaries, focused
+  Web workflow tests, local Git fixture tests, and privacy review
+- documentation: update README, profile model, tasks/outcomes design,
+  architecture, Chinese overview, and roadmap
+
+### T114 Outcome-evidence adapter contract
+
+- status: planned
+- estimated size/risk: large / high; it introduces explicit producer contracts
+  for local or approved verification evidence
+- purpose: make build/test/lint and related delivery evidence machine-readable
+  without equating a missing field, a command exit code, or an external record
+  with universal quality
+- scope: design a versioned Outcome-evidence adapter contract with producer,
+  timestamp, reference, verification status, capture limits, and local storage
+  semantics; implement one approved local adapter only after its source is
+  selected; defer remote CI/review connectors until their authority and privacy
+  model are approved
+- dependencies: T113 confirmation/provenance workflow and an explicit decision
+  for every external evidence source
+- risks and assumptions: adapters cannot execute arbitrary commands, upload
+  source content, or overwrite human Outcome evidence; `verified` must remain a
+  coverage state and be distinguished from all-positive verification results
+- acceptance: a documented contract distinguishes not-captured, observed,
+  passed, failed, skipped, and not-run; producer provenance is visible; one
+  chosen local adapter has fixtures and failure handling; remote integration is
+  not silently enabled
+- verification: contract tests, adapter fixtures, migration/backfill plan if
+  storage changes, Task Profile coverage tests, and security review
+- documentation: update task/outcome, profile, architecture, API, privacy, and
+  roadmap documents before implementation closes
+
+### T115 Agent-consumable local reports and CLI workflow
+
+- status: planned
+- estimated size/risk: medium / medium; it expands local read/write ergonomics
+  without creating a remote control plane
+- purpose: give an Agent a bounded, versioned way to inspect diagnostics,
+  evidence references, Task state, and eligible post-run feedback, then write
+  only explicitly confirmed Outcome evidence
+- scope: add content-free CLI/API report commands for diagnosis and evidence
+  references, document request/response contracts, and expose an explicit
+  Outcome-write workflow that uses the Task repository validations
+- dependencies: T111 semantic-disclosure boundary, T112 stable
+  finding-to-evidence navigation, T90 bounded feedback, T102 CLI foundation,
+  and T113/T114 confirmed Task/Outcome provenance; it remains loopback/local
+  only
+- risks and assumptions: commands must not expose raw prompt/answer/thinking/
+  tool content by default, mutate Agent configuration, or claim a Task passed
+  from process metrics alone
+- acceptance: an Agent can complete `inspect -> cite evidence -> propose or
+  record confirmed Outcome -> read bounded feedback` using versioned local
+  interfaces; no automatic configuration mutation is introduced
+- verification: CLI parser/report tests, Server contract tests, end-to-end
+  local Runtime fixture, and documentation examples
+- documentation: update CLI README sections, architecture/API surface, profile
+  model, runtime proposal, Chinese overview, and roadmap
+
+### T116 runtime event protocol and local collector foundation
+
+- status: planned
+- estimated size/risk: large / high; it adds a new observed-event source and
+  may require additive schema migration
+- purpose: define a source-neutral, local Runtime event protocol so an Agent
+  can emit bounded structured execution evidence during a Task rather than
+  relying only on transcript-file observation
+- scope: publish an event schema for Task/run/turn/tool/subagent/verification
+  lifecycle evidence, define identity/order/coverage/privacy rules, implement a
+  local collector and one adapter only after protocol review, and retain source
+  transcript import as the independent historical path
+- dependencies: T111 privacy boundary, T114 Outcome-evidence semantics, T115
+  local Agent report contracts, and an approved migration/backfill design; it
+  does not authorize remote ingestion
+- risks and assumptions: no raw prompt or chain-of-thought is required; an
+  event stream can be partial or unavailable and must never replace existing
+  imported source evidence without explicit provenance
+- acceptance: contract version, local lifecycle, failure/isolation behavior,
+  duplicate/event-order handling, and coverage semantics are documented and
+  tested; no live hint or automatic strategy change is included yet
+- verification: protocol fixtures, migration/integration tests, concurrency and
+  restart tests, privacy review, and local collector smoke test
+- documentation: add/update runtime proposal, architecture, source-adapter
+  contract, privacy, API/CLI, and roadmap documents
+
+### T117 bounded in-run feedback and policy guardrails
+
+- status: planned
+- estimated size/risk: large / high; it is the first feature that may influence
+  an executing Agent
+- purpose: issue opt-in, evidence-backed runtime hints for budget, context, and
+  repeated-failure risk without automatically changing prompts, rules, tools,
+  models, or user data
+- scope: consume T116 events plus eligible historical evidence, define hint
+  freshness/confidence/coverage/expiry, enforce rate and content limits, expose
+  explicit suppression reasons, record no raw source content in the hint, and
+  define an explicit `adopted`, `ignored`, or `not_recorded` hint-adoption record
+  with producer/time/evidence reference. Adoption must never be inferred from
+  subsequent tool behavior; any persisted record needs a migration plan.
+- dependencies: T89/T90 bounded comparison and suppression baseline, T111,
+  T114, T115, and T116; broad configuration automation is explicitly out of
+  scope
+- risks and assumptions: an in-run hint is a hypothesis, not a diagnosis of
+  code correctness; stale or insufficient cohort evidence must suppress rather
+  than recommend; the Agent remains responsible for its own action
+- acceptance: hints are opt-in, bounded, attributable, and suppress on missing
+  evidence; no endpoint mutates Agent configuration; a subsequent Task Outcome
+  can link only to an explicitly recorded hint-adoption state for evaluation
+- verification: policy unit tests, stale/insufficient-evidence integration
+  tests, local Runtime simulation, privacy/security review, and Agent-consumer
+  contract tests
+- documentation: update profile model, runtime proposal, architecture, API,
+  privacy, operational guidance, and roadmap
+
+### T118 comparable-cohort and regression-evidence rigor
+
+- status: planned
+- estimated size/risk: large / high; it changes how comparison eligibility and
+  evidence sufficiency are interpreted
+- purpose: strengthen configuration comparisons beyond the current bounded
+  mean-difference report while preserving the ban on universal rankings and
+  causal claims without evidence
+- scope: define declared comparability strata, minimum Outcome-quality and
+  coverage rules, robust distribution/effect reporting with uncertainty, and
+  explicit `ready`, `insufficient_evidence`, and `not_comparable` states;
+  retain user-owned keep/rollback decisions rather than automatic mutation
+- dependencies: T89 is the compatibility baseline; T113/T114 provide improved
+  Task and Outcome provenance
+- risks and assumptions: no semantic prompt text may be used by default to
+  infer task equivalence; small or confounded samples must be suppressed, not
+  amplified by statistical labels
+- acceptance: reports identify the exact eligible strata and exclusions,
+  distinguish coverage from favorable outcomes, expose uncertainty/limitations,
+  and never emit a universal configuration winner
+- verification: deterministic statistical fixtures, regression tests for
+  threshold/compatibility behavior, report-schema tests, and documentation
+  review with representative insufficient-data cases
+- documentation: update profile model, task/outcome design, stats,
+  architecture, runtime proposal, README, and roadmap
+
+### T119 unified multi-agent Task graph and resource attribution
+
+- status: planned
+- estimated size/risk: large / high; it extends Session relationship semantics
+  and changes resource aggregation scope
+- purpose: show what primary, continuation, subagent, verification, and
+  source-native child Sessions contributed to one Task without inferring
+  unsupported relationships or double-counting resource use
+- scope: define a typed Task graph over explicit Task links and source-native
+  relationships, show relationship coverage/unavailable parents, add opt-in
+  task-level resource attribution with source provenance, and leave unsupported
+  inferred edges absent
+- dependencies: T87 source-native Codex parent links and T113 Task-link
+  confirmation; migration/backfill review is required for any persisted graph
+- risks and assumptions: titles, paths, timestamps, or model names are not
+  sufficient evidence for an inferred parent; a child record may be stored but
+  excluded from primary Session aggregates
+- acceptance: graph/report makes explicit versus source-native versus missing
+  relationships distinguishable; aggregated Task totals reconcile without
+  double counting; unavailable/deleted source Sessions stay visible as coverage
+  limits
+- verification: Core graph/attribution fixtures, repository migration tests,
+  cross-source integration tests, UI graph accessibility check, and scale
+  benchmark extension
+- documentation: update multi-agent ingestion, profile model, task/outcome,
+  architecture, stats, README, Chinese overview, and roadmap
+
+### T120 Model Catalog governance and multi-currency design
+
+- status: planned
+- estimated size/risk: medium / high; currency and price-source changes affect
+  historical cost interpretation
+- purpose: define governed price-source updates and a migration-safe path from
+  the current CNY/per-million-token contract to explicitly supported additional
+  currencies or provider pricing schemes
+- scope: document the supported price-source lifecycle, staleness/provenance
+  rules, import-review workflow, currency conversion policy if adopted, and
+  compatibility behavior for historical Sessions; do not silently scrape or
+  trust remote pricing
+- dependencies: T99/T100 Model Catalog contracts; any network fetch requires
+  separate user approval and a source-trust decision
+- risks and assumptions: display conversion must not overwrite source price or
+  calculation provenance; unsupported schemes remain unknown rather than
+  estimated; no automatic historical mutation
+- acceptance: a reviewed design selects either an additive multi-currency
+  contract or explicitly defers it; every proposed source/update path preserves
+  provenance, reviewability, and deterministic recomputation semantics
+- verification: design review, migration plan, and documentation consistency
+  check; run pricing fixtures only for an explicitly selected and approved
+  implementation path
+- documentation: update model-configuration design, stats, architecture,
+  README, Chinese overview, and roadmap
+
+### T121 large-history Task workflow and detail virtualization
+
+- status: planned
+- estimated size/risk: medium / medium; it completes the bounded-data contract
+  in surfaces that still rely on compatibility full-array responses
+- purpose: keep Task linking and Session detail usable for large local history
+  without loading every Session or rendering every event at once
+- scope: replace Task workspace full Session loading with bounded discovery and
+  search, virtualize or window large evidence/detail lists, preserve deep links
+  and evidence coverage, and extend the representative scale benchmark with
+  browser-facing and Task-workflow checks where reproducible
+- dependencies: T83/T84 bounded contracts and T112 evidence navigation
+- risks and assumptions: a smaller window must never be represented as complete
+  evidence; compatibility endpoints remain explicit until a versioned removal
+  plan exists
+- acceptance: Task workspace uses bounded selection, detail lists have stable
+  virtual/window behavior, selected evidence remains reachable, and performance
+  budgets protect the revised paths without weakening coverage semantics
+- verification: focused Web tests, production build, browser checks at desktop
+  and mobile widths, scale benchmark extension, and response-size regression
+  checks
+- documentation: update performance, architecture, README, UI guidance, and
+  roadmap
+
 ## Terminal Task Index
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T110](roadmap-archive/2026-q3.md#t110) | profile-evolution documentation and roadmap decomposition | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T5](roadmap-archive/2026-q3.md#t5) | db schema: add agent column | completed |
 | [T6](roadmap-archive/2026-q3.md#t6) | Codex parser | completed |
@@ -117,46 +403,27 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Execution Order
 
-T79 completed the documentation/assessment baseline, T92 completed the bounded
-Codex non-project classification fix, T73 restored MiMo source attribution, and
-T82 established the representative performance baseline. T93/T94 then completed
-the compact Home synchronization, data-management, project-picker, and responsive
-sidebar interaction layer. T95 then established one current primary-Session
-scope while retaining child records, and T97 documented the module and Model
-Catalog target without changing runtime behavior. The remaining normal
-CLI-first implementation order is:
+The completed T79/T82/T85/T87/T89/T90/T99/T100/T101-T105 work establishes the
+current local evidence, bounded comparison, Model Catalog, and CLI foundations.
+The next implementation order is intentionally trust- and evidence-first:
 
-The immediate sequence authorized on 2026-07-31 completed T105 using bounded
-source observation and the existing atomic replacement path without waiting for
-T85's parser optimization, followed by the documentation-only T106
-roadmap-register/archive work and the T71 configuration audit. T99 then
-completed the Model Catalog Server contract, T100 exposed its Web workspace,
-and T80 completed the Task Outcome evidence workflow. T70 subsequently completed
-the independent Session detail transition repair, followed by T81's guarded
-Cohort/Experiment definition workspace and T87's source-native relationship work;
-the next normal implementation candidate remains the CLI-first sequence below.
-longer-term dependency order remains:
+1. T111 and T112 may proceed in parallel: harden semantic-provider disclosure
+   and connect findings to bounded evidence.
+2. T113 then proposes local Task/Outcome candidates for explicit human review;
+   T114 follows with one versioned Outcome-evidence producer contract.
+3. T115 builds the content-free Agent-readable local report and explicit write
+   workflow on those contracts.
+4. T116 adds a local Runtime event protocol/collector; T117 may add bounded,
+   opt-in in-run hints only after the event and Outcome contracts are stable.
 
-1. T101 CLI foundation, then coordinate T83 bounded discovery and T84 bounded
-   detail/evidence retrieval with T102 CLI synchronization/query/report work so
-   CLI and compatibility HTTP routes share the same services.
-2. T103 `serve` and distribution after the terminal workflow is useful; retain
-   the current Web until the production packaging comparison selects Next
-   standalone or a static SPA.
-3. T99 Model Catalog Runtime extraction/data contracts are complete; T100 is
-   the optional Web configuration workspace over that public contract.
-4. T80 Task Outcome evidence, T81 guarded Cohort/Experiment definitions, T86
-   Project Profile aggregation, and T87 source-native relationship evidence are
-   complete; none imply calculated winners or combined resource attribution.
-5. T85 append-only JSONL import is complete with a process-local checkpoint and
-   full-parse fallback for unsafe suffixes.
-6. T89 comparable cohort evaluation and T90 bounded verified post-run feedback
-   are complete; external Runtime consumption and live in-run hints remain
-   future work.
-
-T88 is conditional on a product decision to support non-local access and is not
-part of the default local-first sequence. Mobile dashboard navigation remains
-intentionally out of scope.
+T118 is a comparison-rigor track after T89 and the improved Task/Outcome
+provenance; T119 is a multi-Agent graph/attribution track after T87 and explicit
+Task links; T120 is an independent Model Catalog governance decision after
+T99/T100; and T121 is an independent large-history UI/performance track after
+T83/T84/T112. These tracks can be scheduled in parallel when their stated
+contracts and review capacity are available. T88 remains independent and
+conditional on an explicit decision to support non-local access. Mobile
+dashboard navigation remains intentionally out of scope.
 
 ## Task Lifecycle
 

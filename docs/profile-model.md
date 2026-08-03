@@ -1,16 +1,15 @@
 # Agent Profile Model
 
 > Status: current-state terminology and product model. For implemented storage,
-> APIs, and calculations, see `../ARCHITECTURE.md`. For future cohort,
-> configuration, and Runtime-feedback work, see
-> `agent-runtime-profile-design.md`.
+> APIs, and calculations, see `../ARCHITECTURE.md`. For future delivery phases,
+> see `profile-evolution-plan.md` and `agent-runtime-profile-design.md`.
 
 ## Product positioning
 
 Agent Profile is a local-first runtime profiling, diagnosis, and
 outcome-evaluation system for AI coding agents. It turns local runtime evidence
-into scoped, coverage-aware profiles so people and Agent Runtimes can understand
-how work was performed and verify whether a change preserved delivery results.
+into scoped, coverage-aware profiles so people can understand how work was
+performed and future Agent Runtime consumers can use bounded, verified evidence.
 
 It is not a chat-history viewer, hosted monitoring service, code-quality scanner,
 universal Agent ranking, or autonomous prompt/rule optimizer. Task is a delivery
@@ -63,8 +62,9 @@ single score, describe process behavior.
 - Process efficiency and diagnosis are hypotheses about execution behavior.
 - A Task Outcome provides delivery evidence for one Task, but one Task does not
   establish a general configuration effect.
-- A configuration can be described as preferable only after a future comparable
-  cohort evaluation has sufficient samples and explicit Outcome guardrails.
+- A configuration can be described only as a bounded observed candidate after
+  the current comparable-cohort report has sufficient samples and explicit
+  Outcome guardrails; it is not a universal or causal winner.
 - Observed tool non-error is not verified success; unknown pricing and absent
   source fields remain visible as coverage limits.
 - A Project Profile is a bounded observation of one project key, not a complete
@@ -72,7 +72,7 @@ single score, describe process behavior.
 
 ## Current feedback loop
 
-Today the product supports a local, human- or Runtime-mediated loop:
+Today the product supports a local, primarily human-mediated loop:
 
 1. Import local source histories and inspect Session evidence and diagnostics.
 2. Use the Agent Process Profile to identify recurring process patterns.
@@ -83,15 +83,21 @@ Today the product supports a local, human- or Runtime-mediated loop:
 6. For eligible completed candidate Tasks, explicitly inspect bounded post-run
    feedback and use it to decide what to investigate or test next.
 
-The Task workspace records build, test, lint, and Git-commit fields. The local
-model/API additionally supports human rating, rework reason, completion time,
-and bounded structured evidence; a later UI Task must expose any additional
-fields before the workspace alone can produce fully verified Outcome coverage.
+The Task workspace records build, test, lint, Git commit, human rating, rework
+reason, completion time, and bounded structured evidence. `verified` Outcome
+coverage means the five tracked coverage fields are present; it does not mean
+that every recorded check passed.
 
 The product does not automatically rewrite prompts, rules, model settings, or
 tool policy. It can expose an explicit, bounded post-run finding linked to the
 current `cohort-runtime-profile/v1`, but Runtime-consumable live hints and
 automatic configuration mutation remain future layers.
+
+Source-change observation refreshes imported evidence after local history files
+or databases change. Its updating/recent state is a revision-recency signal, not
+proof that an Agent is live or a Task is complete. Current CLI/API consumers can
+read bounded reports, but an external Runtime SDK and in-run feedback contract
+are not implemented.
 
 ## Deferred implementation boundaries
 
@@ -110,6 +116,9 @@ Each boundary needs a separate roadmap Task with data contracts, privacy,
 comparison rules, migration/API implications, and verification evidence before
 it becomes a current-state capability.
 
+`profile-evolution-plan.md` maps these boundaries to T111-T121. The plan is a
+proposal, not an implementation claim.
+
 ## Documentation rules
 
 - `README.md` and `README.zh-CN.md` explain today’s user workflows and link to
@@ -119,5 +128,7 @@ it becomes a current-state capability.
 - `docs/tasks-outcomes.md` specifies the Task/Outcome layer only.
 - `docs/agent-runtime-profile-design.md` describes future Runtime Profile and
   feedback capabilities; it must label every unimplemented layer as proposal.
+- `docs/profile-evolution-plan.md` decomposes proposed delivery work and its
+  cross-cutting privacy, evidence, and comparison constraints.
 - `docs/roadmap.md` is authoritative for when a proposed layer becomes an
   implementation Task and for its verification evidence.

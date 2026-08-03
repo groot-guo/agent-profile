@@ -1,8 +1,10 @@
 # Model Configuration Design
 
-> Status: Server contract implemented; Web workspace proposed. T99 implements
-> the Model Catalog, pricing/context, alias, import/export, and recalculation
-> contracts below. T100 owns the proposed Web workspace.
+> Status: current implementation. T99 implemented the Model Catalog,
+> pricing/context, alias, import/export, and recalculation contracts; T100
+> implemented the `/settings/models` Web workspace. The future-tense governance
+> constraints in this document belong to planned T120 and are not current
+> multi-currency or remote-price behavior.
 
 ## Current foundation
 
@@ -18,9 +20,11 @@ The current implementation already provides:
 - an explicit full stored-cost recomputation endpoint;
 - startup seeds that use `INSERT OR IGNORE`, preserving existing user rows.
 
-The missing product layer is not another cost formula. It is a separately owned
-configuration module with provenance, history, safe edits, impact preview,
-independent tests, and a Web workspace.
+The implemented product layer is a separately owned configuration module with
+provenance, history, safe edits, impact preview, independent tests, and a Web
+workspace. The remaining product question is governed price-source maintenance
+and whether to add currencies or pricing schemes without weakening historical
+cost interpretation.
 
 ## Goals
 
@@ -39,7 +43,7 @@ independent tests, and a Web workspace.
 - convert statistical display aliases into pricing aliases;
 - automatically mutate historical costs when configuration changes;
 - support every provider's tiered, batch, regional, or promotional pricing in
-  the first implementation;
+  the current contract;
 - merge diagnosis thresholds, Agent Configuration Snapshots, and model reference
   data into one generic settings table.
 
@@ -77,7 +81,7 @@ The resolver must never:
   explicitly configured;
 - replace the raw model stored on the Span.
 
-When alias pricing is implemented, cost provenance must retain the selected
+When an explicit pricing alias is used, cost provenance retains the selected
 pricing key/revision so a user can see that the raw model and pricing record
 were different identifiers.
 
@@ -123,9 +127,14 @@ reproducibility after edits.
 
 ## Currency and source provenance
 
-The first implementation continues calculating stored costs in CNY. A user may
-enter a CNY price directly. If later work supports prices copied from a
-different currency, the stored record must retain:
+The current implementation calculates stored costs in CNY per million tokens.
+It does not fetch provider prices, convert currencies, or claim reproducibility
+for an unrecorded exchange rate. T120 owns the design decision for any additive
+price-source governance or multi-currency contract; it does not authorize a
+network fetch by itself.
+
+A user may enter a CNY price directly. If later work supports prices copied from
+a different currency, the stored record must retain:
 
 - original currency and original values;
 - conversion rate;
@@ -152,7 +161,7 @@ Some providers may use long-context tiers, batch discounts, regional pricing,
 cache-duration variants, or other conditions not represented by four flat
 rates.
 
-The first implementation must declare its supported scheme. If an observed
+The current implementation declares its supported scheme. If an observed
 model requires an unsupported condition:
 
 - the record is not silently flattened into a trusted price;
@@ -185,7 +194,7 @@ but they remain separate repository operations and coverage fields.
 
 ## Observed-model inventory
 
-The workspace should expose raw model identifiers observed in stored LLM Spans,
+The workspace exposes raw model identifiers observed in stored LLM Spans,
 including:
 
 - priced and unpriced status;
@@ -260,7 +269,7 @@ the audit and decision; implementation must not silently mix the two semantics.
 
 ## Implemented Server API
 
-The versioned module contract should support:
+The versioned module contract exposes:
 
 ```text
 GET  /api/model-catalog/models
@@ -295,12 +304,20 @@ The implemented `/settings/models` workspace consumes only the public
 
 The selected exact raw-model identity is deep-linked in the URL. Saving a price
 or context record reports success but never starts recalculation implicitly.
+
 Preview is read-only; execute remains disabled until explicit confirmation and
 is rejected when the pricing revision changes. Versioned JSON export/import is
-local and content-free.
+local and content-free. The workspace must not call an edit a historical provider
+invoice. It manages the local calculator's reference data.
 
-The workspace must not call an edit a historical provider invoice. It manages
-the local calculator's reference data.
+## Future price governance (T120)
+
+T120 must decide and document the supported price-source lifecycle, staleness
+signals, manual review path, currency/unit semantics, and migration/recalculation
+rules before the current CNY-only contract expands. Historical Span cost must
+continue to preserve source, effective time, calculation time, and calculator
+version. Automatic scraping, silent conversion, and unreviewed overwrite of
+local pricing records are explicitly out of scope.
 
 ## Import, export, reset, and privacy
 
@@ -327,7 +344,7 @@ the local calculator's reference data.
 
 ## Verification
 
-Implementation requires:
+Verification expectations for future changes:
 
 - Core calculation and resolver tests for all four token classes, exact/alias/
   unknown lookup, effective times, unsupported schemes, and currency rules;

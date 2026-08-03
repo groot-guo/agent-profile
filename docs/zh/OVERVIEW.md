@@ -3,7 +3,8 @@
 > 本文描述当前已经实现的能力，并与 [中文 README](../../README.zh-CN.md)、
 > `README.md`、`ARCHITECTURE.md` 和 [Profile 模型](../profile-model.md) 保持一致。
 > Task、Outcome、Configuration Snapshot、Cohort、Experiment、Task Profile 与有界
-> post-run feedback 已实现本地能力；外部/运行中 Runtime feedback 仍是未来方案。
+> post-run feedback 已实现本地能力；外部/运行中 Runtime feedback 仍是未来方案，依赖图见
+> [演进方案](../profile-evolution-plan.md)。
 
 ## 定位
 
@@ -17,6 +18,16 @@ Agent Profile 是面向 AI 编码 Agent 的本地优先运行画像、诊断与�
 Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度的 `task-profile/v1`。
 但系统仍不能仅凭过程指标判断最终交付是否正确，也不能直接宣称某个 Agent 全面优于
 另一个 Agent 或某次配置改动一定有效。
+
+## 作为 Profile 工具的适用边界
+
+- **辅助定位：可以。** 人可以从 Session、Span、诊断和覆盖度中定位慢回合、高成本输出、
+  上下文膨胀、缓存损失、工具失败、重复探索与来源覆盖缺口；finding 保留关联 Span ID。
+- **辅助 Agent 复盘：有限但可用。** Agent 可通过现有本地 API、有限 CLI 报告和显式
+  opt-in 的 post-run feedback 获取有界过程证据，再由人确认 Task/Outcome。统一的
+  diagnose -> evidence -> Outcome 写入协议仍是 T115，不能把当前接口误称为执行中控制回路。
+- **自动解决：尚不具备。** 系统不会在 Agent 运行时暂停、修改提示词/规则/模型/工具策略，
+  也不会仅凭指标宣称问题已解决；运行中事件与受限 hint 分别属于 T116/T117。
 
 ## Profile 分层
 
@@ -147,10 +158,12 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 通过 `session-evidence-page/v1` 按 `(开始时间, ID)` cursor 查看全部已归一化 Span；
   默认每页 80 条、最多 200 条，类型、链路和结果筛选在服务端执行，父级链接、全局序号、
   覆盖度及匹配数/总数仍按完整 Session 计算。`session-evidence/v1` 作为兼容全量合同保留。
-- 使用确定性启发式规则诊断重复读取、大输出、低缓存命中、上下文膨胀、长 thinking、
-  重复失败和读取范围过大。
-- 在配置 Anthropic-native 或 OpenAI-compatible API 后执行可选的 LLM 语义诊断；
-  没有配置时，启发式分析与整个服务仍可正常使用。
+- 使用 11 条确定性启发式规则诊断重复读取、大输出、低缓存命中、上下文膨胀、长 thinking、
+  重复失败、读取范围过大、同参数循环、写后即读、上下文压缩和模型降级。
+- 在配置 Anthropic-native 或 OpenAI-compatible API 后执行可选的 LLM 语义诊断；设置
+  `LLM_API_KEY` 时，请求会把已捕获的 Session 标题（如有）、最多五段 thinking（各最多
+  2,000 字符）和最多二十个工具调用的名称/错误状态/输入前 200 字符发送给配置的 provider。
+  当前没有逐请求 consent 或发送前脱敏；没有配置时，启发式分析与整个服务仍可正常使用。
 - 展示过程效率、综合过程分、项目内相对位置、趋势、分布，以及按 Agent/项目/模型的
   消耗统计。
 - 在“统计”页面按项目查看 `project-profile/v1`：展示 Session、来源和指标覆盖，资源汇总、工具
@@ -162,19 +175,22 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
 - 在“任务”工作区关联多个 Session 与版本/Hash 配置快照，记录 build/test/lint/Git、
   人工评分、返工原因、完成时间和最多 50 条结构化证据，并生成带
   Session/Outcome/成本覆盖度和限制的 `task-profile/v1`；页面显示的五项 Outcome
-  coverage 与报告合同一致，缺失值不会被当作失败。
+  coverage 与报告合同一致，缺失值不会被当作失败。`verified` 只表示五项字段齐全，
+  不表示所有已记录检查都通过。
 - 在 `/settings/models` 按 observed raw-model 身份维护四类 Token 定价与上下文窗口；
   未定价/不支持模型优先，配置保存不自动改写历史，成本重算必须先 preview 再明确确认。
 - 导出 Session 数据和分析报告。
 
 ## 数据模型
 
-当前 SQLite 由 `apps/server/src/database.ts` 管理十四张内部表：
+当前 SQLite 由 `apps/server/src/database.ts` 管理十五张内部表：
 
 - `sessions`：来源类型、更新时间与版本指纹、Agent/模型、持久化分析项目 key、四类 token 聚合、
   上下文、缓存、成本、耗时、标签和备注。
 - `spans`：`llm_turn` 与 `tool_call` 的 token、上下文、成本、选价模型/revision、耗时、父子链、
-  sidechain 和工具输入输出证据。
+  sidechain、thinking、answer 和工具输入输出证据。
+- `session_relationships`：来源原生的子到父 Session ID、来源类型和更新时间；允许父 Session
+  当前不可用，以免丢弃已导入的 child 证据。
 - `pricing`：模型四类 token 的当前价格表、生效时间、scheme、revision 与来源。
 - `pricing_history`：含 superseded 记录的价格 revision 历史。
 - `pricing_aliases`：仅保存显式 `pricingEquivalent=true` 的选价等价关系。
@@ -211,7 +227,10 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
   保存定价生效时间、计算时间和计算器版本。未知定价必须显式展示为未知。
 - 工具成本归因是按同一 LLM 回合内的工具类别进行分析分摊，不等于供应商账单。
 - 效率分是“过程效率”，不能替代测试、构建或人工验收结果。
-- LLM 语义诊断属于带证据的推断，应与确定性规则区分。
+- LLM 语义诊断属于带证据的推断，应与确定性规则区分。它在配置 Key 后会向配置的
+  provider 发送受限的来源派生内容；provider 可以是本地或外部服务，截断不等于脱敏，
+  默认 endpoint 是外部 DeepSeek-compatible 服务且产品不验证自定义 endpoint 的本地性；
+  T111 才会补逐请求 consent、脱敏与无内容审计。
 - Agent 相对画像要求目标和至少一个同类 Agent 各有 3 个 Session，且指标覆盖度至少
   50%；与同类中位数相差 ±10% 以内记为“接近”，其余只描述“高于/低于”，不代表
   更好或更差。
@@ -243,7 +262,8 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
 
 未来方案：
 
-- 为 cohort/experiment 增加最低样本统计、guardrail 与回归检测；
+- 以 T118 扩展 cohort/experiment 的可比性分层、不确定性和回归证据；当前已有最低样本与
+  有限 guardrail，不产生因果赢家或自动决策；
 - 让 Agent Runtime 在任务结束后或运行中消费经过验证的建议；
 - 把提示词和 Agent 规则作为可实验配置，而不是把“改提示词”作为唯一目标。
 
@@ -252,6 +272,7 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
 - `README.md` 与 `README.zh-CN.md`：面向用户的中英文当前能力和启动入口。
 - `ARCHITECTURE.md`：当前实现、API、数据和限制。
 - `docs/roadmap.md`：Task 状态、验收条件与验证证据。
+- `docs/profile-evolution-plan.md`：后续能力的 proposal-only 依赖图与决策点，不描述当前行为。
 - `docs/agent-runtime-profile-design.md`：未来 Agent Runtime Profile 方案。
 - `AGENTS.md`：仓库修改必须遵循的工作规范。
 

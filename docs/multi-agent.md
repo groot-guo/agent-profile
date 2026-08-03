@@ -36,11 +36,18 @@ require deleting the local database.
   `session_id` retained only as a legacy fallback;
 - child rollouts keep their distinct thread IDs instead of replacing the
   parent Session, and their generated Spans are marked as sidechain evidence;
+- T87 persists a source-native child-to-parent relationship only when the Codex
+  rollout captures `session_meta.parent_thread_id`. The parent Session may be
+  unavailable or absent locally, so detail must distinguish linked,
+  parent-unavailable, and not-captured states;
+- titles, `cwd`, source paths, timestamps, models, and other sources' event-level
+  parent IDs must not be used to infer a persisted Session relationship;
 - primary Session lists, statistics, project cohorts, Agent Process Profiles,
   and import-source counts exclude a Codex record only when every stored Span
   is sidechain evidence. The child record remains available by direct stored ID;
-  current primary aggregates do not yet merge its resource usage into the
-  parent, which remains T87 work;
+  child-only Sidechain resources are not merged into the parent. T87 completed
+  only the source-native relationship; the unified Task graph and
+  non-double-counted combined attribution remain planned T119 work;
 - a non-empty `session_meta.cwd` supplies project evidence; if it is absent,
   navigation and statistics use the stable `Codex 会话记录` source category
   while preserving the missing coverage and raw file path;

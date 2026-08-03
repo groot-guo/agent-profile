@@ -1,6 +1,6 @@
 # Agent Profile
 
-[中文说明](README.zh-CN.md) · [Profile model](docs/profile-model.md) · [Current architecture](ARCHITECTURE.md) · [Roadmap](docs/roadmap.md)
+[中文说明](README.zh-CN.md) · [Profile model](docs/profile-model.md) · [Current architecture](ARCHITECTURE.md) · [Evolution plan](docs/profile-evolution-plan.md) · [Roadmap](docs/roadmap.md)
 
 Agent Profile is a local-first runtime profiling, diagnosis, and
 outcome-evaluation system for AI coding agents. It imports local Claude Code,
@@ -10,7 +10,9 @@ evidence to explicit Task Outcomes without treating lower resource use as proof
 of better delivery.
 
 It is an analysis tool for observed runtime process and local delivery evidence.
-It is not a chat-history viewer, a hosted monitoring service, a code-quality
+Source watching refreshes persisted local history after it changes; it is not a
+live Agent execution trace or an automatic optimization/control loop. It is not
+a chat-history viewer, a hosted monitoring service, a code-quality
 scanner, or a universal ranking of agents. See
 [the Profile model](docs/profile-model.md) for the terminology and current/future
 boundary.
@@ -217,7 +219,8 @@ invalid entries are rejected rather than converted into a result. Missing
 fields remain visibly uncollected rather than failed. `task-profile/v1`
 aggregates available linked Sessions with explicit coverage and limitations;
 its five-field verified coverage is build, test, lint, Git commit, and human
-rating. `GET /api/experiments/:id/profile` provides Outcome-guarded,
+rating. `verified` means every coverage field is present, not that every recorded
+check passed. `GET /api/experiments/:id/profile` provides Outcome-guarded,
 minimum-sample distributions and bounded guardrail results. For a completed,
 Outcome-verified candidate Task, the workspace explicitly reads
 `GET /api/tasks/:id/feedback?optIn=true` to show bounded `post-run-feedback/v1`
@@ -300,6 +303,17 @@ source database's aggregate cost is not treated as portable billing evidence.
 | `LLM_API_KEY` | Enables optional semantic diagnosis; no key is required for deterministic analysis |
 | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Optional semantic-diagnosis provider settings |
 
+Semantic diagnosis uses configured-provider processing when `LLM_API_KEY` is
+set. The provider may be local or external through `LLM_BASE_URL`, but a provider
+call is not a local-only analysis and configuration is not request-level opt-in.
+Without an override, the endpoint is the external DeepSeek-compatible default;
+Agent Profile does not determine or verify whether a custom endpoint is local.
+Diagnosis requests send the captured Session title when present, up to five
+2,000-character thinking snippets, and up to twenty tool-call names/error states
+with 200-character input prefixes to the configured provider. The current release
+has no request-level confirmation or pre-send redaction for that payload; use an
+approved endpoint or leave the key unset for deterministic local diagnosis only.
+
 Model, context, and diagnosis configuration has separate scopes:
 
 - `/api/model-context` edits the exact raw model's context-window reference used
@@ -355,6 +369,11 @@ AUTO_SCAN_DIR="" pnpm dev
   logical Session links so runtime evidence can be synchronized again.
 - Prompt review is ephemeral: prompt text is not written to the database and is
   not sent to a semantic provider by that feature.
+- Semantic diagnosis is different from prompt review. A semantic request can
+  transmit the bounded source-derived payload described in **Configuration** to
+  its configured provider, which may be local or external; truncation is not
+  secret redaction. T111 is the planned consent, redaction, and audit hardening
+  work.
 - Source data varies. A missing field means “not captured”, not zero, success,
   or failure.
 
@@ -452,6 +471,8 @@ that a runtime metric is wrong.
   reset behavior, Task Profile, and experiment guardrails
 - [Performance benchmark](docs/performance.md) — reproducible content-free
   scale fixture, desktop regression budgets, and measurement limits
+- [Evolution plan](docs/profile-evolution-plan.md) — proposal-only dependency
+  map for the next evidence, Agent, Runtime, comparison, and operations work
 - [Roadmap](docs/roadmap.md) — Task status and verification evidence
 - [Runtime design](docs/agent-runtime-profile-design.md) — implemented phase
   status and remaining proposal

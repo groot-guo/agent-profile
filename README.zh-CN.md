@@ -1,6 +1,6 @@
 # Agent Profile
 
-[English README](README.md) · [Profile 模型](docs/profile-model.md) · [当前架构](ARCHITECTURE.md) · [任务路线图](docs/roadmap.md)
+[English README](README.md) · [Profile 模型](docs/profile-model.md) · [当前架构](ARCHITECTURE.md) · [演进方案](docs/profile-evolution-plan.md) · [任务路线图](docs/roadmap.md)
 
 Agent Profile 是面向 AI 编码 Agent 的本地优先运行画像、诊断与效果验证系统。它导入
 本机的 Claude Code、Codex、Zed、MiMo 和 OpenCode 会话数据，帮助你理解 Token、
@@ -9,7 +9,8 @@ Task Outcome，而不会把更低的资源消耗误作更好的交付结果。
 
 它分析的是**已观察到的运行过程**与本地交付证据，不是聊天记录阅读器、云端监控平台、
 代码质量扫描器，也不会给 Agent 给出绝对能力排名。Profile 的术语与当前/未来边界见
-[Profile 模型](docs/profile-model.md)。
+[Profile 模型](docs/profile-model.md)。来源监听只会在本地历史记录变化并导入后刷新证据，
+不等于对正在执行的 Agent 做 live tracing，也不会自动调整 Agent 配置。
 
 ## 适合解决什么问题
 
@@ -175,6 +176,9 @@ Experiment API 可保存比较定义与证据状态，但不会自动计算因�
 candidate Task 可在任务页面显式读取只读 `post-run-feedback/v1`，其内容只含有界 cohort
 证据与限制，不含提示词、规则、transcript 或思维链。
 
+`verified` 只表示五项覆盖字段都已记录，不表示 build/test/lint 都通过；`failed`、
+`skipped` 和 `not_run` 仍是有效、应保留的 Outcome 证据。
+
 ## 如何理解 Profile
 
 - **Session 分析**解释一次已观察到的运行；它是过程证据，不是交付成功证明。
@@ -231,11 +235,19 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 | `LLM_API_KEY` | 开启可选语义诊断；确定性分析不需要 Key |
 | `LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL` | 可选语义诊断服务配置 |
 
+设置 `LLM_API_KEY` 后，语义诊断会使用配置的 provider；通过 `LLM_BASE_URL` 配置的
+provider 可以是本地或外部服务，但实际 provider 调用并非纯本地分析，配置也不等于逐请求
+opt-in。未覆盖时默认使用外部的 DeepSeek-compatible endpoint；Agent Profile 不会判断或
+验证自定义 endpoint 是否本地。诊断请求会发送已捕获的 Session 标题（如有）、最多五段各
+2,000 字符的 thinking，以及最多二十个工具调用的名称、错误状态和输入前 200 字符。当前版本
+没有逐请求确认或发送前脱敏；敏感来源只能使用已批准的 endpoint，或不设置该 Key 以仅运行
+本地确定性诊断。
+
 模型、上下文和诊断配置分别属于不同范围：
 
 - `/api/model-context` 只编辑精确 raw model 的上下文窗口参考值，用于窗口利用率和上下文
   堆积分析。未知 model ID 不会继承 provider 或 alias 的值；默认值及供应商文档入口记录在
-  `apps/server/src/db.ts` 的 seed 注释中。
+  `apps/server/src/model-catalog/defaults.ts` 中。
 - `/api/pricing` 保存四类 Token 单价和可选的 `effectiveFrom`。导入和重算会按每个 LLM
   Span 的发生时间选择已生效价格；缺少定价仍保持 unknown。`POST /api/recompute-cost`
   是显式的历史成本重算操作。
@@ -269,6 +281,8 @@ AUTO_SCAN_DIR="" pnpm dev
   Configuration Snapshot、cohort、experiment 和逻辑 Session 关联，随后可从当前可用来源
   重新同步运行证据。
 - 提示词审查是临时计算：提示词文本不会写入数据库，也不会由该功能发送给语义模型服务。
+- 语义诊断与提示词审查不同：配置 Key 后会发送上文所述受限的来源派生内容；截断不是
+  secret redaction。T111 将负责逐请求 consent、脱敏和无内容审计边界。
 - 不同来源的数据覆盖度不同。字段缺失表示“未采集”，不表示零、成功或失败。
 
 文件级备份时，先停止 `agent-profile serve`、`pnpm dev` 或 `pnpm start`，再复制选中的
@@ -317,8 +331,9 @@ pnpm dev
 - Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型；有界 cohort
   Profile 和显式 opt-in 的任务后反馈已经实现。更广泛的回归检测、因果实验结论和 Runtime
   feedback/SDK 仍未实现。
-- 跨文件的 Codex 父/子线程目前仍是独立 Session；Sidechain 证据会被保留，但完整持久化
-  任务树仍是后续能力。
+- 跨文件的 Codex 父/子线程仍是独立 Session；当来源捕获 `parent_thread_id` 时，Session
+  详情会展示该来源原生链接（包括父线程不可用的情形）。通用 Task 图和合并资源归因仍是
+  后续能力。
 - 历史很大时仍需发现文件；Claude Code/Codex 的安全 JSONL 尾部追加可复用进程内结构化
   checkpoint，重写、坏行、不完整回合和强制 rebuild 会回退到完整解析与替换。超大 Session
   虚拟化仍是后续工作。
@@ -346,5 +361,7 @@ pnpm benchmark:scale:ci
 - [多 Agent 导入](docs/multi-agent.md)：各来源的归一化方式与覆盖度差异
 - [Task 与 Outcome 基础](docs/tasks-outcomes.md)：持久化、隐私、重置、Task Profile 与实验护栏
 - [性能基准](docs/performance.md)：可复现的无内容规模 fixture、桌面回归预算与测量限制
+- [演进方案](docs/profile-evolution-plan.md)：后续证据、Agent、Runtime、比较与运行能力的
+  proposal-only 依赖图
 - [路线图](docs/roadmap.md)：Task 状态与验证证据
 - [Runtime 设计](docs/agent-runtime-profile-design.md)：已实现阶段和剩余未来方案

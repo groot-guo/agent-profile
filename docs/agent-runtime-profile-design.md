@@ -1,16 +1,18 @@
 # Agent Runtime Profile 设计方案
 
 > 状态：Proposal；Task/Outcome/Configuration、Cohort/Experiment 定义与单 Task 的
-> `task-profile/v1` 已由 T49 实现，T89 已实现有界的
+> `task-profile/v1` 已由 T49/T80 实现，T89 已实现有界的
 > `cohort-runtime-profile/v1`，T90 已实现只读、显式 opt-in 的
-> `post-run-feedback/v1`。更广泛的回归策略与 live Runtime feedback 仍未实现。
+> `post-run-feedback/v1`。更广泛的回归策略、Agent 可消费的本地接口和 live Runtime
+> feedback 仍未实现，依赖顺序见 `profile-evolution-plan.md` 与 T111-T121。
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
 ## 文档地位
 
 本文是未来目标设计，不描述当前已经实现的全部行为。当前产品定位和 Profile 术语以
 `profile-model.md` 为准；当前实现以 `../ARCHITECTURE.md` 为准，用户入口以
-`../README.md` 为准，具体实施状态与验收证据以 `roadmap.md` 为准。
+`../README.md` 为准，未来依赖图以 `profile-evolution-plan.md` 为准，具体实施状态与
+验收证据以 `roadmap.md` 为准。
 
 实现本文中的任一 Phase 前，必须先在 `roadmap.md` 建立明确 Task，写出该阶段的
 数据迁移、API/指标兼容、文档更新和验证计划并标记为 `in_progress`。实现结束后，
@@ -21,9 +23,10 @@
 
 **Agent Profile 的未来 Runtime Profile 层是 Agent Runtime 的 pprof。**
 
-当前产品已实现 Session 分析、Agent Process Profile 和 Task Profile；本文定义的是将这些
-证据扩展为 cohort/configuration 级 Runtime Profile 与受验证反馈的未来层。它不以保存聊天
-记录为目标，也不把“改提示词”当作唯一能力。目标层为一次或一组可比较的任务生成运行
+当前产品已实现 Session 分析、Agent Process Profile、Task Profile、有界
+`cohort-runtime-profile/v1` 与只读 post-run feedback；本文定义的是把这些事后证据
+扩展为 Agent 可消费的本地工作流、明确的 Runtime 事件与受控运行中反馈的未来层。它不以
+保存聊天记录为目标，也不把“改提示词”当作唯一能力。目标层为一次或一组可比较的任务生成
 画像，帮助人和 Agent 回答：
 
 1. 资源花在了哪里（token、成本、时间、上下文、工具、子 Agent）？
@@ -40,8 +43,12 @@ flowchart LR
   E --> P["Profile\n资源、行为、可靠性"]
   O["Outcome\n测试、构建、提交、评价"] --> P
   P --> H["Profile Hint\n下一次运行的建议"]
-  H --> C
+  H --> A["Explicit adoption record\n人或 Agent 明确确认"]
+  A --> C
 ```
+
+`Profile Hint` 不能直接写入 `Configuration`。只有人或 Agent 通过显式采纳记录确认后，
+下一次运行才可以使用相应配置；系统不得从后续工具行为推断已经采纳。
 
 ### 非目标
 
@@ -81,7 +88,10 @@ Profile 不输出“谁更强”的绝对结论，而是输出适用边界。每
 
 示例结论：
 
-> 配置 A 适合复杂重构：测试通过率和上下文稳定性较高，但成本较高。配置 B 适合小修复：速度和成本更优，但复杂任务的工具失败率较高。
+> 在已声明为可比、样本与 Outcome 覆盖足够的任务中，配置 A 观察到较高的测试通过率和
+> 更稳定的上下文，但成本较高；配置 B 在小修复样本中观察到更快、更低成本，同时复杂任务
+> 样本中的工具失败率更高。该报告必须同时展示样本、排除项和限制，不能据此推出因果结论
+> 或通用配置赢家。
 
 ## 4. 数据模型
 
@@ -114,9 +124,11 @@ experiments
 - Outcome 必须区分“未采集”和“失败”，不能将缺失数据误认为失败。
 - 一个 Task 可关联多个 Session，支持“中断后续跑”“主/子 Agent 分工”。
 
-### 4.2 标准化 Profile Report
+### 4.2 目标化 Profile Report
 
-Profile Report 是 Runtime 和 UI 共用的稳定输出，不直接暴露数据库表结构。
+下例是未来 Runtime 与 UI 共用的目标输出，不是当前 `task-profile/v1` 或
+`cohort-runtime-profile/v1` 的逐字段合同，也不代表 `hints` 已实现。已实现报告的字段
+以 `ARCHITECTURE.md` 为准。
 
 ```json
 {
@@ -144,21 +156,27 @@ Profile Report 是 Runtime 和 UI 共用的稳定输出，不直接暴露数据�
 
 ### 5.1 事后反馈（Phase 1）
 
-Agent 或编排器在任务结束后写入 Task、Configuration、Outcome。系统聚合已有 session/spans，产生 Profile Report。
+当前 UI/API 已允许记录显式 Task、Configuration 与 Outcome，并聚合已有
+Session/Span。面向外部 Agent 的统一内容受限读写合同仍是 T115 的未来工作。
 
-建议接口：
+当前已实现的相关本地 API：
 
 ```text
 POST /api/tasks
-POST /api/tasks/:id/sessions
-POST /api/tasks/:id/outcome
+GET/POST /api/tasks/:id/sessions
+PUT /api/tasks/:id/outcome
 GET  /api/tasks/:id/profile
-GET  /api/cohorts/:id/profile-diff
+GET  /api/tasks/:id/feedback?optIn=true
+GET  /api/experiments/:id/profile
 ```
 
-### 5.2 运行时反馈（Phase 3）
+T115 才会在这些当前接口之上定义面向 Agent 的版本化、内容受限工作流；它不能假定新的
+路径，也不能默认返回 prompt、thinking、answer 或工具输入/输出内容。
 
-Runtime 可选接入轻量 SDK，不要求上传思维链：
+### 5.2 运行时反馈（Phase 3，Proposal）
+
+T116/T117 才会定义 Runtime 可选接入的轻量 SDK/事件协议；当前来源监听只是源文件或
+数据库变更后的导入，不是 live Runtime tracing。目标协议不要求上传思维链：
 
 ```text
 profile.start(task, configuration)
@@ -234,8 +252,9 @@ Prompt 是 Configuration 的一个可实验变量，不是产品中心。
 这仍不等于经过验证的提示词优化。正式推荐提示词或 Agent
 规则的前提仍是同类 cohort 有足够样本，并同时满足质量 guardrail。例如推荐“要求运行
 测试”之前，需证明测试通过率/返工率改善且成本没有超过上限。T49 已实现 Task、
-Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，但尚未实现最低
-样本统计或自动实验判断，因此页面建议仍必须被视为下一次实验的假设。
+Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础；T89 已实现
+最低样本、Outcome 覆盖与有限 guardrail 的有界比较，但没有产生因果赢家或自动决策。
+T118 才会扩展可比性分层与不确定性表达，因此页面建议仍必须被视为下一次实验的假设。
 
 ## 9. 分期交付
 
@@ -243,8 +262,9 @@ Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，�
 
 当前进度：已实现 `agent-profile/v1` 的 Agent 级过程画像、覆盖度、最低样本约束和
 人类可读差异页；也已实现无持久化的提示词结构审查与受控迭代假设。诊断卡片与完整
-事件时间线的统一透明度仍属于后续任务。运行画像只基于 Session/Span，Outcome
-明确标记为未采集，提示词建议也尚不能通过 Outcome 闭环验证。
+事件时间线已经存在；finding 到精确有界 Evidence 的导航属于 T112，超大历史的详情
+虚拟化属于 T121。运行画像只基于 Session/Span，Outcome 明确标记为未采集，提示词
+建议也尚不能通过 Outcome 闭环验证。
 
 - 为现有指标增加定义、公式、数据覆盖与限制说明。
 - 将诊断改为“结论 + 证据 + 影响 + 建议 + 置信度”。
@@ -254,38 +274,43 @@ Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础，�
 
 ### Phase 1：Task 与 Outcome（核心）
 
-当前进度：T49 已实现实体、关联、Outcome 录入、Task 工作区与 `task-profile/v1` JSON。
+当前进度：T49/T80 已实现实体、关联、完整 Outcome 录入、Task 工作区与
+`task-profile/v1`。
 
 - 引入 Task、Configuration Snapshot、Outcome、Task-Session 关联。
 - 支持 test/build/lint/Git/human rating 的结果录入。
 - 生成 Task Profile Report，并支持导出 JSON。
 
 验收：可记录一个 Task 的交付 Outcome 与配置关联，且不会将“未采集结果”误判为失败。
-同类 Task 的配置质量比较属于后续 Phase 2 自动评估，而不是当前 Phase 1 的结论。
+同类 Task 的配置质量比较属于有界的 Phase 2 报告或后续 T118 工作，而不是当前
+Phase 1 的结论。
 
 ### Phase 2：Cohort 与 Experiment
 
-当前进度：T49 已实现 cohort/experiment 定义、证据状态和因果决策护栏；T89 已实现
+当前进度：T49 已实现 cohort/experiment 定义、证据状态和决策护栏；T89 已实现
 `cohort-runtime-profile/v1` 的 Outcome-guarded 分布、最低样本与有限 guardrail 计算；
 T90 已让完成且 Outcome-verified 的 candidate Task 显式读取有界 post-run finding。
-通用回归策略、外部 Runtime 消费和 live Runtime feedback 仍未实现。
+当前报告只描述证据与限制，不产生自动 keep/rollback 或因果赢家。
 
-- 定义 cohort：项目、任务类型、复杂度区间、Agent/模型。
-- 支持控制组/候选配置对比，展示主要指标与 guardrail。
-- 建立回归检测：质量下降、成本激增、失败率上升。
+- T118 将扩展已声明的 cohort 可比性分层、结果/覆盖区分、不确定性与更严格的回归证据。
+- 任何控制组/候选配置比较必须展示样本、排除项、Outcome/指标覆盖与 guardrail 限制。
+- 外部 Runtime 消费和 live Runtime feedback 仍未实现。
 
-验收：一次规则或模型变更能得到“保留/回滚/证据不足”的明确结论。
+验收目标：T118 可让一次规则或模型变更得到更严格的“证据不足或有界观察”报告；
+keep/rollback 仍必须是显式、可审计的用户/Runtime 决定，而非自动结论。
 
 ### Phase 3：Runtime Feedback
 
 - 已实现前置的 post-run feedback：本地 Task 工作区可在显式 opt-in 后读取
   `post-run-feedback/v1`；它只引用 Experiment/Cohort ID、报告版本、指标、guardrail
   与 limitations，并在证据不足或过期时抑制。
-- 提供 Runtime SDK/HTTP 事件适配器。
-- 提供 `hint` 接口和预算/上下文/失败策略。
-- 支持 Agent 在下一次或执行中消费 Profile Report。
+- T115 将先提供本地、内容受限的 Agent 读取与显式 Outcome 写入工作流。
+- T116 才会提供 Runtime SDK/HTTP 事件适配器；T117 才会提供 `hint` 接口和
+  预算/上下文/失败策略。
+- Agent 在下一次或执行中消费 Profile Report 仍是目标，不是当前能力。
 
-验收：Runtime 能在不上传原始思维链的情况下，根据已验证策略改变执行计划，并被后续 outcome 评估。
+验收目标：Runtime 能在不上传原始思维链的情况下接收 opt-in、有界、可抑制的建议；
+它不会自动改变配置，后续 Outcome 只能评估显式记录的采纳情况。
 
 ## 10. 成功指标与护栏
 

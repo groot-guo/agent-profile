@@ -44,7 +44,10 @@ Outcome coverage has three states:
 - `partial`: at least one but not all tracked fields was recorded;
 - `verified`: build, test, lint, Git commit, and human rating are all present.
 
-An explicit `failed` value is evidence. A missing field is not failure.
+`verified` is a coverage state only. One or more captured build, test, or lint
+values may still be `failed`, `skipped`, or `not_run`; it does not mean every
+check passed or prove that the Task delivered the intended result. An explicit
+`failed` value is evidence. A missing field is not failure.
 
 The Task workspace records all supported fields: build, test, and lint status;
 Git commit; 1–5 human rating; rework reason; completion time; and structured
@@ -105,3 +108,17 @@ does not persist a feedback record, expose Task goal/acceptance text, prompts,
 rules, transcripts, tool output, or chain-of-thought, and cannot mutate an
 Experiment decision or Configuration Snapshot. The finding is a bounded
 post-run observation, not a causal guarantee or live Runtime instruction.
+
+## Planned evidence evolution
+
+- T113 may suggest locally observable Task, Session, Git, or verification
+  candidates, but a person must confirm every Task link and Outcome update.
+  Correlation by time, project, or commit is not proof of Task membership or
+  success.
+- T114 will define a versioned Outcome-evidence adapter contract and implement
+  one approved local producer only after its authority and privacy boundary are
+  chosen. It must preserve producer, timestamp, local reference, capture limits,
+  and the distinction between coverage and result.
+- T118 will strengthen comparability strata and uncertainty reporting around the
+  current bounded cohort report. It must not turn descriptive process metrics
+  into a causal or universal configuration winner.
