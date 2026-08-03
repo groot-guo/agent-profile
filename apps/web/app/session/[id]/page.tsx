@@ -22,6 +22,7 @@ import { API } from '../../config';
 import { waitForSessionUpdates } from '../../home-data';
 import { AgentMark } from '../../icons';
 import {
+  SESSION_DETAIL_NAVIGATION_TYPE,
   SESSION_DETAIL_STATUS_TYPE,
   type SessionDetailStatus,
 } from '../../session-detail-transition';
@@ -221,6 +222,22 @@ function reportEmbedStatus(id: string, isEmbed: boolean, status: SessionDetailSt
   );
 }
 
+function requestEmbeddedSessionNavigation(
+  fromId: string,
+  targetId: string,
+  isEmbed: boolean,
+): void {
+  const href = `/session/${encodeURIComponent(targetId)}`;
+  if (!isEmbed || window.parent === window) {
+    window.location.assign(href);
+    return;
+  }
+  window.parent.postMessage(
+    { type: SESSION_DETAIL_NAVIGATION_TYPE, fromId, id: targetId },
+    window.location.origin,
+  );
+}
+
 export default function SessionPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -340,7 +357,11 @@ export default function SessionPage() {
   return (
     <div className="session-page">
       {!isEmbed && (
-        <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>
+        <Link
+          href="/"
+          target="_top"
+          style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}
+        >
           ← 返回列表
         </Link>
       )}
@@ -481,7 +502,17 @@ export default function SessionPage() {
               title="先看诊断，再决定是否下钻"
               description="这里保留最影响判断的建议、性能信号和交付痕迹；资源构成、工具过程和完整 Span 已拆到独立视图。"
             />
-            {relationships && <SourceRelationshipCard relationships={relationships} />}
+            {relationships && (
+              <SourceRelationshipCard
+                relationships={relationships}
+                embedded={isEmbed}
+                onNavigate={
+                  isEmbed
+                    ? (targetId) => requestEmbeddedSessionNavigation(id, targetId, isEmbed)
+                    : undefined
+                }
+              />
+            )}
             <Card
               title="诊断建议"
               meta={diag ? `可优化 ~${fmtTokens(diag.totalWastedTokens)} token` : undefined}

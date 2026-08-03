@@ -555,7 +555,12 @@ The current server/UI support:
   context/cost, tools/chain, and normalized-evidence views. Home retains the
   selected identity and a reserved detail layout until the active same-origin
   embedded detail reports bounded-analysis readiness or failure; stale or
-  foreign messages cannot replace the active selection;
+  foreign messages cannot replace the active selection. Embedded parent/child
+  relationship links send a same-origin navigation message containing the
+  current and target Session IDs; Home accepts it only from the active iframe
+  and current Session, then updates the outer selection/history. Standalone
+  fallback links target the top browsing context so an accidental iframe load
+  cannot create another nested Home page;
 - Git commit evidence, JSON/CSV export, and generated session reports;
 - versioned Model Catalog inventory/configuration APIs, editable pricing/context
   data, explicit pricing-equivalent aliases, and previewed cost recomputation;

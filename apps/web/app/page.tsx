@@ -22,6 +22,7 @@ import { ProjectPicker } from './project-picker';
 import { activityLabel, activityStateAt, groupSessionsWithActivity } from './session-activity';
 import {
   isCurrentSessionDetailStatus,
+  parseSessionDetailNavigation,
   parseSessionDetailStatus,
   type SessionDetailStatus,
 } from './session-detail-transition';
@@ -478,22 +479,37 @@ export default function HomePage() {
   ].filter(Boolean).length;
   const secondaryFilterCount = [agentFilter !== 'all', quickView !== 'all'].filter(Boolean).length;
 
-  const selectSession = (id: string) => {
-    if (sessionListRef.current) {
-      window.sessionStorage.setItem(SESSION_SCROLL_KEY, String(sessionListRef.current.scrollTop));
-    }
-    const query = serializeSessionNavigation({ ...navigationState, selectedId: id });
-    writeSessionSelectionHistory(
-      window.history,
-      query ? `${window.location.pathname}?${query}` : window.location.pathname,
-    );
-    setSelectedId(id);
-  };
+  const selectSession = useCallback(
+    (id: string) => {
+      if (sessionListRef.current) {
+        window.sessionStorage.setItem(SESSION_SCROLL_KEY, String(sessionListRef.current.scrollTop));
+      }
+      const query = serializeSessionNavigation({ ...navigationState, selectedId: id });
+      writeSessionSelectionHistory(
+        window.history,
+        query ? `${window.location.pathname}?${query}` : window.location.pathname,
+      );
+      setSelectedId(id);
+    },
+    [navigationState],
+  );
 
   const closeSession = () => {
     if (window.history.state?.agentProfileSession) window.history.back();
     else setSelectedId(null);
   };
+
+  useEffect(() => {
+    const receiveDetailNavigation = (event: MessageEvent<unknown>) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== detailFrameRef.current?.contentWindow) return;
+      const navigation = parseSessionDetailNavigation(event.data);
+      if (!navigation || navigation.fromId !== selectedId) return;
+      selectSession(navigation.id);
+    };
+    window.addEventListener('message', receiveDetailNavigation);
+    return () => window.removeEventListener('message', receiveDetailNavigation);
+  }, [selectSession, selectedId]);
 
   const clearFilters = () => {
     setSearch('');

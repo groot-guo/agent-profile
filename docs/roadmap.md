@@ -314,6 +314,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T123](roadmap-archive/2026-q3.md#t123) | embedded Session relationship navigation containment | completed |
 | [T122](roadmap-archive/2026-q3.md#t122) | concise commit-message convention | completed |
 | [T110](roadmap-archive/2026-q3.md#t110) | profile-evolution documentation and roadmap decomposition | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |

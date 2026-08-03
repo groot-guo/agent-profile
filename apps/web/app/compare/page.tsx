@@ -70,7 +70,11 @@ function CompareView() {
   if (sessions.length < 2) {
     return (
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: SP.xl }}>
-        <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>
+        <Link
+          href="/"
+          target="_top"
+          style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}
+        >
           ← 返回列表
         </Link>
         <Empty text="需要 2 个会话才能对比" hint="在 URL 中加 ?ids=ID1,ID2" />
@@ -113,7 +117,11 @@ function CompareView() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: SP.xl }}>
-      <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>
+      <Link
+        href="/"
+        target="_top"
+        style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}
+      >
         ← 返回列表
       </Link>
       <h2 style={{ margin: '6px 0 16px', fontSize: FS.page, fontWeight: 600, color: C.text }}>

@@ -53,6 +53,7 @@ export function Header() {
     >
       <Link
         href="/"
+        target="_top"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -101,6 +102,7 @@ export function Header() {
             <Link
               key={n.href}
               href={n.href}
+              target="_top"
               className="app-nav-link"
               aria-busy={pending}
               onClick={() => {

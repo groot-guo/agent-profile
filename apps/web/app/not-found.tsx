@@ -10,7 +10,11 @@ export default function NotFound() {
       <p style={{ fontSize: FS.base, color: C.sub, margin: `${SP.sm}px 0 ${SP.lg}px` }}>
         页面不存在
       </p>
-      <Link href="/" style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}>
+      <Link
+        href="/"
+        target="_top"
+        style={{ color: C.link, fontSize: FS.sm, textDecoration: 'none' }}
+      >
         ← 返回会话列表
       </Link>
     </div>

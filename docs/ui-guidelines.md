@@ -67,6 +67,10 @@ Agent Profile Web 端统一视觉与交互约束。改 UI 前必读;新增页面
 - 必须尊重 `prefers-reduced-motion`(全局已处理,新增动画走 CSS 类,不自建 keyframes)。
 - 焦点可见:不覆盖 `:focus-visible` 的全局 outline。
 - header 在 `?embed=1`(iframe 嵌入)时不渲染。
+- 嵌入详情中的父/子 Session 关系链接必须由外层 Home 接管，消息需校验同源、当前 iframe
+  和当前 Session ID；不得在 iframe 内直接打开新的 Session 或 Home 页面。
+- 独立详情、404、对比页和全局 Header 的返回/导航兜底链接使用顶层 browsing context，避免
+  异常嵌入时继续形成页面嵌套。
 
 ### 导入与全量重建反馈
 

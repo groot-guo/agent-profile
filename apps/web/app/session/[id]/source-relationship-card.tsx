@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { C, FS, R, SP } from '../../theme';
 import { Card, Chip } from '../../ui';
 import { relationshipStatusLabel, shortSessionId } from './source-relationship';
@@ -14,9 +15,11 @@ export interface SessionRelationshipReport {
 
 type Props = {
   relationships: SessionRelationshipReport;
+  embedded?: boolean;
+  onNavigate?: (id: string) => void;
 };
 
-export function SourceRelationshipCard({ relationships }: Props) {
+export function SourceRelationshipCard({ relationships, embedded = false, onNavigate }: Props) {
   const status = relationshipStatusLabel(relationships.coverage.status);
   return (
     <Card title="来源会话关系" meta={status}>
@@ -26,7 +29,11 @@ export function SourceRelationshipCard({ relationships }: Props) {
           `parent_thread_id`，不从标题、路径、时间或模型推断。
         </span>
         {relationships.parent ? (
-          <RelationshipParent parent={relationships.parent} />
+          <RelationshipParent
+            parent={relationships.parent}
+            embedded={embedded}
+            onNavigate={onNavigate}
+          />
         ) : (
           <span>父会话：来源未采集稳定关系。</span>
         )}
@@ -34,13 +41,14 @@ export function SourceRelationshipCard({ relationships }: Props) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: SP.sm, alignItems: 'center' }}>
             <span>子会话：</span>
             {relationships.children.map((child) => (
-              <Link
+              <RelationshipLink
                 key={child.id}
-                href={`/session/${encodeURIComponent(child.id)}`}
-                style={relationshipLinkStyle}
+                id={child.id}
+                embedded={embedded}
+                onNavigate={onNavigate}
               >
                 {shortSessionId(child.id)}
-              </Link>
+              </RelationshipLink>
             ))}
           </div>
         )}
@@ -51,8 +59,12 @@ export function SourceRelationshipCard({ relationships }: Props) {
 
 function RelationshipParent({
   parent,
+  embedded,
+  onNavigate,
 }: {
   parent: NonNullable<SessionRelationshipReport['parent']>;
+  embedded: boolean;
+  onNavigate?: (id: string) => void;
 }) {
   if (parent.availability === 'unavailable') {
     return (
@@ -64,11 +76,49 @@ function RelationshipParent({
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: SP.sm, alignItems: 'center' }}>
       <span>父会话：</span>
-      <Link href={`/session/${encodeURIComponent(parent.id)}`} style={relationshipLinkStyle}>
+      <RelationshipLink id={parent.id} embedded={embedded} onNavigate={onNavigate}>
         {shortSessionId(parent.id)}
-      </Link>
+      </RelationshipLink>
       <Chip color={C.mute}>{parent.sourceKind}</Chip>
     </div>
+  );
+}
+
+function RelationshipLink({
+  id,
+  embedded,
+  onNavigate,
+  children,
+}: {
+  id: string;
+  embedded: boolean;
+  onNavigate?: (id: string) => void;
+  children: string;
+}) {
+  const handleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (
+      !embedded ||
+      !onNavigate ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    onNavigate(id);
+  };
+
+  return (
+    <Link
+      href={`/session/${encodeURIComponent(id)}`}
+      onClick={handleClick}
+      style={relationshipLinkStyle}
+    >
+      {children}
+    </Link>
   );
 }
 
