@@ -6,6 +6,7 @@ import {
   type CohortRuntimeProfileReport,
   type OutcomeEvidenceStatus,
   type PostRunFeedbackReport,
+  type RuntimeHintHistoricalEvidence,
   type TaskEvidenceProvenance,
   type TaskOutcomeEvidence,
   type TaskProfileConfiguration,
@@ -651,6 +652,50 @@ export class TaskRepository {
       persistedDecision: experiment.decision,
       tasks,
     });
+  }
+
+  findRuntimeHintHistoricalEvidence(
+    taskId: string | null,
+    configurationSnapshotId: string | null,
+  ): RuntimeHintHistoricalEvidence | null {
+    if (!taskId || !configurationSnapshotId) return null;
+    const matchingExperiments: Array<RuntimeHintHistoricalEvidence> = [];
+    for (const experiment of this.listExperiments()) {
+      const configurationRole =
+        experiment.controlConfigId === configurationSnapshotId
+          ? ('control' as const)
+          : experiment.candidateConfigId === configurationSnapshotId
+            ? ('candidate' as const)
+            : null;
+      if (!configurationRole || experiment.status !== 'completed') continue;
+      const profile = this.buildExperimentProfile(experiment.id);
+      const taskRole = profile.groups.control.taskIds.includes(taskId)
+        ? 'control'
+        : profile.groups.candidate.taskIds.includes(taskId)
+          ? 'candidate'
+          : null;
+      if (taskRole !== configurationRole) continue;
+      const primary = profile.comparisons.find(
+        (comparison) => comparison.metric === profile.experiment.primaryMetric,
+      );
+      if (profile.evaluationStatus !== 'ready' || primary?.status !== 'descriptive') continue;
+      matchingExperiments.push({
+        experimentId: experiment.id,
+        cohortId: experiment.cohortId,
+        configurationRole,
+        profileGeneratedAt: profile.generatedAt,
+        evaluationStatus: 'ready',
+        primaryMetric: primary.metric,
+        primaryStatus: 'descriptive',
+        primaryRelativeDelta: primary.relativeDelta,
+        guardrails: profile.guardrails.map((guardrail) => ({
+          metric: guardrail.metric,
+          status: guardrail.status,
+        })),
+        limitations: profile.limitations,
+      });
+    }
+    return matchingExperiments.length === 1 ? matchingExperiments[0] : null;
   }
 
   buildTaskFeedback(taskId: string): PostRunFeedbackReport[] {

@@ -21,6 +21,7 @@ describe('runtime event routes', () => {
       url: '/api/runtime/events',
       payload: {
         schemaVersion: 'runtime-event-batch/v1',
+        coverageComplete: true,
         events: [
           {
             schemaVersion: 'runtime-event/v1',

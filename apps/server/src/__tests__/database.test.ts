@@ -107,6 +107,8 @@ describe('database migrations', () => {
       { version: 10, name: 'source_native_session_relationships' },
       { version: 11, name: 'task_assistance_provenance' },
       { version: 12, name: 'runtime_event_collector' },
+      { version: 13, name: 'runtime_hint_policy' },
+      { version: 14, name: 'runtime_event_coverage' },
     ]);
 
     const legacySession = database
@@ -143,7 +145,23 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(12);
+    expect(count.count).toBe(14);
+    expect(columnsOf(database, 'runtime_hints')).toEqual(
+      expect.arrayContaining(['hint_id', 'task_id', 'run_id', 'payload_json', 'evidence_json']),
+    );
+    expect(columnsOf(database, 'runtime_hint_adoptions')).toEqual(
+      expect.arrayContaining(['hint_id', 'status', 'producer', 'recorded_at', 'evidence_json']),
+    );
+    expect(columnsOf(database, 'runtime_event_coverage')).toEqual(
+      expect.arrayContaining([
+        'run_id',
+        'task_id',
+        'submitted_events',
+        'observed_events',
+        'rejected_events',
+        'coverage_known',
+      ]),
+    );
     database.close();
   });
 

@@ -116,21 +116,28 @@ into delivery claims.
 
 The local `runtime-event/v1` collector is a separate observed evidence source.
 It accepts only bounded Task/Run lifecycle metadata, keeps event identity and
-sequence explicit, is idempotent for exact duplicates, and reports partial
-coverage for rejected or out-of-order input. Its reference page omits payload
-values and raw process content. It does not replace imported Session evidence or
-provide live hints; those policy decisions remain in T117.
+sequence explicit, is idempotent for exact duplicates, and reports partial or
+unknown coverage for rejected, out-of-order, or unattested input. Producers
+must explicitly attest `coverageComplete: true` for a batch before Runtime hint
+policy can treat the Run as complete. Its reference page omits payload values
+and raw process content. It does not replace imported Session evidence or
+provide automatic control. T117 now adds a separate opt-in `runtime-hint/v1`
+policy: only fresh complete event coverage plus ready descriptive historical
+evidence can emit a short-lived repeated-tool-failure hypothesis, and adoption
+must be explicitly recorded.
 
 The product does not automatically rewrite prompts, rules, model settings, or
 tool policy. It can expose an explicit, bounded post-run finding linked to the
-current `cohort-runtime-profile/v1`, but Runtime-consumable live hints and
-automatic configuration mutation remain future layers.
+current `cohort-runtime-profile/v1`, and T117 can expose a local Runtime-consumable
+hint under explicit opt-in and evidence gates. Automatic configuration mutation
+and external Runtime SDK delivery remain future layers.
 
 Source-change observation refreshes imported evidence after local history files
 or databases change. Its updating/recent state is a revision-recency signal, not
 proof that an Agent is live or a Task is complete. Current CLI/API consumers can
-read bounded reports, but an external Runtime SDK and in-run hint/feedback
-policy are not implemented; T116's collector is local metadata ingestion only.
+read bounded reports, but an external Runtime SDK and automatic in-run strategy
+mutation are not implemented; T117's hint policy is local, opt-in, bounded, and
+reference-only.
 
 ## Deferred implementation boundaries
 

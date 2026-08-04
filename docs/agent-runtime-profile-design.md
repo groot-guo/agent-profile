@@ -184,14 +184,16 @@ task-feedback <task-id> --opt-in --json
 诊断与证据命令默认只返回 finding/event references、Span ID 和 coverage；Outcome 命令必须显式
 确认，并复用 Task repository 校验；feedback 命令必须 opt-in。它们不返回 prompt、thinking、
 answer 或工具输入/输出内容，也不改变 Agent 配置。T116 已提供本地
-`runtime-event/v1` HTTP collector；T117 才定义运行中反馈。
+`runtime-event/v1` HTTP collector；T117 已在其上提供有界、显式 opt-in 的运行中 hint
+策略和 adoption 记录。
 
-### 5.2 运行时反馈（Phase 3，Proposal）
+### 5.2 运行时反馈（Phase 3，bounded local implementation）
 
 T116 已定义并实现 Runtime 可选接入的本地 `runtime-event/v1` HTTP collector；它只接收
 Task/Run 生命周期 metadata，处理 identity、sequence、duplicate、partial coverage 和
-failure isolation，不接收原始思维链，也不替代 transcript import。T117 才会在此基础上
-定义 live hint policy：
+failure isolation，不接收原始思维链，也不替代 transcript import。T117 在此基础上实现
+`runtime-hint/v1`：只有 fresh complete event coverage、ready descriptive historical
+evidence 和重复工具失败信号同时满足时才返回短期 hint；不满足时返回 suppression reason。
 
 ```text
 profile.start(task, configuration)
@@ -201,6 +203,11 @@ profile.finish(outcome)
 ```
 
 `profile.hint()` 只能返回受控建议，例如预算、上下文风险、工具失败模式和同类任务的已验证策略；不得直接生成未验证的规则替换。
+
+当前 HTTP surface 是 `GET /api/runtime/runs/:runId/hint?optIn=true`，并通过
+`POST /api/runtime/hints/:hintId/adoption` 显式记录 `adopted`、`ignored` 或
+`not_recorded`。Hint 按 Run 限流、短期过期，只保存 event/Experiment 引用；后续工具行为
+不会推断 adoption，也不会修改 Agent 配置。外部 Runtime SDK 仍未实现。
 
 示例：
 
@@ -311,7 +318,7 @@ T90 已让完成且 Outcome-verified 的 candidate Task 显式读取有界 post-
 
 - T118 将扩展已声明的 cohort 可比性分层、结果/覆盖区分、不确定性与更严格的回归证据。
 - 任何控制组/候选配置比较必须展示样本、排除项、Outcome/指标覆盖与 guardrail 限制。
-- 外部 Runtime 消费和 live Runtime feedback 仍未实现。
+- 外部 Runtime 消费和自动配置控制仍未实现；T117 的本地 hint 只提供可抑制的观察假设。
 
 验收目标：T118 可让一次规则或模型变更得到更严格的“证据不足或有界观察”报告；
 keep/rollback 仍必须是显式、可审计的用户/Runtime 决定，而非自动结论。
@@ -322,9 +329,10 @@ keep/rollback 仍必须是显式、可审计的用户/Runtime 决定，而非自
   `post-run-feedback/v1`；它只引用 Experiment/Cohort ID、报告版本、指标、guardrail
   与 limitations，并在证据不足或过期时抑制。
 - T115 已提供本地、内容受限的 Agent 读取与显式 Outcome 写入工作流。
-- T116 已提供本地 Runtime SDK/HTTP 事件适配器；T117 才会提供 `hint` 接口和预算、
-  上下文、失败策略。
-- Agent 在下一次或执行中消费 Profile Report 仍是目标，不是当前能力。
+- T116 已提供本地 Runtime HTTP 事件适配器；T117 已提供 `hint` 接口、freshness/coverage、
+  历史证据门槛、expiry、rate limit、suppression 和显式 adoption 状态。
+- 外部 Agent Runtime 在下一次或执行中消费 Profile Report 仍是目标；当前仅有本地、显式
+  opt-in、可抑制的 Runtime hint HTTP surface。
 
 验收目标：Runtime 能在不上传原始思维链的情况下接收 opt-in、有界、可抑制的建议；
 它不会自动改变配置，后续 Outcome 只能评估显式记录的采纳情况。

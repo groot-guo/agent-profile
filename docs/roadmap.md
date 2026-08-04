@@ -25,35 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T117 bounded in-run feedback and policy guardrails
-
-- status: planned
-- estimated size/risk: large / high; it is the first feature that may influence
-  an executing Agent
-- purpose: issue opt-in, evidence-backed runtime hints for budget, context, and
-  repeated-failure risk without automatically changing prompts, rules, tools,
-  models, or user data
-- scope: consume T116 events plus eligible historical evidence, define hint
-  freshness/confidence/coverage/expiry, enforce rate and content limits, expose
-  explicit suppression reasons, record no raw source content in the hint, and
-  define an explicit `adopted`, `ignored`, or `not_recorded` hint-adoption record
-  with producer/time/evidence reference. Adoption must never be inferred from
-  subsequent tool behavior; any persisted record needs a migration plan.
-- dependencies: T89/T90 bounded comparison and suppression baseline, T111,
-  T114, T115, and T116; broad configuration automation is explicitly out of
-  scope
-- risks and assumptions: an in-run hint is a hypothesis, not a diagnosis of
-  code correctness; stale or insufficient cohort evidence must suppress rather
-  than recommend; the Agent remains responsible for its own action
-- acceptance: hints are opt-in, bounded, attributable, and suppress on missing
-  evidence; no endpoint mutates Agent configuration; a subsequent Task Outcome
-  can link only to an explicitly recorded hint-adoption state for evaluation
-- verification: policy unit tests, stale/insufficient-evidence integration
-  tests, local Runtime simulation, privacy/security review, and Agent-consumer
-  contract tests
-- documentation: update profile model, runtime proposal, architecture, API,
-  privacy, operational guidance, and roadmap
-
 ### T118 comparable-cohort and regression-evidence rigor
 
 - status: planned
@@ -169,6 +140,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T114](roadmap-archive/2026-q3.md#t114) | Outcome-evidence adapter contract | completed |
 | [T115](roadmap-archive/2026-q3.md#t115) | Agent-consumable local reports and CLI workflow | completed |
 | [T116](roadmap-archive/2026-q3.md#t116) | Runtime event protocol and local collector foundation | completed |
+| [T117](roadmap-archive/2026-q3.md#t117) | bounded in-run feedback and policy guardrails | completed |
 | [T113](roadmap-archive/2026-q3.md#t113) | Task discovery and local Outcome-assistance workflow | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T124](roadmap-archive/2026-q3.md#t124) | runtime-mode model-label classification | completed |
@@ -271,9 +243,9 @@ The next implementation order is intentionally trust- and evidence-first:
    read-only local Git adapter.
 3. T115 now provides the content-free Agent-readable local report and explicit
    Outcome-write workflow on those contracts.
-4. T116 now provides the local Runtime event protocol/collector; T117 may add
-   bounded, opt-in in-run hints only after the event and Outcome contracts are
-   stable.
+4. T116 now provides the local Runtime event protocol/collector and T117 now
+   provides bounded, opt-in in-run hints with suppression and explicit adoption
+   records. T118 is the next comparison-rigor track.
 
 T118 is a comparison-rigor track after T89 and the improved Task/Outcome
 provenance; T119 is a multi-Agent graph/attribution track after T87 and explicit

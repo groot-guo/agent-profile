@@ -116,6 +116,24 @@ export {
   PROMPT_REVIEW_SCHEMA_VERSION,
   reviewPromptStructure,
 } from './prompt-review';
+export {
+  buildRuntimeHint,
+  RUNTIME_HINT_ADOPTION_SCHEMA_VERSION,
+  RUNTIME_HINT_EXPIRY_MS,
+  RUNTIME_HINT_MAX_AGE_MS,
+  RUNTIME_HINT_MIN_INTERVAL_MS,
+  RUNTIME_HINT_SCHEMA_VERSION,
+  type RuntimeHint,
+  type RuntimeHintAdoptionRecord,
+  type RuntimeHintAdoptionStatus,
+  type RuntimeHintCoverage,
+  type RuntimeHintEventSignal,
+  type RuntimeHintEvidence,
+  type RuntimeHintHistoricalEvidence,
+  type RuntimeHintInput,
+  type RuntimeHintReport,
+  type RuntimeHintSuppressionReason,
+} from './runtime-hints';
 export type { TranscriptTextResult } from './scanners/transcript';
 export {
   findTranscriptFiles,

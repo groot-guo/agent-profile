@@ -3,6 +3,7 @@ import { createDatabase, type DatabaseConnection } from '../database';
 import {
   appendRuntimeEventBatch,
   getRuntimeEventPage,
+  getRuntimeEventSignals,
   RuntimeEventCollectorError,
 } from '../runtime-event-collector';
 
@@ -20,6 +21,7 @@ describe('runtime event collector', () => {
     const first = appendRuntimeEventBatch(database, {
       schemaVersion: 'runtime-event-batch/v1',
       events: [event(2, 'tool_result', { status: 'observed' }), event(1, 'run_started')],
+      coverageComplete: true,
     });
     expect(first).toMatchObject({
       accepted: 2,
@@ -32,6 +34,7 @@ describe('runtime event collector', () => {
     const duplicate = appendRuntimeEventBatch(database, {
       schemaVersion: 'runtime-event-batch/v1',
       events: [event(2, 'tool_result', { status: 'observed' })],
+      coverageComplete: true,
     });
     expect(duplicate).toMatchObject({
       accepted: 0,
@@ -39,15 +42,28 @@ describe('runtime event collector', () => {
       coverage: { status: 'complete' },
     });
 
+    const duplicateRetry = appendRuntimeEventBatch(database, {
+      schemaVersion: 'runtime-event-batch/v1',
+      events: [event(1, 'run_started')],
+    });
+    expect(duplicateRetry).toMatchObject({
+      accepted: 0,
+      duplicates: 1,
+      rejected: [],
+      coverage: { status: 'complete' },
+    });
+
     const conflict = appendRuntimeEventBatch(database, {
       schemaVersion: 'runtime-event-batch/v1',
       events: [event(2, 'tool_call')],
+      coverageComplete: true,
     });
     expect(conflict.rejected).toEqual([{ eventId: 'event-2', reason: 'event_id_conflict' }]);
 
     const sequenceConflict = appendRuntimeEventBatch(database, {
       schemaVersion: 'runtime-event-batch/v1',
       events: [event(3, 'turn_started', undefined, 1)],
+      coverageComplete: true,
     });
     expect(sequenceConflict.rejected).toEqual([
       { eventId: 'event-3', reason: 'sequence_conflict' },
@@ -63,6 +79,7 @@ describe('runtime event collector', () => {
     expect(page.events.map((item) => item.sequence)).toEqual([1, 2]);
     expect(page.events[1]?.payloadFields).toEqual(['status']);
     expect(JSON.stringify(page)).not.toContain('private');
+    expect(getRuntimeEventSignals(database, 'run-1').coverageKnown).toBe(true);
   });
 
   it('rejects raw-content payload keys and invalid batches without partial writes', () => {
@@ -82,18 +99,38 @@ describe('runtime event collector', () => {
       new RuntimeEventCollectorError('invalid_limit'),
     );
   });
+
+  it('rejects task identity changes across batches for one run', () => {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    appendRuntimeEventBatch(database, {
+      schemaVersion: 'runtime-event-batch/v1',
+      events: [event(1, 'run_started')],
+    });
+
+    expect(() =>
+      appendRuntimeEventBatch(database, {
+        schemaVersion: 'runtime-event-batch/v1',
+        events: [event(2, 'run_finished', undefined, 2, 'task-2')],
+      }),
+    ).toThrowError(new RuntimeEventCollectorError('invalid_batch'));
+    expect(database.prepare('SELECT COUNT(*) as count FROM runtime_events').get()).toEqual({
+      count: 1,
+    });
+  });
 });
 
 function event(
   sequence: number,
-  kind: 'run_started' | 'tool_call' | 'tool_result' | 'turn_started',
+  kind: 'run_started' | 'run_finished' | 'tool_call' | 'tool_result' | 'turn_started',
   payload?: Record<string, unknown>,
   actualSequence = sequence,
+  taskId = 'task-1',
 ) {
   return {
     schemaVersion: 'runtime-event/v1' as const,
     eventId: `event-${sequence}`,
-    taskId: 'task-1',
+    taskId,
     runId: 'run-1',
     sequence: actualSequence,
     capturedAt: 1_800_000_000_000 + sequence,

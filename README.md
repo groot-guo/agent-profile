@@ -274,6 +274,17 @@ Exact duplicates are idempotent; sequence conflicts are rejected without
 replacing existing events; out-of-order arrivals remain visible as partial
 ordering coverage. This collector is an observed local source, not live hints,
 automatic configuration control, or a replacement for transcript imports.
+An event producer must explicitly set `coverageComplete: true` on every batch
+that it attests as complete; missing or false attestation keeps Runtime hint
+coverage unknown and suppresses hints.
+
+An explicit `GET /api/runtime/runs/:runId/hint?optIn=true` can return a bounded
+`runtime-hint/v1` hypothesis when the run has fresh complete event coverage,
+ready descriptive cohort evidence, and a repeated tool-failure signal. The
+hint is short-lived, rate-limited, content-free, and stores only event and
+experiment references. `POST /api/runtime/hints/:hintId/adoption` records an
+explicit `adopted`, `ignored`, or `not_recorded` status; later tool behavior
+never infers adoption, and no Agent configuration is changed.
 
 ## How to read a Profile
 
@@ -422,7 +433,8 @@ AUTO_SCAN_DIR="" pnpm dev
   and notes, but retains Model Catalog pricing/history/aliases/context,
   recalculation audit, migration,
   Tasks, Outcomes, Configuration Snapshots, cohorts, experiments, and their
-  logical Session links so runtime evidence can be synchronized again.
+  logical Session links, plus locally collected Runtime events/coverage and bounded
+  Runtime hint/adoption records so runtime evidence can be synchronized again.
 - Prompt review is ephemeral: prompt text is not written to the database and is
   not sent to a semantic provider by that feature.
 - Semantic diagnosis is different from prompt review. An explicit semantic
@@ -486,9 +498,10 @@ pnpm dev
   no published package, signed installer, cross-platform CI matrix, or desktop
   application yet. Detailed Session/evidence CLI commands remain future work.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
-  local foundations. The bounded cohort report and opt-in post-run findings are
-  implemented; broader automated regression detection, causal experiment
-  conclusions, and Runtime feedback/SDK integration are not implemented.
+  local foundations. The bounded cohort report, opt-in post-run findings, and
+  bounded local Runtime hint policy are implemented; broader automated
+  regression detection, causal experiment conclusions, and external Runtime
+  feedback/SDK integration are not implemented.
 - Cross-file parent/child Codex threads remain separate Sessions. When Codex
   captures `parent_thread_id`, the Session detail page shows the source-native
   link (including an unavailable parent); a universal task graph and combined

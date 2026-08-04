@@ -362,6 +362,62 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 13,
+    name: 'runtime_hint_policy',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS runtime_hints (
+          hint_id       TEXT PRIMARY KEY,
+          task_id       TEXT NOT NULL,
+          run_id        TEXT NOT NULL,
+          generated_at  INTEGER NOT NULL,
+          expires_at    INTEGER NOT NULL,
+          category      TEXT NOT NULL,
+          payload_json  TEXT NOT NULL CHECK (json_valid(payload_json)),
+          evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+          created_at    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_runtime_hints_run_time
+          ON runtime_hints(run_id, generated_at DESC);
+        CREATE TABLE IF NOT EXISTS runtime_hint_adoptions (
+          hint_id       TEXT PRIMARY KEY REFERENCES runtime_hints(hint_id),
+          task_id       TEXT NOT NULL,
+          run_id        TEXT NOT NULL,
+          status        TEXT NOT NULL CHECK (status IN ('adopted', 'ignored', 'not_recorded')),
+          producer      TEXT NOT NULL,
+          recorded_at   INTEGER NOT NULL,
+          evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+          updated_at    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_runtime_hint_adoptions_task_time
+          ON runtime_hint_adoptions(task_id, recorded_at DESC);
+      `);
+    },
+  },
+  {
+    version: 14,
+    name: 'runtime_event_coverage',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS runtime_event_coverage (
+          run_id           TEXT PRIMARY KEY,
+          task_id          TEXT NOT NULL,
+          submitted_events INTEGER NOT NULL CHECK (submitted_events >= 0),
+          observed_events  INTEGER NOT NULL CHECK (observed_events >= 0),
+          rejected_events  INTEGER NOT NULL CHECK (rejected_events >= 0),
+          coverage_known   INTEGER NOT NULL DEFAULT 1 CHECK (coverage_known IN (0, 1)),
+          updated_at       INTEGER NOT NULL
+        );
+        INSERT OR IGNORE INTO runtime_event_coverage (
+          run_id, task_id, submitted_events, observed_events, rejected_events,
+          coverage_known, updated_at
+        )
+        SELECT run_id, MIN(task_id), COUNT(*), COUNT(*), 0, 0, MAX(received_at)
+          FROM runtime_events GROUP BY run_id;
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {

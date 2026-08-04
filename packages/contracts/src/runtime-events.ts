@@ -52,6 +52,7 @@ export interface RuntimeEvent {
 export interface RuntimeEventBatch {
   schemaVersion: typeof RUNTIME_EVENT_BATCH_SCHEMA_VERSION;
   events: RuntimeEvent[];
+  coverageComplete?: boolean;
 }
 
 export type RuntimeEventRejectionReason = 'event_id_conflict' | 'sequence_conflict';

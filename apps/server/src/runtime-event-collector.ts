@@ -15,6 +15,25 @@ import type { DatabaseConnection } from './database';
 export const MAX_RUNTIME_EVENT_BATCH = 100;
 export const MAX_RUNTIME_EVENT_PAGE = 100;
 
+export interface RuntimeEventSignal {
+  eventId: string;
+  sequence: number;
+  capturedAt: number;
+  kind: RuntimeEventKind;
+  status?: RuntimeEventStatus;
+  isError?: boolean;
+  configurationSnapshotId?: string;
+}
+
+export interface RuntimeEventSignalPage {
+  taskId: string | null;
+  runId: string;
+  total: number;
+  rejectedEvents: number;
+  coverageKnown: boolean;
+  events: RuntimeEventSignal[];
+}
+
 const EVENT_KINDS: RuntimeEventKind[] = [
   'task_started',
   'task_finished',
@@ -73,6 +92,20 @@ export function appendRuntimeEventBatch(
   const events = normalizeBatch(input);
   const taskId = events[0].taskId;
   const runId = events[0].runId;
+  const existingTask = database
+    .prepare(
+      'SELECT task_id as taskId FROM runtime_events WHERE run_id = ? ORDER BY sequence ASC LIMIT 1',
+    )
+    .get(runId) as { taskId: string } | undefined;
+  const existingCoverage = database
+    .prepare('SELECT coverage_known as coverageKnown FROM runtime_event_coverage WHERE run_id = ?')
+    .get(runId) as { coverageKnown: number } | undefined;
+  const coverageKnown =
+    input.coverageComplete === true &&
+    (existingTask ? existingCoverage?.coverageKnown === 1 : true);
+  if (existingTask && existingTask.taskId !== taskId) {
+    throw new RuntimeEventCollectorError('invalid_batch');
+  }
   const rejected: RuntimeEventAppendReport['rejected'] = [];
   const fresh: RuntimeEvent[] = [];
   let duplicates = 0;
@@ -121,6 +154,10 @@ export function appendRuntimeEventBatch(
     .get(runId) as { maxSequence: number | null };
   let maxSequence = maxSequenceRow.maxSequence ?? -1;
   let outOfOrderAccepted = 0;
+  const observed = fresh.length + duplicates;
+  const effectiveCoverageKnown =
+    coverageKnown ||
+    (fresh.length === 0 && rejected.length === 0 && existingCoverage?.coverageKnown === 1);
   try {
     database.transaction(() => {
       const insert = database.prepare(
@@ -144,12 +181,34 @@ export function appendRuntimeEventBatch(
           receivedAt,
         );
       }
+      database
+        .prepare(
+          `INSERT INTO runtime_event_coverage (
+             run_id, task_id, submitted_events, observed_events, rejected_events,
+             coverage_known, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(run_id) DO UPDATE SET
+             task_id = excluded.task_id,
+             submitted_events = runtime_event_coverage.submitted_events + excluded.submitted_events,
+             observed_events = runtime_event_coverage.observed_events + excluded.observed_events,
+             rejected_events = runtime_event_coverage.rejected_events + excluded.rejected_events,
+             coverage_known = MIN(runtime_event_coverage.coverage_known, excluded.coverage_known),
+             updated_at = excluded.updated_at`,
+        )
+        .run(
+          runId,
+          taskId,
+          events.length,
+          observed,
+          rejected.length,
+          effectiveCoverageKnown ? 1 : 0,
+          receivedAt,
+        );
     })();
   } catch {
     throw new RuntimeEventCollectorError('storage_failed');
   }
 
-  const observed = fresh.length + duplicates;
   return {
     schemaVersion: RUNTIME_EVENT_BATCH_SCHEMA_VERSION,
     taskId,
@@ -160,7 +219,12 @@ export function appendRuntimeEventBatch(
     coverage: {
       observed,
       total: events.length,
-      status: rejected.length === 0 ? 'complete' : observed > 0 ? 'partial' : 'not_captured',
+      status:
+        effectiveCoverageKnown && rejected.length === 0
+          ? 'complete'
+          : observed > 0
+            ? 'partial'
+            : 'not_captured',
     },
     ordering: { strategy: 'sequence_ascending', outOfOrderAccepted },
     limitations: [
@@ -213,6 +277,38 @@ export function getRuntimeEventPage(
           ]
         : []),
     ],
+  };
+}
+
+export function getRuntimeEventSignals(
+  database: DatabaseConnection,
+  runId: string,
+): RuntimeEventSignalPage {
+  const normalizedRunId = boundedText(runId, 128);
+  if (!normalizedRunId) throw new RuntimeEventCollectorError('invalid_event');
+  const totalRow = database
+    .prepare('SELECT COUNT(*) as count FROM runtime_events WHERE run_id = ?')
+    .get(normalizedRunId) as { count: number };
+  const coverage = database
+    .prepare(
+      `SELECT rejected_events as rejectedEvents, coverage_known as coverageKnown
+         FROM runtime_event_coverage WHERE run_id = ?`,
+    )
+    .get(normalizedRunId) as { rejectedEvents: number; coverageKnown: number } | undefined;
+  const rows = database
+    .prepare(
+      `SELECT event_id as eventId, sequence, captured_at as capturedAt, kind,
+              payload_json as payloadJson
+         FROM runtime_events WHERE run_id = ? ORDER BY sequence DESC, event_id DESC LIMIT ?`,
+    )
+    .all(normalizedRunId, MAX_RUNTIME_EVENT_PAGE) as StoredRuntimeEvent[];
+  return {
+    taskId: findTaskId(database, normalizedRunId),
+    runId: normalizedRunId,
+    total: totalRow.count + (coverage?.rejectedEvents ?? 0),
+    rejectedEvents: coverage?.rejectedEvents ?? 0,
+    coverageKnown: coverage?.coverageKnown === 1,
+    events: rows.reverse().map(toSignal),
   };
 }
 
@@ -364,6 +460,26 @@ function toReference(row: StoredRuntimeEvent): RuntimeEventReference {
     kind: row.kind,
     parentEventId: row.parentEventId,
     payloadFields,
+  };
+}
+
+function toSignal(row: StoredRuntimeEvent): RuntimeEventSignal {
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = JSON.parse(row.payloadJson) as Record<string, unknown>;
+  } catch {
+    payload = {};
+  }
+  return {
+    eventId: row.eventId,
+    sequence: row.sequence,
+    capturedAt: row.capturedAt,
+    kind: row.kind,
+    ...(typeof payload.status === 'string' ? { status: payload.status as RuntimeEventStatus } : {}),
+    ...(typeof payload.isError === 'boolean' ? { isError: payload.isError } : {}),
+    ...(typeof payload.configurationSnapshotId === 'string'
+      ? { configurationSnapshotId: payload.configurationSnapshotId }
+      : {}),
   };
 }
 

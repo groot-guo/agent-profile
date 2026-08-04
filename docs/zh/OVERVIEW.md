@@ -3,8 +3,8 @@
 > 本文描述当前已经实现的能力，并与 [中文 README](../../README.zh-CN.md)、
 > `README.md`、`ARCHITECTURE.md` 和 [Profile 模型](../profile-model.md) 保持一致。
 > Task、Outcome、Configuration Snapshot、Cohort、Experiment、Task Profile、有界
-> post-run feedback 与 T115 Agent 可消费的本地 CLI 工作流已实现；外部/运行中 Runtime
-> feedback 仍是未来方案，依赖图见
+> post-run feedback、T115 Agent 可消费的本地 CLI 工作流，以及 T117 有界本地运行中 hint
+> 策略已实现；外部 Runtime SDK 和自动配置控制仍是未来方案，依赖图见
 > [演进方案](../profile-evolution-plan.md)。
 
 ## 定位
@@ -31,7 +31,12 @@ T115 还提供 `diagnosis`、`evidence`、显式确认的 `task-outcome` 和 opt
 T116 已提供本地 `runtime-event/v1` collector：`POST /api/runtime/events` 接收有界生命周期
 metadata，`GET /api/runtime/runs/:runId/events` 返回按 sequence 排序的引用。它处理精确重复、
 乱序到达、sequence 冲突和 partial coverage，不接收 prompt/answer/thinking/tool input/output，
-也不提供运行中 hint 或自动配置修改。
+也不自动修改配置；运行中 hint 由 T117 的独立策略提供。
+
+T117 在此基础上提供显式 opt-in 的 `runtime-hint/v1`：只有新鲜且完整的事件覆盖、ready 的
+历史 descriptive cohort evidence 和重复工具失败信号同时满足时才返回短期提示；提示按 Run 限流，
+只引用事件/Experiment，不包含原始过程内容。`POST /api/runtime/hints/:hintId/adoption` 只接受
+显式的 `adopted`、`ignored` 或 `not_recorded`，不会从后续工具行为推断采纳，也不会修改 Agent 配置。
 
 当前还提供显式来源选择的只读 `outcome-evidence/v1` 本地 Git adapter：
 `GET /api/tasks/:id/outcome-evidence?source=local_git`。它只读取关联 Session 工作目录或绝对 Task
@@ -49,7 +54,7 @@ build/test/lint，不上传内容、不自动写 Outcome，远程 CI/review 证�
   references 和显式 opt-in 的 post-run feedback 获取有界过程证据，再由人确认 Task/Outcome。
   这些接口仍不能被误称为执行中控制回路。
 - **自动解决：尚不具备。** 系统不会在 Agent 运行时暂停、修改提示词/规则/模型/工具策略，
-  也不会仅凭指标宣称问题已解决；受限运行中 hint 仍属于 T117。
+  也不会仅凭指标宣称问题已解决；T117 的 hint 只是受限、可抑制的观察假设。
 
 ## Profile 分层
 
@@ -291,8 +296,8 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
 - 能运行 `agent-profile help/version/doctor/sources/sync/sessions/stats/profiles/serve`
   与 `task-profile <id>`；详细 Session/证据 CLI 查询仍未实现。当前可在本机生成未签名、
   仅限同平台/架构的 Node 发行归档，尚无公开 package、签名安装器或跨平台 CI matrix。
-- 有界 cohort Profile 与显式 opt-in 的任务后反馈已实现；更广泛的回归检测、因果实验结论和
-  Runtime feedback/SDK 尚未实现。
+- 有界 cohort Profile、显式 opt-in 的任务后反馈与 T117 本地运行中 hint 已实现；更广泛的回归检测、
+  因果实验结论和外部 Runtime feedback/SDK 尚未实现。
 
 未来方案：
 

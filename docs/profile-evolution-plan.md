@@ -43,7 +43,7 @@ Agent ranking, or automatic prompt/configuration mutation.
 | Can a person locate runtime problems and performance hotspots? | Yes, usually for observed Sessions. | It identifies evidence-backed patterns, not arbitrary code-root causes. |
 | Can a person or offline Agent form a next-step hypothesis? | Yes, through findings, Profiles, prompt review, and explicit Task/Outcome records. | The hypothesis remains human-mediated and must be verified by a Task Outcome. |
 | Can an Agent consume findings and write a bounded result? | Yes, through the versioned local CLI/API reports, explicit Outcome write, and opt-in post-run report. | It remains local/content-free and does not mutate Agent configuration. |
-| Can the tool solve or prevent a problem during execution? | No. | T116 now collects local lifecycle metadata, but there is no live hint channel or automatic configuration mutation; T117 owns that policy. |
+| Can the tool solve or prevent a problem during execution? | Only as bounded advice. | T117 can issue an opt-in, short-lived hypothesis from fresh Runtime events plus ready historical evidence; it never mutates configuration or proves a problem is solved. |
 | Can it prove one Agent/configuration is better? | No. | Current cohort output is descriptive and bounded; task difficulty, coverage, uncertainty, and attribution remain limits; T118/T119 extend them. |
 
 ### Material gaps mapped to Tasks
@@ -54,7 +54,8 @@ bounded content-free audit metadata (T111), while findings with stored Span IDs
 now have direct bounded evidence navigation (T112). Outcome evidence needs
 confirmation and a producer contract (T113/T114), and the Agent now has
 content-free local reports and an explicit write path (T115). T116 adds the
-local Runtime event protocol/collector; bounded in-run advice remains T117.
+local Runtime event protocol/collector; T117 now adds bounded in-run advice with
+explicit suppression and adoption records.
 Comparison rigor (T118),
 typed multi-Agent attribution (T119), pricing governance (T120), and large-history
 ergonomics (T121) are parallel or later tracks. Non-local use remains conditional
@@ -114,7 +115,7 @@ high token count or a heuristic finding to an automatic rule change.
 | Lower-friction Outcome evidence | T113, T114 | Human-confirmed Task candidates and a versioned Outcome-evidence contract | Implicit Task links, remote CI access by default |
 | Agent-readable local loop | T115 | Content-free CLI/API reports plus explicit Outcome write flow | In-run control or configuration mutation |
 | Runtime observation | T116 | Local structured event protocol and collector | Live hints or replacement of transcript evidence |
-| Runtime advice | T117 | Opt-in, bounded in-run hints with suppression and evaluation | Automatic model/prompt/tool changes |
+| Runtime advice | T117 | Opt-in, bounded in-run hints with suppression, expiry, rate limits, and explicit adoption | Automatic model/prompt/tool changes |
 | Better comparison | T118 | Explicit comparability strata and uncertainty-aware reports | Causal proof from small/confounded samples |
 | Multi-Agent accountability | T119 | Typed Task graph and non-double-counted attribution | Inferred parentage from titles, paths, or timestamps |
 | Operational completeness | T120, T121 | Governed model pricing direction and bounded large-history workflows | Blind price scraping or weakening evidence coverage |

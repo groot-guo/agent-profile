@@ -20,6 +20,7 @@ const runtimeEventBatchSchema = {
   properties: {
     schemaVersion: { type: 'string', const: 'runtime-event-batch/v1' },
     events: { type: 'array', minItems: 1, maxItems: 100 },
+    coverageComplete: { type: 'boolean' },
   },
 } as const;
 

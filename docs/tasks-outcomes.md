@@ -134,9 +134,9 @@ cost, tool-error rate, peak context, and cache hit rate. Guardrails are
 evaluated only when they use `{ metric, maxRelativeRegression }`; arbitrary
 stored guardrail values remain `not_evaluable`. Relative differences are
 descriptive observations and never become a universal Agent/configuration
-winner or an automatic keep/rollback mutation. Runtime feedback hints remain
-future work; the separate post-run feedback contract below is the only current
-Runtime-facing consumer.
+winner or an automatic keep/rollback mutation. T117 adds a separate local,
+opt-in Runtime hint contract gated by fresh events and ready historical
+evidence; it does not mutate configuration or replace the post-run contract.
 
 ## Verified Post-Run Feedback
 

@@ -7,9 +7,10 @@ terminology is in `docs/profile-model.md`. Task/Outcome/Configuration
 persistence, Task-Session links, cohort/experiment definitions,
 `task-profile/v1`, `cohort-runtime-profile/v1`, and bounded
 `post-run-feedback/v1` are implemented foundations. The local
-`runtime-event/v1` protocol and metadata-only collector are also implemented;
-broader automated cohort statistics, causal experiment evaluation, automatic
-regression decisions, and live Runtime feedback remain proposals. Their dependency plan is
+`runtime-event/v1` protocol, metadata-only collector, and bounded opt-in
+`runtime-hint/v1` policy are also implemented; broader automated cohort
+statistics, causal experiment evaluation, automatic regression decisions, and
+external Runtime SDK feedback remain proposals. Their dependency plan is
 `docs/profile-evolution-plan.md`; the future Runtime design is in
 `docs/agent-runtime-profile-design.md`. The prompt-review surface remains
 ephemeral and does not automatically create or modify those persisted records.
@@ -42,9 +43,9 @@ The product has distinct evidence layers:
   for one completed, Outcome-verified candidate Task. It links a bounded finding
   to the current cohort report, decision, guardrails, and limitations; it does
   not mutate configuration or transmit raw Task/transcript content.
-- Broader time-window/statistical regression policies and live Runtime feedback
-  remain future work beyond the current bounded reports and local event
-  collector.
+- Broader time-window/statistical regression policies, external Runtime SDK
+  feedback, and automatic Runtime control remain future work beyond the current
+  bounded reports, local event collector, and opt-in hint policy.
 
 All reports expose their scope and limitations. Process metrics may form a
 diagnostic or iteration hypothesis; they are not a universal Agent ranking or a
@@ -409,7 +410,7 @@ stale provider-labelled rows once; no generated-data reset is required.
 
 ## Persistence model
 
-`apps/server/src/database.ts` owns sixteen current internal tables:
+`apps/server/src/database.ts` owns nineteen current internal tables:
 
 - `sessions` — source identity and revision metadata (`source_kind`,
   `source_updated_at`, `source_fingerprint`); agent/model fields plus the
@@ -448,6 +449,14 @@ stale provider-labelled rows once; no generated-data reset is required.
   identity and sequence. It stores no prompt, answer, thinking, tool input, or
   tool output content; duplicate event IDs are idempotent and sequence conflicts
   are isolated as rejected input.
+- `runtime_event_coverage` — per-Run submitted, observed, and rejected event
+  counts used to preserve partial-coverage suppression across requests.
+- `runtime_hints` — bounded opt-in hint payloads with expiry and event/history
+  references. The stored payload is fixed-policy metadata and contains no raw
+  process content.
+- `runtime_hint_adoptions` — explicit `adopted`, `ignored`, or `not_recorded`
+  decisions with producer/time and the stored hint evidence reference. Adoption
+  is never inferred from later Runtime behavior.
 - `task_outcomes` — nullable build/test/lint/Git/rating/rework/completion-time/
   bounded-evidence fields; null means not collected and explicit `failed` means
   failed. The Tasks workspace validates optional evidence before its existing
@@ -821,7 +830,7 @@ page exposes the same contract and privacy boundaries.
 | `POST` | `/api/imports/rebuild` | Force available sources through analysis and atomic replacement despite matching fingerprints |
 | `POST` | `/api/scan` | Scan/import a selected transcript directory |
 | `GET` | `/api/data-management/summary` | Return reset impact counts and the required confirmation phrase |
-| `POST` | `/api/data-management/reset` | Confirm and transactionally delete generated Sessions/Spans while retaining pricing, model configuration, migrations, and Task/Outcome/experiment records |
+| `POST` | `/api/data-management/reset` | Confirm and transactionally delete generated Sessions/Spans while retaining pricing, model configuration, migrations, Task/Outcome/experiment, Runtime event/coverage, and Runtime hint records |
 | `GET` | `/api/sessions` | Compatibility full-array Session list |
 | `GET` | `/api/session-discovery` | Versioned bounded Session page with server-side filters, sort, counts, facets, selected preview, and keyset cursor |
 | `GET` | `/api/session-updates` | Content-free long-poll cursor for bounded changed-Session IDs; waits at most 30 seconds |
@@ -861,6 +870,8 @@ page exposes the same contract and privacy boundaries.
 | `GET` | `/api/tasks/:id/feedback?optIn=true` | Explicitly requested bounded `post-run-feedback/v1` records |
 | `POST` | `/api/runtime/events` | Append local `runtime-event/v1` metadata batches with idempotency and coverage report |
 | `GET` | `/api/runtime/runs/:runId/events` | Read bounded `runtime-event-page/v1` references in sequence order |
+| `GET` | `/api/runtime/runs/:runId/hint?optIn=true` | Read an explicit opt-in, fresh, coverage- and history-gated `runtime-hint/v1` report |
+| `POST` | `/api/runtime/hints/:hintId/adoption` | Record explicit `runtime-hint-adoption/v1` status and producer; never inferred from later events |
 | `GET/POST` | `/api/config-snapshots` | List or create version/hash-only Configuration Snapshots |
 | `GET/POST` | `/api/cohorts` | List or create cohort definitions |
 | `GET/POST` | `/api/experiments` | List or create guarded experiment records |
@@ -904,6 +915,16 @@ page exposes the same contract and privacy boundaries.
   field values. The collector is idempotent for exact duplicates, accepts
   out-of-order arrivals while preserving sequence reads, isolates event ID and
   sequence conflicts, and keeps imported transcript evidence independent.
+- The loopback Runtime hint policy accepts only an explicit `optIn=true` read.
+  Migrations v13/v14 store fixed, bounded hint payloads, explicit adoption
+  status, and per-Run rejected-event coverage. Each Runtime event batch must
+  explicitly attest `coverageComplete: true` before a Run can pass the complete
+  coverage gate. A hint also requires fresh complete event coverage, a ready
+  descriptive historical comparison, and a repeated tool-failure signal;
+  future-dated events, unknown/partial coverage, and finished Runs are
+  suppressed. It is rate-limited per run, expires quickly, returns only
+  event/experiment references, and cannot mutate prompts, tools, models, or
+  configuration.
 - `agent-profile serve` composes Next standalone, the shared Runtime, and
   Fastify behind one loopback origin. The release archive keeps mutable data
   outside its installation tree and closes all three layers on signals.

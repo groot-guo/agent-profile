@@ -210,6 +210,14 @@ project key 与七天本地时间窗口；每个 Session 关联和 Git 证据都
 Task/Run identity、sequence、parent reference、生命周期 kind、时间和白名单 metadata；精确重复
 幂等处理，sequence 冲突拒绝且不覆盖已有事件，乱序到达会保留并标记 ordering coverage。它只是
 本地观测来源，不是 live hint、自动配置控制，也不替代 transcript 导入。
+事件生产方只有在明确确认该批次覆盖完整时才设置 `coverageComplete: true`；缺失或为 false 时，
+Runtime hint 的覆盖度保持 unknown 并抑制提示。
+
+显式调用 `GET /api/runtime/runs/:runId/hint?optIn=true` 后，只有在 Runtime 事件新鲜且完整、历史
+cohort evidence 达到 ready、并观察到重复工具失败信号时，才会返回有界的 `runtime-hint/v1` 假设。
+提示短时有效、按 Run 限流且不含原始内容，只保留事件和 Experiment 引用。通过
+`POST /api/runtime/hints/:hintId/adoption` 才能显式记录 `adopted`、`ignored` 或 `not_recorded`；
+后续工具行为不会反推采纳，也不会修改 Agent 配置。
 
 ## 如何理解 Profile
 
@@ -222,7 +230,7 @@ Task/Run identity、sequence、parent reference、生命周期 kind、时间和�
   覆盖度与聚合过程证据。
 - **Verified Post-Run Feedback**（`post-run-feedback/v1`）在显式 opt-in 后展示完成且
   Outcome 已验证的 candidate Task 的有界 Experiment 发现；证据不足或过期时会抑制。
-- 外部 Runtime feedback、运行中 hint、自动实验结论、回归决策和配置修改仍是后续能力。
+- T117 的本地运行中 hint 已实现，但外部 Runtime SDK、自动实验结论、回归决策和配置修改仍是后续能力。
 
 OpenCode 适配器以只读方式打开本机 SQLite。当前来源把 Token 总量保存在 Session
 聚合字段中，而不是逐消息记录；Agent Profile 因此保留一个明确标记的聚合 LLM 回合，
@@ -366,8 +374,8 @@ pnpm dev
   平台的未签名 Node 归档；尚无已发布 package、签名安装器、跨平台 CI matrix 或桌面应用。
   详细 Session/证据 CLI 命令仍是后续工作。
 - Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型；有界 cohort
-  Profile 和显式 opt-in 的任务后反馈已经实现。更广泛的回归检测、因果实验结论和 Runtime
-  feedback/SDK 仍未实现。
+  Profile、显式 opt-in 的任务后反馈和 T117 本地运行中 hint 已实现。更广泛的回归检测、因果实验
+  结论和外部 Runtime feedback/SDK 仍未实现。
 - 跨文件的 Codex 父/子线程仍是独立 Session；当来源捕获 `parent_thread_id` 时，Session
   详情会展示该来源原生链接（包括父线程不可用的情形）。通用 Task 图和合并资源归因仍是
   后续能力。
