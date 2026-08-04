@@ -72,6 +72,25 @@ When the user explicitly authorizes a commit:
 - The staged diff must remain within the active Task and satisfy the existing
   review and explicit-commit gates before committing.
 
+## Code Review Workflow
+
+Code review can be started by an ordinary natural-language request such as
+“检查未提交更改”; the user does not need to provide a CLI command. The command
+below is an internal execution route, not a prerequisite for the request.
+
+- Review staged, unstaged, and untracked files in the requested scope.
+- Read the applicable `AGENTS.md`, language rules, and review checklist before
+  reviewing unfamiliar or cross-file changes.
+- Prefer the environment-native Codex route `codex review --uncommitted` for
+  current uncommitted work. If it cannot initialize, manually audit the diff
+  using the configured review checklist and report that fallback explicitly.
+- Keep the review pass read-only: do not edit, stage, commit, or push unless the
+  user separately asks for that action.
+- Report only discrete, actionable findings introduced by the change. Use
+  normal Markdown and `::code-comment` for line-specific feedback.
+- P0/P1 findings block commit; P2/P3 findings are reported but do not block by
+  default. After fixing a blocking finding, rerun the same review route.
+
 ## Durable implementation invariants
 
 These rules protect metric correctness and must not change accidentally:
