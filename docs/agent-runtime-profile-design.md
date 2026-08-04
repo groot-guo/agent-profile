@@ -278,7 +278,8 @@ Prompt 是 Configuration 的一个可实验变量，不是产品中心。
 测试”之前，需证明测试通过率/返工率改善且成本没有超过上限。T49 已实现 Task、
 Configuration Snapshot、Outcome、Cohort 和 Experiment 的持久化基础；T89 已实现
 最低样本、Outcome 覆盖与有限 guardrail 的有界比较，但没有产生因果赢家或自动决策。
-T118 才会扩展可比性分层与不确定性表达，因此页面建议仍必须被视为下一次实验的假设。
+T118 现在提供可比性分层、排除项、`ready`/`insufficient_evidence`/`not_comparable` 状态和有界
+不确定性表达；页面建议仍必须被视为下一次实验的描述性假设。
 
 ## 9. 分期交付
 
@@ -316,7 +317,7 @@ Phase 1 的结论。
 T90 已让完成且 Outcome-verified 的 candidate Task 显式读取有界 post-run finding。
 当前报告只描述证据与限制，不产生自动 keep/rollback 或因果赢家。
 
-- T118 将扩展已声明的 cohort 可比性分层、结果/覆盖区分、不确定性与更严格的回归证据。
+- T118 已实现已声明的 cohort 可比性分层、结果/覆盖区分和有界不确定性；更严格的回归证据仍需后续任务。
 - 任何控制组/候选配置比较必须展示样本、排除项、Outcome/指标覆盖与 guardrail 限制。
 - 外部 Runtime 消费和自动配置控制仍未实现；T117 的本地 hint 只提供可抑制的观察假设。
 

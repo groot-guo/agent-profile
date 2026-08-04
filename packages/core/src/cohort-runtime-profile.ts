@@ -10,11 +10,42 @@ export type RuntimeProfileMetric =
   | 'peak_context_tokens'
   | 'cache_hit_rate';
 
+export type RuntimeProfileStratumDimension = 'project_id' | 'task_type' | 'complexity';
+
+export interface RuntimeProfileComparabilityInput {
+  dimensions: RuntimeProfileStratumDimension[];
+  minTasksPerGroup?: number;
+  minOutcomeCoverage?: number;
+}
+
+export interface RuntimeProfileStratumReport {
+  key: string;
+  controlTasks: number;
+  candidateTasks: number;
+  controlEligibleTasks: number;
+  candidateEligibleTasks: number;
+  controlOutcomeCoverage: number;
+  candidateOutcomeCoverage: number;
+  status: 'included' | 'excluded';
+  reason: 'missing_stratum_value' | 'missing_counterpart' | 'insufficient_outcome_evidence' | null;
+}
+
+export interface RuntimeProfileComparabilityReport {
+  status: 'comparable' | 'not_comparable';
+  dimensions: RuntimeProfileStratumDimension[];
+  minTasksPerGroup: number;
+  minOutcomeCoverage: number;
+  strata: RuntimeProfileStratumReport[];
+  includedTaskIds: string[];
+  excludedTaskIds: string[];
+}
+
 export interface RuntimeProfileTaskInput {
   id: string;
   configGroup: 'control' | 'candidate';
   outcomeVerified: boolean;
   metrics: Partial<Record<RuntimeProfileMetric, number | null>>;
+  strata?: Partial<Record<RuntimeProfileStratumDimension, string | null>>;
 }
 
 export interface RuntimeProfileDistribution {
@@ -23,18 +54,29 @@ export interface RuntimeProfileDistribution {
   coverage: number;
   mean: number | null;
   median: number | null;
+  p25: number | null;
   p90: number | null;
+  p75: number | null;
   min: number | null;
   max: number | null;
+  standardDeviation: number | null;
 }
 
 export interface RuntimeProfileGroup {
   configId: string;
   eligibleTasks: number;
   totalTasks: number;
+  comparableTasks: number;
   outcomeCoverage: number;
   taskIds: string[];
+  excludedTaskIds: string[];
   distributions: RuntimeProfileDistribution[];
+}
+
+export interface RuntimeProfileUncertainty {
+  method: 'normal_approximation_95' | 'not_available';
+  relativeDeltaLower: number | null;
+  relativeDeltaUpper: number | null;
 }
 
 export interface RuntimeProfileComparison {
@@ -42,8 +84,12 @@ export interface RuntimeProfileComparison {
   status: 'descriptive' | 'insufficient_evidence';
   controlObserved: number;
   candidateObserved: number;
+  controlMedian: number | null;
+  candidateMedian: number | null;
+  absoluteDelta: number | null;
   relativeDelta: number | null;
   direction: 'higher' | 'lower' | 'similar' | 'unknown';
+  uncertainty: RuntimeProfileUncertainty;
   interpretation: string;
 }
 
@@ -64,6 +110,7 @@ export interface CohortRuntimeProfileInput {
   primaryMetric: string;
   guardrails: unknown[];
   tasks: RuntimeProfileTaskInput[];
+  comparability?: RuntimeProfileComparabilityInput;
   persistedDecision?: string | null;
   generatedAt?: number;
 }
@@ -85,14 +132,17 @@ export interface CohortRuntimeProfileReport {
     outcomeEligibleTasks: number;
     minimumTasksPerGroup: number;
     minimumMetricCoverage: number;
+    comparableTasks: number;
+    excludedTasks: number;
   };
+  comparability: RuntimeProfileComparabilityReport;
   groups: {
     control: RuntimeProfileGroup;
     candidate: RuntimeProfileGroup;
   };
   comparisons: RuntimeProfileComparison[];
   guardrails: RuntimeProfileGuardrail[];
-  evaluationStatus: 'ready' | 'insufficient_evidence';
+  evaluationStatus: 'ready' | 'insufficient_evidence' | 'not_comparable';
   interpretation: string;
   limitations: string[];
 }
@@ -102,8 +152,10 @@ export function buildCohortRuntimeProfile(
 ): CohortRuntimeProfileReport {
   const controlTasks = input.tasks.filter((task) => task.configGroup === 'control');
   const candidateTasks = input.tasks.filter((task) => task.configGroup === 'candidate');
-  const control = buildGroup(input.controlConfigId, controlTasks);
-  const candidate = buildGroup(input.candidateConfigId, candidateTasks);
+  const comparability = buildComparability(input.tasks, input.comparability);
+  const comparableTaskIds = new Set(comparability.includedTaskIds);
+  const control = buildGroup(input.controlConfigId, controlTasks, comparableTaskIds);
+  const candidate = buildGroup(input.candidateConfigId, candidateTasks, comparableTaskIds);
   const comparisons = RUNTIME_PROFILE_METRICS.map((metric) =>
     compareMetric(metric, control, candidate),
   );
@@ -123,12 +175,26 @@ export function buildCohortRuntimeProfile(
     (guardrail) => guardrail.status === 'passed' || guardrail.status === 'failed',
   );
   const evaluationStatus =
-    enoughSamples && primaryReady && guardrailsReady ? 'ready' : 'insufficient_evidence';
+    comparability.status === 'not_comparable'
+      ? 'not_comparable'
+      : enoughSamples && primaryReady && guardrailsReady
+        ? 'ready'
+        : 'insufficient_evidence';
 
   const limitations: string[] = [];
   if (!enoughSamples) {
     limitations.push(
       `Each configuration needs at least ${MIN_RUNTIME_PROFILE_TASKS} Outcome-eligible Tasks before comparison.`,
+    );
+  }
+  if (comparability.excludedTaskIds.length > 0) {
+    limitations.push(
+      'Tasks in strata without a comparable control/candidate counterpart or sufficient Outcome coverage are excluded from the guarded comparison.',
+    );
+  }
+  if (comparability.status === 'not_comparable') {
+    limitations.push(
+      'No declared comparability stratum met the minimum counterpart, Outcome-quality, and metric-evidence rules.',
     );
   }
   if (input.tasks.some((task) => !task.outcomeVerified)) {
@@ -162,7 +228,10 @@ export function buildCohortRuntimeProfile(
       outcomeEligibleTasks: input.tasks.filter((task) => task.outcomeVerified).length,
       minimumTasksPerGroup: MIN_RUNTIME_PROFILE_TASKS,
       minimumMetricCoverage: MIN_RUNTIME_PROFILE_COVERAGE,
+      comparableTasks: control.comparableTasks + candidate.comparableTasks,
+      excludedTasks: comparability.excludedTaskIds.length,
     },
+    comparability,
     groups: { control, candidate },
     comparisons,
     guardrails,
@@ -184,14 +253,21 @@ const RUNTIME_PROFILE_METRICS: RuntimeProfileMetric[] = [
   'cache_hit_rate',
 ];
 
-function buildGroup(configId: string, tasks: RuntimeProfileTaskInput[]): RuntimeProfileGroup {
-  const eligibleTasks = tasks.filter((task) => task.outcomeVerified);
+function buildGroup(
+  configId: string,
+  tasks: RuntimeProfileTaskInput[],
+  comparableTaskIds: Set<string>,
+): RuntimeProfileGroup {
+  const comparableTasks = tasks.filter((task) => comparableTaskIds.has(task.id));
+  const eligibleTasks = comparableTasks.filter((task) => task.outcomeVerified);
   return {
     configId,
     eligibleTasks: eligibleTasks.length,
     totalTasks: tasks.length,
-    outcomeCoverage: tasks.length > 0 ? eligibleTasks.length / tasks.length : 0,
+    comparableTasks: comparableTasks.length,
+    outcomeCoverage: comparableTasks.length > 0 ? eligibleTasks.length / comparableTasks.length : 0,
     taskIds: tasks.map((task) => task.id),
+    excludedTaskIds: tasks.filter((task) => !comparableTaskIds.has(task.id)).map((task) => task.id),
     distributions: RUNTIME_PROFILE_METRICS.map((metric) => {
       const values = eligibleTasks
         .map((task) => task.metrics[metric])
@@ -213,9 +289,12 @@ function distribution(
     coverage: eligibleTasks > 0 ? sorted.length / eligibleTasks : 0,
     mean: sorted.length > 0 ? sorted.reduce((sum, value) => sum + value, 0) / sorted.length : null,
     median: nearestRank(sorted, 0.5),
+    p25: nearestRank(sorted, 0.25),
     p90: nearestRank(sorted, 0.9),
+    p75: nearestRank(sorted, 0.75),
     min: sorted[0] ?? null,
     max: sorted.at(-1) ?? null,
+    standardDeviation: sampleStandardDeviation(sorted),
   };
 }
 
@@ -230,6 +309,10 @@ function compareMetric(
   const candidateObserved = candidateDistribution?.observed ?? 0;
   const controlMean = controlDistribution?.mean ?? null;
   const candidateMean = candidateDistribution?.mean ?? null;
+  const controlMedian = controlDistribution?.median ?? null;
+  const candidateMedian = candidateDistribution?.median ?? null;
+  const absoluteDelta =
+    controlMean != null && candidateMean != null ? candidateMean - controlMean : null;
   const relativeDelta =
     controlMean != null && candidateMean != null && controlMean !== 0
       ? (candidateMean - controlMean) / Math.abs(controlMean)
@@ -254,13 +337,162 @@ function compareMetric(
     status,
     controlObserved,
     candidateObserved,
+    controlMedian,
+    candidateMedian,
+    absoluteDelta,
     relativeDelta,
     direction,
+    uncertainty: uncertaintyFor(
+      controlDistribution,
+      candidateDistribution,
+      controlMean,
+      relativeDelta,
+    ),
     interpretation:
       status === 'descriptive'
         ? 'Observed relative difference only; direction has no universal quality meaning.'
         : 'Missing sample or metric coverage prevents a guarded comparison.',
   };
+}
+
+function buildComparability(
+  tasks: RuntimeProfileTaskInput[],
+  input: RuntimeProfileComparabilityInput | undefined,
+): RuntimeProfileComparabilityReport {
+  const dimensions = [...new Set(input?.dimensions ?? [])];
+  const minTasksPerGroup = normalizeMinimum(input?.minTasksPerGroup, MIN_RUNTIME_PROFILE_TASKS);
+  const minOutcomeCoverage = normalizeCoverage(
+    input?.minOutcomeCoverage,
+    MIN_RUNTIME_PROFILE_COVERAGE,
+  );
+  const buckets = new Map<
+    string,
+    { control: RuntimeProfileTaskInput[]; candidate: RuntimeProfileTaskInput[] }
+  >();
+  for (const task of tasks) {
+    const key = stratumKey(task, dimensions);
+    const bucket = buckets.get(key) ?? { control: [], candidate: [] };
+    bucket[task.configGroup].push(task);
+    buckets.set(key, bucket);
+  }
+  const strata = [...buckets.entries()].map(([key, bucket]) => {
+    const controlEligibleTasks = bucket.control.filter((task) => task.outcomeVerified).length;
+    const candidateEligibleTasks = bucket.candidate.filter((task) => task.outcomeVerified).length;
+    const controlOutcomeCoverage = coverage(controlEligibleTasks, bucket.control.length);
+    const candidateOutcomeCoverage = coverage(candidateEligibleTasks, bucket.candidate.length);
+    const reason =
+      hasMissingStratumValue(bucket.control, dimensions) ||
+      hasMissingStratumValue(bucket.candidate, dimensions)
+        ? ('missing_stratum_value' as const)
+        : bucket.control.length === 0 || bucket.candidate.length === 0
+          ? ('missing_counterpart' as const)
+          : controlEligibleTasks < minTasksPerGroup ||
+              candidateEligibleTasks < minTasksPerGroup ||
+              controlOutcomeCoverage < minOutcomeCoverage ||
+              candidateOutcomeCoverage < minOutcomeCoverage
+            ? ('insufficient_outcome_evidence' as const)
+            : null;
+    return {
+      key,
+      controlTasks: bucket.control.length,
+      candidateTasks: bucket.candidate.length,
+      controlEligibleTasks,
+      candidateEligibleTasks,
+      controlOutcomeCoverage,
+      candidateOutcomeCoverage,
+      status: reason ? ('excluded' as const) : ('included' as const),
+      reason,
+    };
+  });
+  const includedKeys = new Set(
+    strata.filter((stratum) => stratum.status === 'included').map((stratum) => stratum.key),
+  );
+  const hasStructuralCounterpart = strata.some(
+    (stratum) =>
+      stratum.controlTasks > 0 &&
+      stratum.candidateTasks > 0 &&
+      stratum.reason !== 'missing_stratum_value',
+  );
+  const includedTaskIds = tasks
+    .filter((task) => includedKeys.has(stratumKey(task, dimensions)))
+    .map((task) => task.id);
+  const includedTaskIdSet = new Set(includedTaskIds);
+  return {
+    status: hasStructuralCounterpart ? 'comparable' : 'not_comparable',
+    dimensions,
+    minTasksPerGroup,
+    minOutcomeCoverage,
+    strata,
+    includedTaskIds,
+    excludedTaskIds: tasks.filter((task) => !includedTaskIdSet.has(task.id)).map((task) => task.id),
+  };
+}
+
+function hasMissingStratumValue(
+  tasks: RuntimeProfileTaskInput[],
+  dimensions: RuntimeProfileStratumDimension[],
+): boolean {
+  return tasks.some((task) => dimensions.some((dimension) => !task.strata?.[dimension]?.trim()));
+}
+
+function stratumKey(
+  task: RuntimeProfileTaskInput,
+  dimensions: RuntimeProfileStratumDimension[],
+): string {
+  if (dimensions.length === 0) return 'all';
+  return dimensions
+    .map((dimension) => `${dimension}=${task.strata?.[dimension]?.trim() || '<not_captured>'}`)
+    .join('|');
+}
+
+function uncertaintyFor(
+  control: RuntimeProfileDistribution | undefined,
+  candidate: RuntimeProfileDistribution | undefined,
+  controlMean: number | null,
+  relativeDelta: number | null,
+): RuntimeProfileUncertainty {
+  if (
+    controlMean == null ||
+    relativeDelta == null ||
+    control?.standardDeviation == null ||
+    candidate?.standardDeviation == null ||
+    control.observed < 2 ||
+    candidate.observed < 2
+  ) {
+    return { method: 'not_available', relativeDeltaLower: null, relativeDeltaUpper: null };
+  }
+  const standardError = Math.sqrt(
+    control.standardDeviation ** 2 / control.observed +
+      candidate.standardDeviation ** 2 / candidate.observed,
+  );
+  const margin = (1.96 * standardError) / Math.abs(controlMean);
+  return {
+    method: 'normal_approximation_95',
+    relativeDeltaLower: relativeDelta - margin,
+    relativeDeltaUpper: relativeDelta + margin,
+  };
+}
+
+function sampleStandardDeviation(values: number[]): number | null {
+  if (values.length < 2) return null;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.sqrt(
+    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1),
+  );
+}
+
+function coverage(eligible: number, total: number): number {
+  return total > 0 ? eligible / total : 0;
+}
+
+function normalizeMinimum(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : fallback;
+}
+
+function normalizeCoverage(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : fallback;
 }
 
 function evaluateGuardrail(

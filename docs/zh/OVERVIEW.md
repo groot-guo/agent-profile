@@ -296,13 +296,13 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
 - 能运行 `agent-profile help/version/doctor/sources/sync/sessions/stats/profiles/serve`
   与 `task-profile <id>`；详细 Session/证据 CLI 查询仍未实现。当前可在本机生成未签名、
   仅限同平台/架构的 Node 发行归档，尚无公开 package、签名安装器或跨平台 CI matrix。
-- 有界 cohort Profile、显式 opt-in 的任务后反馈与 T117 本地运行中 hint 已实现；更广泛的回归检测、
-  因果实验结论和外部 Runtime feedback/SDK 尚未实现。
+- 有界 cohort Profile、显式 opt-in 的任务后反馈、T117 本地运行中 hint 与 T118 声明式可比性分层/不确定性
+  报告已实现；更广泛的回归检测、因果实验结论和外部 Runtime feedback/SDK 尚未实现。
 
 未来方案：
 
-- 以 T118 扩展 cohort/experiment 的可比性分层、不确定性和回归证据；当前已有最低样本与
-  有限 guardrail，不产生因果赢家或自动决策；
+- 以后续任务扩展 cohort/experiment 的回归证据；T118 已提供可比性分层、不确定性、排除项和
+  最低样本/coverage guardrail，不产生因果赢家或自动决策；
 - 让 Agent Runtime 在任务结束后或运行中消费经过验证的建议；
 - 把提示词和 Agent 规则作为可实验配置，而不是把“改提示词”作为唯一目标。
 

@@ -25,32 +25,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - documentation: update configuration, privacy, architecture, README, and
   roadmap only after a concrete deployment decision
 
-### T118 comparable-cohort and regression-evidence rigor
-
-- status: planned
-- estimated size/risk: large / high; it changes how comparison eligibility and
-  evidence sufficiency are interpreted
-- purpose: strengthen configuration comparisons beyond the current bounded
-  mean-difference report while preserving the ban on universal rankings and
-  causal claims without evidence
-- scope: define declared comparability strata, minimum Outcome-quality and
-  coverage rules, robust distribution/effect reporting with uncertainty, and
-  explicit `ready`, `insufficient_evidence`, and `not_comparable` states;
-  retain user-owned keep/rollback decisions rather than automatic mutation
-- dependencies: T89 is the compatibility baseline; T113/T114 provide improved
-  Task and Outcome provenance
-- risks and assumptions: no semantic prompt text may be used by default to
-  infer task equivalence; small or confounded samples must be suppressed, not
-  amplified by statistical labels
-- acceptance: reports identify the exact eligible strata and exclusions,
-  distinguish coverage from favorable outcomes, expose uncertainty/limitations,
-  and never emit a universal configuration winner
-- verification: deterministic statistical fixtures, regression tests for
-  threshold/compatibility behavior, report-schema tests, and documentation
-  review with representative insufficient-data cases
-- documentation: update profile model, task/outcome design, stats,
-  architecture, runtime proposal, README, and roadmap
-
 ### T119 unified multi-agent Task graph and resource attribution
 
 - status: planned
@@ -142,6 +116,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T115](roadmap-archive/2026-q3.md#t115) | Agent-consumable local reports and CLI workflow | completed |
 | [T116](roadmap-archive/2026-q3.md#t116) | Runtime event protocol and local collector foundation | completed |
 | [T117](roadmap-archive/2026-q3.md#t117) | bounded in-run feedback and policy guardrails | completed |
+| [T118](roadmap-archive/2026-q3.md#t118) | comparable-cohort and regression-evidence rigor | completed |
 | [T113](roadmap-archive/2026-q3.md#t113) | Task discovery and local Outcome-assistance workflow | completed |
 | [T109](roadmap-archive/2026-q3.md#t109) | unified Project Profile selector | completed |
 | [T124](roadmap-archive/2026-q3.md#t124) | runtime-mode model-label classification | completed |

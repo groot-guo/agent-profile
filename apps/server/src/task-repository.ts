@@ -7,6 +7,8 @@ import {
   type OutcomeEvidenceStatus,
   type PostRunFeedbackReport,
   type RuntimeHintHistoricalEvidence,
+  type RuntimeProfileComparabilityInput,
+  type RuntimeProfileStratumDimension,
   type TaskEvidenceProvenance,
   type TaskOutcomeEvidence,
   type TaskProfileConfiguration,
@@ -405,6 +407,7 @@ export class TaskRepository {
     definition: Record<string, unknown>;
     status?: 'active' | 'archived';
   }): CohortRecord {
+    validateCohortDefinition(input.definition);
     const id = input.id?.trim() || randomUUID();
     const now = Date.now();
     this.database
@@ -440,6 +443,8 @@ export class TaskRepository {
     }>,
   ): CohortRecord {
     const current = this.requireCohort(id);
+    const definition = input.definition ?? current.definition;
+    validateCohortDefinition(definition);
     this.database
       .prepare(
         `UPDATE cohorts SET title = ?, definition_json = ?, status = ?, updated_at = ?
@@ -449,7 +454,7 @@ export class TaskRepository {
         input.title === undefined
           ? current.title
           : requiredText(input.title, 'invalid_cohort_title', 200),
-        JSON.stringify(input.definition ?? current.definition),
+        JSON.stringify(definition),
         input.status ?? current.status,
         Date.now(),
         id,
@@ -640,6 +645,11 @@ export class TaskRepository {
           peak_context_tokens: row.peakContextTokens,
           cache_hit_rate: row.contextTokens > 0 ? row.cacheReadTokens / row.contextTokens : null,
         },
+        strata: {
+          project_id: row.projectId,
+          task_type: row.type,
+          complexity: row.complexity,
+        },
       }));
     return buildCohortRuntimeProfile({
       experimentId: experiment.id,
@@ -650,6 +660,7 @@ export class TaskRepository {
       primaryMetric: experiment.primaryMetric,
       guardrails: experiment.guardrails,
       persistedDecision: experiment.decision,
+      comparability: comparabilityFromCohort(cohort.definition),
       tasks,
     });
   }
@@ -995,6 +1006,65 @@ function cohortMatches(
     (type == null || type === task.type) &&
     (complexity == null || complexity === task.complexity)
   );
+}
+
+function comparabilityFromCohort(
+  definition: Record<string, unknown>,
+): RuntimeProfileComparabilityInput | undefined {
+  validateCohortDefinition(definition);
+  const value = definition.comparability;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const comparability = value as Record<string, unknown>;
+  const dimensions = Array.isArray(comparability.dimensions)
+    ? comparability.dimensions.filter(isRuntimeProfileStratumDimension)
+    : [];
+  if (dimensions.length === 0) return undefined;
+  return {
+    dimensions: [...new Set(dimensions)],
+    ...(typeof comparability.minTasksPerGroup === 'number'
+      ? { minTasksPerGroup: comparability.minTasksPerGroup }
+      : {}),
+    ...(typeof comparability.minOutcomeCoverage === 'number'
+      ? { minOutcomeCoverage: comparability.minOutcomeCoverage }
+      : {}),
+  };
+}
+
+function validateCohortDefinition(definition: Record<string, unknown>): void {
+  const value = definition.comparability;
+  if (value === undefined) return;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TaskModelError('invalid_comparability');
+  }
+  const comparability = value as Record<string, unknown>;
+  if (
+    !Array.isArray(comparability.dimensions) ||
+    comparability.dimensions.length === 0 ||
+    comparability.dimensions.some((dimension) => !isRuntimeProfileStratumDimension(dimension))
+  ) {
+    throw new TaskModelError('invalid_comparability');
+  }
+  if (
+    comparability.minTasksPerGroup !== undefined &&
+    (typeof comparability.minTasksPerGroup !== 'number' ||
+      !Number.isSafeInteger(comparability.minTasksPerGroup) ||
+      comparability.minTasksPerGroup <= 0)
+  ) {
+    throw new TaskModelError('invalid_comparability');
+  }
+  if (
+    comparability.minOutcomeCoverage !== undefined &&
+    (typeof comparability.minOutcomeCoverage !== 'number' ||
+      !Number.isFinite(comparability.minOutcomeCoverage) ||
+      comparability.minOutcomeCoverage < 0 ||
+      comparability.minOutcomeCoverage > 1)
+  ) {
+    throw new TaskModelError('invalid_comparability');
+  }
+}
+
+function isRuntimeProfileStratumDimension(value: unknown): value is RuntimeProfileStratumDimension {
+  return value === 'project_id' || value === 'task_type' || value === 'complexity';
 }
 
 function requiredText(value: string, code: string, max: number): string {

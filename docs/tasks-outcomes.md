@@ -126,11 +126,21 @@ a causal winner from process metrics alone.
 matches Tasks against the persisted Cohort definition and requires exactly one
 linked control or candidate Configuration Snapshot per Task. Only Tasks with
 all five tracked Outcome fields contribute to guarded distributions. Each
-group needs at least three Outcome-eligible Tasks and 50% metric coverage;
-otherwise the report returns `insufficient_evidence`.
+group needs at least three Outcome-eligible Tasks and 50% metric coverage. A
+Cohort can declare `comparability.dimensions` (`project_id`, `task_type`, or
+`complexity`); missing declared values and strata without a control/candidate
+counterpart are excluded, and each included stratum must have
+the same minimum Outcome-quality threshold, and the same minimum coverage rule.
+Excluded strata and Task IDs remain visible. The report returns `ready` when at
+least one declared stratum is comparable and all selected evidence gates pass,
+`insufficient_evidence` when comparability exists but a metric/guardrail gate is
+not ready, and `not_comparable` when no declared stratum can be compared.
 
 The report includes task-level distributions for duration, total tokens, known
-cost, tool-error rate, peak context, and cache hit rate. Guardrails are
+cost, tool-error rate, peak context, and cache hit rate, including median, p25,
+p75, p90, and sample standard deviation. Comparisons include absolute/relative
+effects, candidate/control medians, and a bounded 95% normal-approximation
+interval when both samples support it. Guardrails are
 evaluated only when they use `{ metric, maxRelativeRegression }`; arbitrary
 stored guardrail values remain `not_evaluable`. Relative differences are
 descriptive observations and never become a universal Agent/configuration
@@ -172,6 +182,7 @@ post-run observation, not a causal guarantee or live Runtime instruction.
   workflow with explicit `--confirm` and `--opt-in` gates. It remains a local,
   content-free consumer of existing diagnosis, evidence, Task, Outcome, and
   feedback contracts; it is not a live Runtime control loop.
-- T118 will strengthen comparability strata and uncertainty reporting around the
-  current bounded cohort report. It must not turn descriptive process metrics
-  into a causal or universal configuration winner.
+- T118 now provides declared comparability strata and bounded uncertainty around
+  the cohort report. It must not turn descriptive process metrics into a causal
+  or universal configuration winner; stronger regression policy remains future
+  work.

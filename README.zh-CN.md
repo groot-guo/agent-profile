@@ -110,7 +110,10 @@ HTTP，但会把派生的本地 Session/Span 数据导入所选数据库；`diag
 `stats`、`profiles` 与 `task-profile <id>` 分别输出已经实现的汇总统计、Project Profile、Agent Process
 Profile 和显式 Task Profile。JSON 会保留原报告的指标覆盖度与 limitations。过程证据不能证明
 交付质量；`/api/experiments/:id/profile` 在 Outcome 和指标覆盖达到最低门槛时输出有界的
-cohort/configuration 分布与 guardrail 结果，但不推断通用或因果赢家。Agent Profile 的相对观察
+cohort/configuration 分布与 guardrail 结果。Cohort 可声明 `comparability.dimensions`（`project_id`、
+`task_type`、`complexity`）；缺少 control/candidate 对照或 Outcome 覆盖不足的 strata 会被排除并显式
+报告。报告区分 `ready`、`insufficient_evidence`、`not_comparable`，并提供中位数/IQR、样本标准差和
+有界的 95% 正态近似 effect 区间；这些只是描述性观察，不推断通用或因果赢家。Agent Profile 的相对观察
 不是通用质量排名，Task Profile 只覆盖其显式关联的 Session 与本地记录的 Outcome 证据。
 已完成且 Outcome 已验证的 candidate Task 可通过显式
 `GET /api/tasks/:id/feedback?optIn=true` 读取 `post-run-feedback/v1`；它只引用

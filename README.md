@@ -305,9 +305,14 @@ never infers adoption, and no Agent configuration is changed.
   current cohort evidence, guardrails, and limitations; insufficient or stale
   evidence is suppressed rather than recommended.
 - `cohort-runtime-profile/v1` provides a bounded cohort/configuration comparison
-  when Outcome and metric coverage meet minimum thresholds; external Runtime
-  feedback, live in-run hints, and automatic configuration mutation remain
-  future work.
+  when Outcome and metric coverage meet minimum thresholds. A Cohort may declare
+  `comparability.dimensions` using `project_id`, `task_type`, and `complexity`;
+  strata without a control/candidate counterpart or sufficient Outcome coverage
+  are excluded and reported. The report exposes `ready`, `insufficient_evidence`,
+  or `not_comparable`, plus median/IQR, sample deviation, and a bounded 95%
+  normal-approximation effect interval. These are descriptive observations, not
+  causal or universal winners; external Runtime SDK feedback and automatic
+  configuration mutation remain future work.
 
 ## What the main views do
 

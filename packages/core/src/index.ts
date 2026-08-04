@@ -15,12 +15,17 @@ export {
   type CohortRuntimeProfileReport,
   MIN_RUNTIME_PROFILE_COVERAGE,
   MIN_RUNTIME_PROFILE_TASKS,
+  type RuntimeProfileComparabilityInput,
+  type RuntimeProfileComparabilityReport,
   type RuntimeProfileComparison,
   type RuntimeProfileDistribution,
   type RuntimeProfileGroup,
   type RuntimeProfileGuardrail,
   type RuntimeProfileMetric,
+  type RuntimeProfileStratumDimension,
+  type RuntimeProfileStratumReport,
   type RuntimeProfileTaskInput,
+  type RuntimeProfileUncertainty,
 } from './cohort-runtime-profile';
 export type {
   DiagnoseOptions,

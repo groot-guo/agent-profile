@@ -366,7 +366,10 @@ describe('Task/Outcome foundations', () => {
     const candidate = repository.createConfiguration({ agent: 'codex', sourceHash: 'candidate' });
     const cohort = repository.createCohort({
       title: 'Feature tasks',
-      definition: { type: 'feature' },
+      definition: {
+        type: 'feature',
+        comparability: { dimensions: ['task_type'] },
+      },
     });
     const experiment = repository.createExperiment({
       title: 'Runtime profile',
@@ -402,6 +405,10 @@ describe('Task/Outcome foundations', () => {
       groups: {
         control: { eligibleTasks: 3 },
         candidate: { eligibleTasks: 3 },
+      },
+      comparability: {
+        status: 'comparable',
+        dimensions: ['task_type'],
       },
     });
 

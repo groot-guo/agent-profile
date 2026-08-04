@@ -37,8 +37,10 @@ The product has distinct evidence layers:
   coverage.
 - **Cohort/Experiment definitions** persist comparison scope and guardrails.
   The local Task workspace can create and edit those definitions. The bounded
-  `cohort-runtime-profile/v1` report evaluates comparable samples and guardrails
-  without calculating a universal or causal winner.
+  `cohort-runtime-profile/v1` report evaluates declared comparable strata and
+  guardrails without calculating a universal or causal winner. It exposes
+  included/excluded strata, `ready`/`insufficient_evidence`/`not_comparable`,
+  robust distribution summaries, and bounded effect uncertainty.
 - **Post-run feedback** is an opt-in, read-only `post-run-feedback/v1` report
   for one completed, Outcome-verified candidate Task. It links a bounded finding
   to the current cohort report, decision, guardrails, and limitations; it does
