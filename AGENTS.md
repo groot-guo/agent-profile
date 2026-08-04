@@ -67,8 +67,13 @@ When the user explicitly authorizes a commit:
   `test`, and `chore`.
 - Keep one logical Task per commit. Name the delivered outcome; do not use vague
   subjects such as `update`, `changes`, `WIP`, or a Task ID alone.
-- Add a body only when non-obvious context, compatibility, risk, or verification
-  needs recording. It must not repeat the subject or include secrets.
+- Every commit must include a readable body; do not create subject-only commits.
+  The body must explain the delivered intent and material scope, and include
+  verification results. Record compatibility, risk, or deferred work when
+  relevant; do not repeat the subject or include secrets.
+- Push is user-owned. After creating a commit, do not run `git push`. If a push
+  was explicitly requested before this rule takes effect but fails, report the
+  error and stop; do not retry unless the user explicitly asks.
 - The staged diff must remain within the active Task and satisfy the existing
   review and explicit-commit gates before committing.
 
