@@ -6,6 +6,138 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
+### T128 architecture documentation reconciliation
+
+- status: planned
+- estimated size/risk: medium / low
+- purpose: reconcile current-state documentation and provide one prioritized set
+  of architecture views that clearly separates implemented behavior from
+  proposed work
+- scope: remove duplicated/stale claims in README, ARCHITECTURE, profile-model,
+  Chinese overview, and roadmap; add system, module, ingestion, evidence,
+  Task/Outcome/Experiment, feedback, deployment-security, and multi-agent views
+- documentation work packages:
+  1. `README.md` and `docs/zh/OVERVIEW.md`: align product positioning,
+     implemented CLI commands, local startup, supported sources, safety
+     boundary, limitations, and document navigation in both languages.
+  2. `ARCHITECTURE.md`: become the single current-state technical map; remove
+     duplicate contracts and stale future-work claims; document composition,
+     storage, HTTP/runtime boundaries, ingestion, Profile layers, operations,
+     and known limitations without copying proposal-only designs.
+  3. `docs/profile-model.md`: deduplicate and normalize Session Evidence, Agent
+     Process Profile, Project Profile, Task Profile, Cohort Runtime Profile,
+     Outcome, coverage, and causal-claim terminology.
+  4. `docs/diagnosis.md`, `docs/multi-agent.md`, and `docs/stats.md`: reconcile
+     focused behavior with the canonical architecture and Profile vocabulary;
+     keep source-observed relationships distinct from inferred relationships.
+  5. `docs/performance.md`: connect T121 browser/Task-workflow budgets to the
+     existing content-free scale fixture and state what is not measured.
+  6. Model Catalog/configuration documentation: record current CNY pricing,
+     provenance, recalculation, and unknown-price behavior; link T120 decisions
+     without presenting multi-currency or network updates as implemented.
+  7. `docs/profile-evolution-plan.md` and
+     `docs/agent-runtime-profile-design.md`: retain proposal status, update
+     dependency links, and explicitly separate the target Runtime Profile from
+     implemented bounded reports and feedback.
+  8. `docs/roadmap.md` and terminal archives: keep only active/planned work in
+     the register, preserve immutable completion evidence, and ensure execution
+     order contains no already-completed next steps.
+- architecture view checklist:
+  1. system context: local user, one Agent Profile application, source histories,
+     and optional explicitly consented semantic provider;
+  2. runtime composition: single `agent-profile` CLI entry orchestrating local
+     API, Web UI, application Runtime, and SQLite;
+  3. monorepo dependency direction: Web/CLI/Server, Contracts, Core, and
+     infrastructure ownership without implying independent services;
+  4. ingestion sequence: Scanner -> Source Adapter -> Import Coordinator ->
+     Session Repository, including revision and atomic replacement rules;
+  5. evidence/Profile layers: Span -> Session Evidence -> Agent Process Profile
+     -> Project/Task Profile -> bounded Cohort Runtime Profile;
+  6. Task data model: Task, explicit Session links, configuration snapshots,
+     Outcome evidence, Cohort, and Experiment;
+  7. feedback flow: runtime events, bounded hints, suppression/adoption records,
+     opt-in/read-only boundaries, and unimplemented automation markers;
+  8. deployment/security boundary: loopback default, local files/database,
+     optional provider egress, and the unresolved T88 non-local decision;
+  9. multi-agent evidence: current source-native parent/child evidence versus
+     proposed T119 Task graph and resource attribution.
+- consistency rules: every view must carry a current/proposed legend; use one
+  canonical term per Profile layer; link detailed contracts instead of
+  duplicating them; distinguish product CLI commands from `pnpm` development
+  commands and repository `.mjs` maintenance checks
+- architecture direction: describe Agent Profile as one local-first modular
+  desktop/server application in a monorepo: CLI is the unified user entry and
+  process orchestrator; Web and API are internal application components; Core,
+  Contracts, and SQLite provide shared logic, protocol ownership, and storage
+- constraints: this Task does not introduce microservices, service discovery,
+  message queues, independently owned databases, or new top-level packages;
+  repository maintenance scripts such as `check-roadmap.mjs` must be clearly
+  separated from the product CLI and runtime architecture
+- decisions: proposed capabilities are labelled and do not become current-state
+  claims; diagrams emphasize product cohesion as well as dependency boundaries
+- acceptance: diagrams agree with implementation and terminology; completed
+  CLI/runtime work is not described as future; execution order lists only open
+  work; each document above has an explicit owner, current/proposed boundary,
+  and cross-link; no diagram implies microservices or multiple product CLIs
+- verification: documentation consistency review and `pnpm check:roadmap`
+- documentation: README, ARCHITECTURE, docs/profile-model.md,
+  docs/zh/OVERVIEW.md, and this register
+
+### T130 HTTP contract and module-boundary governance
+
+- status: planned
+- estimated size/risk: medium / medium
+- purpose: make shared DTO ownership and runtime request validation explicit
+  across Web, Server, CLI, and Contracts
+- scope: move duplicate public Web DTOs to `@agent-profile/contracts`, add
+  bounded runtime validation to mutation routes, and extend the architecture
+  boundary checker for prohibited cross-layer dependencies
+- acceptance: public API shapes have one owner; malformed mutation payloads
+  fail predictably; boundary checks cover the intended dependency direction
+  within the single local application
+- verification: focused tests, `pnpm check:boundaries`, lint, and build
+- documentation: ARCHITECTURE and roadmap
+
+### T131 domain cohesion and responsibility convergence
+
+- status: planned
+- estimated size/risk: large / medium
+- purpose: improve cohesion where responsibilities are either duplicated across
+  modules or concentrated in oversized orchestration files, without making the
+  repository more fragmented
+- scope: preserve the existing `apps/web`, `apps/server`, `packages/cli`,
+  `packages/core`, and `packages/contracts` top-level boundaries; organize
+  Server internals around existing capabilities, keep Web page data/state/view
+  responsibilities together in feature-local modules, and split CLI commands
+  behind the single `agent-profile` entry point
+- dependencies: T128 establishes target module views; T130 defines DTO
+  ownership before Web API modules are extracted; T121 may run in parallel only
+  where file ownership does not overlap
+- implementation rule: do not create a file solely to satisfy a line-count
+  target; extract only a stable responsibility with a clear caller and owner;
+  do not create additional shared packages for feature-local code
+- acceptance: duplicated concepts have one owner; extracted units improve
+  cohesion and have focused tests; CLI remains one command; priority files move
+  toward the 800-line guideline; remaining exceptions are recorded with
+  rationale and follow-up scope
+- verification: focused Web/Server/CLI tests, production build, lint, and scale
+  checks
+- documentation: performance, architecture, README, UI guidance, and roadmap
+
+### T132 continuous integration and smoke E2E baseline
+
+- status: planned
+- estimated size/risk: medium / medium
+- purpose: continuously verify the repository's supported local workflow and
+  catch integration regressions that unit tests and builds miss
+- scope: GitHub Actions for lint/test/build/roadmap/boundaries plus a bounded
+  Playwright smoke covering health and primary Web navigation
+- acceptance: CI is deterministic, content-free, and documented; smoke tests
+  run against disposable local data and fail with actionable diagnostics
+- verification: workflow/schema review and local Playwright smoke where the
+  environment supports browser installation
+- documentation: README, architecture/operations guidance, and roadmap
+
 ### T88 conditional non-local access safety
 
 - status: planned
@@ -15,6 +147,10 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   backup/export, and threat-model controls only if the product is intentionally
   exposed beyond the local trusted-machine use case
 - dependency: an explicit user/product decision to support non-loopback access
+- decision gate: choose one before implementation: (A) enforce loopback-only in
+  every Server/CLI startup path, or (B) support non-loopback access only after
+  an authenticated deployment threat model is approved; option A is the
+  recommended near-term boundary
 - scope: threat model first; then narrow authentication/authorization, safe
   origin/export controls, operational recovery guidance, and security tests as
   required by the chosen deployment model
@@ -66,6 +202,10 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   trust remote pricing
 - dependencies: T99/T100 Model Catalog contracts; any network fetch requires
   separate user approval and a source-trust decision
+- decision gate: choose one before implementation: (A) complete governance
+  design and retain the current CNY-only runtime contract, or (B) include an
+  additive multi-currency implementation and migration in the current scope;
+  option A is recommended until a concrete consumer requires another currency
 - risks and assumptions: display conversion must not overwrite source price or
   calculation provenance; unsupported schemes remain unknown rather than
   estimated; no automatic historical mutation
@@ -209,29 +349,41 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Execution Order
 
-The completed T79/T82/T85/T87/T89/T90/T99/T100/T101-T105 work establishes the
-current local evidence, bounded comparison, Model Catalog, and CLI foundations.
-The next implementation order is intentionally trust- and evidence-first:
+The current system is one local-first modular application in a monorepo. The
+CLI is the unified user entry and process orchestrator; Web, local API, Core,
+Contracts, and SQLite are internal components rather than independently
+deployed microservices. The adjustment programme is split into decision,
+governance, maintainability, and product-evolution tracks so architecture
+cleanup does not silently expand product scope or create more fragmentation.
 
-1. T111 and T112 establish the consent, redaction, audit, and
-   finding-to-evidence boundaries.
-2. T113 now provides local Task/Outcome candidates for explicit human review;
-   T114 now provides one versioned Outcome-evidence producer contract and a
-   read-only local Git adapter.
-3. T115 now provides the content-free Agent-readable local report and explicit
-   Outcome-write workflow on those contracts.
-4. T116 now provides the local Runtime event protocol/collector and T117 now
-   provides bounded, opt-in in-run hints with suppression and explicit adoption
-   records. T118 is the next comparison-rigor track.
+1. **P0 — reconcile the source of truth:** T128 updates current-state wording
+   and architecture views. It is documentation-only and precedes architectural
+   implementation so later Tasks have an agreed boundary map.
+2. **P0 — close the security decision:** T88 selects loopback-only operation
+   (recommended) or an authenticated non-local deployment. No network behavior
+   should change until that decision is recorded.
+3. **P1 — harden module contracts:** T130 centralizes public DTO ownership,
+   runtime request validation, and dependency-direction checks.
+4. **P1 — address scale and cohesion separately:** T121 owns bounded
+   discovery/detail virtualization; T131 owns responsibility convergence inside
+   the existing top-level boundaries. Sequence overlapping Web files instead of
+   combining both risks in one change.
+5. **P2 — establish regression gates:** T132 adds CI; Playwright smoke coverage
+   is included only if approved as a maintained project dependency.
+6. **P2 — extend evidence semantics:** T119 follows the stabilized contracts
+   and adds the explicit multi-Agent Task graph/resource attribution without
+   inferred relationships or double counting.
+7. **P3 — govern pricing evolution:** T120 records the price-source and currency
+   policy first; multi-currency implementation remains conditional on that
+   decision.
 
-T118 is a comparison-rigor track after T89 and the improved Task/Outcome
-provenance; T119 is a multi-Agent graph/attribution track after T87 and explicit
-Task links; T120 is an independent Model Catalog governance decision after
-T99/T100; and T121 is an independent large-history UI/performance track after
-T83/T84/T112. These tracks can be scheduled in parallel when their stated
-contracts and review capacity are available. T88 remains independent and
-conditional on an explicit decision to support non-local access. Mobile
-dashboard navigation remains intentionally out of scope.
+T128 and the design-only part of T120 may proceed in parallel. T132 may be
+prepared alongside T130 but should land after the intended checks are stable.
+T119 should not be combined with T121/T131 because each changes a different
+high-risk evidence or UI boundary. Mobile dashboard navigation remains out of
+scope. No current Task proposes microservice extraction or a new top-level
+package; such a change would require a separate evidence-backed architecture
+decision.
 
 ## Task Lifecycle
 
