@@ -274,7 +274,7 @@ Codex Desktop 物化的外部 Agent 历史如果只有 `external-import-turn-*`�
 | 变量 | 作用 |
 | --- | --- |
 | `PORT` | API 端口，默认 `3000` |
-| `HOST` | API 绑定地址，默认 `127.0.0.1` |
+| `HOST` | API 绑定地址；仅接受回环地址，默认 `127.0.0.1` |
 | `WEB_ORIGIN` | API CORS 允许的浏览器来源，多个值用逗号分隔；默认仅允许本机 `3001` Web 来源 |
 | `NEXT_PUBLIC_API` | 可选 Web API 覆盖；打包及默认 Web 请求使用同源 `/api` |
 | `AUTO_SCAN_DIR` | 未设置：扫描默认 Claude Code 与 Codex 目录；空字符串：关闭 transcript 自动扫描；路径：只扫描该一个 transcript 目录。 |
@@ -387,8 +387,8 @@ pnpm dev
   checkpoint，重写、坏行、不完整回合和强制 rebuild 会回退到完整解析与替换。超大 Session
   虚拟化仍是后续工作。
 - 产品边界已经确定为仅本地回环访问。`agent-profile serve` 会拒绝非回环 host；源码工作区
-  Server 仍保留 `HOST` 覆盖这一兼容缺口，由 T88 负责收口，不是受支持的可信网络部署方式。
-  任何非本地访问都需要另建产品与威胁模型决策 Task。
+  Server 与 `HOST` 覆盖同样只接受回环地址。任何非本地访问都需要另建产品与威胁模型决策
+  Task。
 
 ## 开发检查
 

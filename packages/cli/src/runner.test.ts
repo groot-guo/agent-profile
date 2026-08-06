@@ -663,6 +663,20 @@ describe('CLI runner', () => {
     });
   });
 
+  it('ignores a non-loopback HOST environment value outside serve', () => {
+    const binaryPath = fileURLToPath(new URL('../bin/agent-profile.mjs', import.meta.url));
+
+    const result = spawnSync(process.execPath, [binaryPath, 'version'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      env: { ...process.env, HOST: '0.0.0.0' },
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it('runs the workspace sources command without importing local data', () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-profile-cli-sources-'));
     temporaryDirectories.push(directory);

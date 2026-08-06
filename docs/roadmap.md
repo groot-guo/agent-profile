@@ -61,24 +61,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   environment supports browser installation
 - documentation: README, architecture/operations guidance, and roadmap
 
-### T88 enforce the loopback-only product boundary
-
-- status: planned
-- estimated size/risk: small / medium
-- decision: option A is selected; Agent Profile does not support non-local
-  access, and this decision must not be reopened without a new product Task
-- purpose: make every supported Server and CLI startup path enforce the settled
-  loopback-only boundary consistently
-- scope: remove the source-workspace Server's non-loopback `HOST` escape hatch,
-  align CORS/origin guidance, add negative startup coverage, and keep semantic
-  provider egress as a separate explicit opt-in content boundary
-- acceptance: Server and `agent-profile serve` reject non-loopback hosts; no
-  user-facing documentation suggests exposing the unauthenticated API on a
-  trusted network; local development and release startup remain unchanged
-- verification: focused Server/CLI configuration and startup tests, build, and
-  documentation consistency scan
-- documentation: README, architecture, Chinese overview, and roadmap
-
 ### T119 unified multi-agent Task graph and resource attribution
 
 - status: planned
@@ -134,6 +116,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T88](roadmap-archive/2026-q3.md#t88) | enforce the loopback-only product boundary | completed |
 | [T128](roadmap-archive/2026-q3.md#t128) | architecture documentation reconciliation | completed |
 | [T120](roadmap-archive/2026-q3.md#t120) | Model Catalog governance and multi-currency design | cancelled |
 | [T126](roadmap-archive/2026-q3.md#t126) | persistent code-review workflow rules | completed |

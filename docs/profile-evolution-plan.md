@@ -59,8 +59,8 @@ explicit suppression and adoption records.
 Comparison rigor (T118), typed multi-Agent attribution (T119), and large-history
 ergonomics (T121) are parallel or later tracks. Multi-currency/remote-price work
 has no current consumer and T120 is cancelled. The product boundary is settled
-as loopback-only; T88 only closes the remaining source-workspace Server escape
-hatch.
+as loopback-only; the source-workspace Server and the CLI both reject
+non-loopback hosts.
 
 ## Current Boundary
 
@@ -121,8 +121,8 @@ high token count or a heuristic finding to an automatic rule change.
 | Multi-Agent accountability | T119 | Typed Task graph and non-double-counted attribution | Inferred parentage from titles, paths, or timestamps |
 | Operational completeness | T121 | Bounded large-history workflows | Weakening evidence coverage |
 
-T88 is no longer a decision gate: option A (loopback-only) is selected. Its
-remaining scope is enforcement consistency in the source-workspace Server.
+T88 is no longer a decision gate: option A (loopback-only) is selected and
+enforced by both the source-workspace Server and the CLI.
 
 ## Contract Rules
 
@@ -209,8 +209,9 @@ Task remain actionable.
    T118 samples permanently scarce? The coverage/result distinction must remain.
 4. Any future multi-currency or remote-price requirement must start a new Task
    with a concrete consumer and provenance/migration design.
-5. Any future non-local deployment proposal must start a new product and threat-
-   model Task; T88 must not be reopened as an undecided A/B choice.
+5. Any future non-local deployment proposal must start a new product and
+   threat-model Task; the loopback-only decision must not be reopened as an
+   undecided A/B choice.
 
 ## Success Measures
 

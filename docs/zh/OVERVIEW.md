@@ -335,9 +335,9 @@ Task 标记为 `completed`。
 - server 默认 `3000`，可通过 `PORT` 修改。
 - web 默认 `3001`，可通过 `NEXT_PUBLIC_API` 修改 API 地址。
 - Server 与 Web 默认只绑定 `127.0.0.1`；API CORS 默认只接受本机 `3001` 来源。
-  产品边界已经确定为仅回环访问，`agent-profile serve` 会拒绝非回环 host。源码工作区
-  Server 仍保留 `HOST` 覆盖这一兼容缺口，由 T88 负责收口；它不是受支持的可信网络部署
-  方式。任何非本地访问都需要另建产品与威胁模型决策 Task。
+  产品边界已经确定为仅回环访问，`agent-profile serve` 会拒绝非回环 host，源码工作区
+  Server 的 `HOST` 覆盖同样只接受回环地址。任何非本地访问都需要另建产品与威胁模型决策
+  Task。
 - Web 开发产物写入 `apps/web/.next-dev`，生产构建仍写入 `apps/web/.next`，因此
   运行中的 `pnpm dev` 不会再被 `pnpm build` 替换 chunk。
 - 首页“同步数据”与启动导入共享任务管理器，检查 Claude Code、Codex、Zed、MiMo 和 OpenCode，

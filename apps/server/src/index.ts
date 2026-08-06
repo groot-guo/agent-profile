@@ -24,11 +24,6 @@ async function shutdown(exitCode: number): Promise<void> {
 try {
   await app.listen({ port: config.port, host: config.host });
   app.log.info(`Trace Server running at http://${config.host}:${config.port}`);
-  if (!['127.0.0.1', 'localhost', '::1'].includes(config.host)) {
-    app.log.warn(
-      'The API is listening beyond loopback without authentication; use only on a trusted network.',
-    );
-  }
   await runtime.imports.startStartupImports();
 } catch (error) {
   app.log.error(error);

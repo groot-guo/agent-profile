@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { cwd } from 'node:process';
-import { DEFAULT_SCAN_DIR } from 'trace-server/config';
+import { DEFAULT_SCAN_DIR } from 'trace-server/constants';
 import { startHttpServer } from 'trace-server/http-server';
 import { getImportStatus, runImport } from 'trace-server/imports';
 import {

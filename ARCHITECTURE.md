@@ -161,9 +161,10 @@ current:  source-native parent/child evidence + explicit Task links
 planned:  T119 typed Task graph + reconciled, non-double-counted attribution
 ```
 
-Non-local application access is outside the selected product boundary. T88 only
-removes the remaining source-workspace `HOST` inconsistency. Provider egress is
-a separate request-scoped consent boundary and does not make the application a
+Non-local application access is outside the selected product boundary. The
+source-workspace Server and the CLI both reject non-loopback hosts, so no
+supported startup path exposes the API beyond loopback. Provider egress is a
+separate request-scoped consent boundary and does not make the application a
 remote service. T119 must not infer multi-agent edges from titles, paths,
 timestamps, or models.
 
@@ -294,11 +295,10 @@ through the same query service. Content-free `diagnosis`/`evidence`, explicit
 Outcome writing, and opt-in Task feedback are implemented as versioned local
 CLI interfaces.
 
-The product security boundary is loopback-only. The distributable CLI already
-enforces that boundary. The source-workspace Server retains a legacy `HOST`
-override, but non-loopback use is unsupported; T88 is the bounded implementation
-task that removes this remaining inconsistency. It is not an open choice between
-local and remote deployment.
+The product security boundary is loopback-only. The distributable CLI and the
+source-workspace Server both enforce that boundary; the Server `HOST` override
+accepts loopback aliases only. It is not an open choice between local and
+remote deployment.
 
 The default database is outside application files:
 `~/Library/Application Support/agent-profile/trace.db` on macOS,
@@ -1005,9 +1005,10 @@ page exposes the same contract and privacy boundaries.
 - `agent-profile serve` composes Next standalone, the shared Runtime, and
   Fastify behind one loopback origin. The release archive keeps mutable data
   outside its installation tree and closes all three layers on signals.
-- The supported deployment boundary is local loopback. A source-workspace
-  `HOST` override remains as a compatibility gap tracked by T88; it must not be
-  documented as a supported trusted-network deployment.
+- The supported deployment boundary is local loopback. The source-workspace
+  Server and `agent-profile serve` both reject non-loopback hosts; the Server
+  `HOST` override accepts loopback aliases only. No supported deployment
+  exposes the unauthenticated API on a trusted network.
 - Root `pnpm dev` uses parallel workspace execution to start the API and Web
   processes together. The API development command runs in watch mode; the Web
   process uses Next.js development reloads.

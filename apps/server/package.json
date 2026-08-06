@@ -2,6 +2,7 @@
   "name": "trace-server",
   "type": "module",
   "exports": {
+    "./constants": "./src/constants.ts",
     "./config": "./src/config.ts",
     "./imports": "./src/ingestion/import-service.ts",
     "./reports": "./src/reports-service.ts",

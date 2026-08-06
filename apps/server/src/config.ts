@@ -1,3 +1,5 @@
+import { DEFAULT_SCAN_DIR } from './constants';
+
 export interface ServerConfig {
   port: number;
   host: string;
@@ -8,7 +10,7 @@ export interface ServerConfig {
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_HOST = '127.0.0.1';
-export const DEFAULT_SCAN_DIR = '~/.claude/projects';
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 const DEFAULT_WEB_ORIGINS = ['http://localhost:3001', 'http://127.0.0.1:3001'];
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -20,10 +22,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const webOrigins = env.WEB_ORIGIN?.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const requestedHost = env.HOST?.trim();
+  if (requestedHost && !LOOPBACK_HOSTS.has(requestedHost)) {
+    throw new Error(
+      `HOST must be a loopback address (127.0.0.1, localhost, or ::1); received "${requestedHost}"`,
+    );
+  }
+  const host = requestedHost || DEFAULT_HOST;
 
   return {
     port,
-    host: env.HOST?.trim() || DEFAULT_HOST,
+    host,
     webOrigins: webOrigins?.length ? webOrigins : [...DEFAULT_WEB_ORIGINS],
     // AUTO_SCAN_DIR 未设置 → 默认扫描所有源
     // AUTO_SCAN_DIR 设为空字符串 → 不自动扫描

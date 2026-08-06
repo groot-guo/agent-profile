@@ -366,7 +366,7 @@ source database's aggregate cost is not treated as portable billing evidence.
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | API port; default `3000` |
-| `HOST` | API bind host; default `127.0.0.1` |
+| `HOST` | API bind host; loopback addresses only, default `127.0.0.1` |
 | `WEB_ORIGIN` | Comma-separated browser origins allowed by API CORS; defaults to the local Web origins on port `3001` |
 | `NEXT_PUBLIC_API` | Optional Web API override; packaged and default Web requests use same-origin `/api` |
 | `AUTO_SCAN_DIR` | Unset: scan default Claude Code and Codex directories. Empty: disable transcript auto-scan. A path: scan that one transcript directory. |
@@ -518,11 +518,10 @@ pnpm dev
   malformed or incomplete suffixes, and forced rebuilds fall back to full
   changed-session replacement. Large-session virtualisation remains future work.
 - The application is designed for local use. Do not expose its API to an
-  untrusted network. `agent-profile serve` already rejects non-loopback hosts.
-  The source-workspace Server still accepts a `HOST` override for compatibility;
-  that remaining escape hatch is tracked by T88 and is not a supported deployment
-  mode. Non-local access would require a new, explicit product and threat-model
-  decision.
+  untrusted network. Both `agent-profile serve` and the source-workspace Server
+  reject non-loopback hosts; the Server `HOST` override accepts loopback
+  aliases only. Non-local access would require a new, explicit product and
+  threat-model decision.
 
 ## Development checks
 
