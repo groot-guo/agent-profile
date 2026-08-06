@@ -56,10 +56,11 @@ confirmation and a producer contract (T113/T114), and the Agent now has
 content-free local reports and an explicit write path (T115). T116 adds the
 local Runtime event protocol/collector; T117 now adds bounded in-run advice with
 explicit suppression and adoption records.
-Comparison rigor (T118),
-typed multi-Agent attribution (T119), pricing governance (T120), and large-history
-ergonomics (T121) are parallel or later tracks. Non-local use remains conditional
-T88 work.
+Comparison rigor (T118), typed multi-Agent attribution (T119), and large-history
+ergonomics (T121) are parallel or later tracks. Multi-currency/remote-price work
+has no current consumer and T120 is cancelled. The product boundary is settled
+as loopback-only; T88 only closes the remaining source-workspace Server escape
+hatch.
 
 ## Current Boundary
 
@@ -104,8 +105,8 @@ high token count or a heuristic finding to an automatic rule change.
 - Calling a source observation state proof that an Agent is currently running.
 - Treating a complete Outcome coverage record as proof that all checks passed.
 - Selecting a universal Agent/configuration winner from observed process metrics.
-- Enabling non-local access before the conditional T88 threat model and
-  authorization work are complete.
+- Enabling non-local access. It is outside the selected product boundary and
+  would require a new product and threat-model decision.
 
 ## Delivery Sequence
 
@@ -118,10 +119,10 @@ high token count or a heuristic finding to an automatic rule change.
 | Runtime advice | T117 | Opt-in, bounded in-run hints with suppression, expiry, rate limits, and explicit adoption | Automatic model/prompt/tool changes |
 | Better comparison | T118 | Explicit comparability strata and uncertainty-aware reports | Causal proof from small/confounded samples |
 | Multi-Agent accountability | T119 | Typed Task graph and non-double-counted attribution | Inferred parentage from titles, paths, or timestamps |
-| Operational completeness | T120, T121 | Governed model pricing direction and bounded large-history workflows | Blind price scraping or weakening evidence coverage |
+| Operational completeness | T121 | Bounded large-history workflows | Weakening evidence coverage |
 
-T88 remains independent and conditional. It is a deployment/security decision,
-not a prerequisite for the default loopback workflow.
+T88 is no longer a decision gate: option A (loopback-only) is selected. Its
+remaining scope is enforcement consistency in the source-workspace Server.
 
 ## Contract Rules
 
@@ -192,9 +193,11 @@ same child evidence twice. A relationship that is absent or unavailable is a
 coverage limitation, not an invitation to infer one from text, path, time, or
 model similarity.
 
-## Decision Points
+## Remaining decision boundaries
 
-The following decisions are needed before their dependent Tasks begin:
+The first three decisions below were resolved by T114, T116, and T118. They are
+retained as design history; only items explicitly represented by an open roadmap
+Task remain actionable.
 
 1. Which local verification producer is appropriate for the first T114 adapter?
    The default recommendation is a local, user-initiated producer rather than a
@@ -204,10 +207,10 @@ The following decisions are needed before their dependent Tasks begin:
    is protocol first.
 3. What minimum Outcome evidence supports a useful comparison without making
    T118 samples permanently scarce? The coverage/result distinction must remain.
-4. Is multi-currency pricing a user need now, or should T120 document and defer
-   it while hardening source provenance? No remote price collection is implied.
-5. Does the product intend to support non-local use? If yes, T88 must complete
-   before remote interfaces or exports are offered.
+4. Any future multi-currency or remote-price requirement must start a new Task
+   with a concrete consumer and provenance/migration design.
+5. Any future non-local deployment proposal must start a new product and threat-
+   model Task; T88 must not be reopened as an undecided A/B choice.
 
 ## Success Measures
 

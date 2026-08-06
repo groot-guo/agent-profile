@@ -179,7 +179,7 @@ still detecting order-of-magnitude latency changes, accidental response
 expansion, payload loading during unchanged synchronization, or a major memory
 high-water regression. They must not be presented as user-facing SLOs.
 
-T83–T85 may update a budget only with a recorded before/after benchmark,
+Any Task may update a budget only with a recorded before/after benchmark,
 unchanged metric/privacy semantics, and an explanation of fixture or workload
 changes. A faster result does not authorize dropping coverage; a smaller
 response must state whether evidence became windowed or paged.
@@ -196,5 +196,7 @@ response must state whether evidence became windowed or paged.
   workload and report schema, not used to rank machines or Agents.
 - T83's bounded Session discovery/statistics and T84's bounded detail/evidence
   workloads are now part of the benchmark. Compatibility full-array/full-detail
-  routes remain regression baselines. T85 owns source-safe append-only JSONL
-  import.
+  routes remain regression baselines. T121 is responsible for adding
+  reproducible browser-facing Task-workspace and rendered-list budgets; this
+  fixture currently does not measure browser rendering, DOM/React memory,
+  interaction latency, or Task linking over very large histories.

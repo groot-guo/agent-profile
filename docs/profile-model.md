@@ -21,7 +21,6 @@ and comparability boundary in this system, not its sole purpose.
 local source histories
   -> normalized Spans and Sessions
   -> Session analysis and diagnosis
-  -> Project Profile
   -> Agent Process Profile
   -> Project Profile
   -> Task + Configuration Snapshot + Outcome
@@ -40,7 +39,6 @@ better.
 | --- | --- | --- |
 | **Span / Event evidence** | One normalized LLM turn, tool call, thinking block, or answer block. This is the structural evidence layer. | Implemented as stored Spans and `session-evidence/v1`. It is not a complete original transcript. |
 | **Session analysis** | One continuous observed Agent run. Explains resource use, context, tools, chain relationships, diagnosis, and process efficiency. | Implemented. It does not prove task success. |
-| **Project Profile** | Coverage-aware process evidence for one project key across primary Sessions: resources, source coverage, tool reliability, and time trends. | Implemented as `project-profile/v1`. File evidence remains `not_captured`; it does not establish code quality or causality. |
 | **Agent Process Profile** | Distributional runtime fingerprint for one observed Agent across current Sessions: resource, context, reliability, collaboration, coverage, and neutral peer-relative characteristics. | Implemented as `agent-profile/v1`. It is Session-scoped and does not yet group by Task, Configuration Snapshot, or Outcome. |
 | **Project Profile** | One project's observed primary Sessions across sources: scope, resource totals, tool/reliability evidence, metric coverage, and UTC-day observed trace. | Implemented as read-only `project-profile/v1` Web/API output. It is not complete repository activity, file evidence, Task Outcome, or configuration causality. |
 | **Task Profile** | One explicit delivery unit, its linked primary/continuation/subagent/verification Sessions, associated configuration snapshots, outcome fields, coverage, and aggregated process evidence. | Implemented as `task-profile/v1`. It is not a cross-Task configuration comparison. |
@@ -146,8 +144,8 @@ The following are deliberate future boundaries, not current product claims:
 - extend the bounded cohort/configuration Runtime Profile with broader time,
   project, and statistical regression contracts beyond the current Experiment
   and Cohort definition scope;
-- make post-run feedback available to an external Agent Runtime, then add
-  bounded in-run hints without transmitting raw prompts or chain-of-thought;
+- make post-run feedback and bounded hints available to an external Agent
+  Runtime without transmitting raw prompts or chain-of-thought;
 - add optional code-quality evidence integrations such as CI, static analysis,
   review, and rework signals. Process metrics alone must not be relabelled as
   code-quality evidence.
@@ -156,8 +154,9 @@ Each boundary needs a separate roadmap Task with data contracts, privacy,
 comparison rules, migration/API implications, and verification evidence before
 it becomes a current-state capability.
 
-`profile-evolution-plan.md` maps these boundaries to T111-T121. The plan is a
-proposal, not an implementation claim.
+`profile-evolution-plan.md` records the delivered T111-T118 foundations and maps
+the remaining open boundaries to current roadmap Tasks. It is a proposal and
+delivery map, not an implementation claim.
 
 ## Documentation rules
 

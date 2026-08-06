@@ -498,10 +498,12 @@ pnpm dev
 ## Current product boundaries
 
 - The CLI supports `help`, `version`, `doctor`, `sources`, `sync`, bounded
-  `sessions`, `stats`, `profiles`, `task-profile <id>`, and loopback `serve`.
+  `sessions`, `stats`, `profiles`, `task-profile <id>`, `diagnosis <session-id>`,
+  `evidence <session-id>`, explicit `task-outcome <task-id>`, opt-in
+  `task-feedback <task-id>`, and loopback `serve`.
   `build:release` produces an unsigned current-platform Node archive; there is
   no published package, signed installer, cross-platform CI matrix, or desktop
-  application yet. Detailed Session/evidence CLI commands remain future work.
+  application yet.
 - Task, Configuration Snapshot, Outcome, cohort, and experiment records are
   local foundations. The bounded cohort report, opt-in post-run findings, and
   bounded local Runtime hint policy are implemented; broader automated
@@ -516,10 +518,11 @@ pnpm dev
   malformed or incomplete suffixes, and forced rebuilds fall back to full
   changed-session replacement. Large-session virtualisation remains future work.
 - The application is designed for local use. Do not expose its API to an
-  untrusted network without adding authentication and directory-access controls.
-  Setting `HOST=0.0.0.0` is an explicit opt-in that exposes the unauthenticated
-  API beyond loopback; pair it with a narrow `WEB_ORIGIN` only on a trusted
-  network.
+  untrusted network. `agent-profile serve` already rejects non-loopback hosts.
+  The source-workspace Server still accepts a `HOST` override for compatibility;
+  that remaining escape hatch is tracked by T88 and is not a supported deployment
+  mode. Non-local access would require a new, explicit product and threat-model
+  decision.
 
 ## Development checks
 

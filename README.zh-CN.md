@@ -373,9 +373,10 @@ pnpm dev
 ## 当前产品边界
 
 - CLI 支持 `help`、`version`、`doctor`、`sources`、`sync`、有界 `sessions`、
-  `stats`、`profiles`、`task-profile <id>` 和回环 `serve`。`build:release` 可生成当前
-  平台的未签名 Node 归档；尚无已发布 package、签名安装器、跨平台 CI matrix 或桌面应用。
-  详细 Session/证据 CLI 命令仍是后续工作。
+  `stats`、`profiles`、`task-profile <id>`、`diagnosis <session-id>`、
+  `evidence <session-id>`、显式 `task-outcome <task-id>`、opt-in
+  `task-feedback <task-id>` 和回环 `serve`。`build:release` 可生成当前平台的未签名 Node
+  归档；尚无已发布 package、签名安装器、跨平台 CI matrix 或桌面应用。
 - Task、Configuration Snapshot、Outcome、cohort、experiment 已有本地基础模型；有界 cohort
   Profile、显式 opt-in 的任务后反馈和 T117 本地运行中 hint 已实现。更广泛的回归检测、因果实验
   结论和外部 Runtime feedback/SDK 仍未实现。
@@ -385,9 +386,9 @@ pnpm dev
 - 历史很大时仍需发现文件；Claude Code/Codex 的安全 JSONL 尾部追加可复用进程内结构化
   checkpoint，重写、坏行、不完整回合和强制 rebuild 会回退到完整解析与替换。超大 Session
   虚拟化仍是后续工作。
-- 产品设计为本地使用。不要把 API 暴露到不可信网络；如要这样做，需要先补认证和目录访问
-  控制。设置 `HOST=0.0.0.0` 会显式把无认证 API 暴露到回环地址之外；只能在可信网络中
-  使用，并通过 `WEB_ORIGIN` 严格限制浏览器来源。
+- 产品边界已经确定为仅本地回环访问。`agent-profile serve` 会拒绝非回环 host；源码工作区
+  Server 仍保留 `HOST` 覆盖这一兼容缺口，由 T88 负责收口，不是受支持的可信网络部署方式。
+  任何非本地访问都需要另建产品与威胁模型决策 Task。
 
 ## 开发检查
 

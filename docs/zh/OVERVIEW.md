@@ -60,8 +60,6 @@ build/test/lint，不上传内容、不自动写 Outcome，远程 CI/review 证�
 
 - **Span/Event 证据**与 **Session 分析**：描述一次已观察到的运行过程，不保证是完整
   原始 transcript，也不证明交付成功。
-- **Project Profile**（`project-profile/v1`）：按一个项目 key 聚合 primary Session 的
-  资源、来源覆盖、工具可靠性和日趋势；文件级证据保持“未采集”时不会被推断。
 - **Agent Process Profile**（`agent-profile/v1`）：按 Agent 聚合当前 Session 的资源、
   上下文、可靠性、协作、覆盖度和中性相对特征；它尚未按 Task、配置或 Outcome 分组。
 - **Project Profile**（`project-profile/v1`）：按一个项目聚合已观察到的主链 Session，展示来源、
@@ -294,7 +292,8 @@ Snapshot 只保存显式的 Agent/model/version 标识与 source hash，不自�
   `task-feedback`；JSON wrapper 为 `agent-profile-cli/v1`，默认只返回 bounded references、
   coverage 和 limitations，不返回原始过程内容。
 - 能运行 `agent-profile help/version/doctor/sources/sync/sessions/stats/profiles/serve`
-  与 `task-profile <id>`；详细 Session/证据 CLI 查询仍未实现。当前可在本机生成未签名、
+  与 `task-profile <id>`，并提供 `diagnosis`、`evidence`、显式 `task-outcome` 和 opt-in
+  `task-feedback`。当前可在本机生成未签名、
   仅限同平台/架构的 Node 发行归档，尚无公开 package、签名安装器或跨平台 CI matrix。
 - 有界 cohort Profile、显式 opt-in 的任务后反馈、T117 本地运行中 hint 与 T118 声明式可比性分层/不确定性
   报告已实现；更广泛的回归检测、因果实验结论和外部 Runtime feedback/SDK 尚未实现。
@@ -336,8 +335,9 @@ Task 标记为 `completed`。
 - server 默认 `3000`，可通过 `PORT` 修改。
 - web 默认 `3001`，可通过 `NEXT_PUBLIC_API` 修改 API 地址。
 - Server 与 Web 默认只绑定 `127.0.0.1`；API CORS 默认只接受本机 `3001` 来源。
-  `HOST` 和逗号分隔的 `WEB_ORIGIN` 可显式覆盖。由于 API 没有认证与目录授权，非回环
-  `HOST` 只适合可信网络，启动时会输出警告。
+  产品边界已经确定为仅回环访问，`agent-profile serve` 会拒绝非回环 host。源码工作区
+  Server 仍保留 `HOST` 覆盖这一兼容缺口，由 T88 负责收口；它不是受支持的可信网络部署
+  方式。任何非本地访问都需要另建产品与威胁模型决策 Task。
 - Web 开发产物写入 `apps/web/.next-dev`，生产构建仍写入 `apps/web/.next`，因此
   运行中的 `pnpm dev` 不会再被 `pnpm build` 替换 chunk。
 - 首页“同步数据”与启动导入共享任务管理器，检查 Claude Code、Codex、Zed、MiMo 和 OpenCode，

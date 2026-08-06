@@ -2,9 +2,9 @@
 
 > Status: current implementation. T99 implemented the Model Catalog,
 > pricing/context, alias, import/export, and recalculation contracts; T100
-> implemented the `/settings/models` Web workspace. The future-tense governance
-> constraints in this document belong to planned T120 and are not current
-> multi-currency or remote-price behavior.
+> implemented the `/settings/models` Web workspace. T120 was cancelled because
+> no current consumer requires multi-currency or remote-price behavior. Any such
+> expansion requires a new Task with a concrete consumer and migration design.
 
 ## Current foundation
 
@@ -22,9 +22,8 @@ The current implementation already provides:
 
 The implemented product layer is a separately owned configuration module with
 provenance, history, safe edits, impact preview, independent tests, and a Web
-workspace. The remaining product question is governed price-source maintenance
-and whether to add currencies or pricing schemes without weakening historical
-cost interpretation.
+workspace. The current contract intentionally remains local, CNY-only, and
+manually governed.
 
 ## Goals
 
@@ -129,9 +128,8 @@ reproducibility after edits.
 
 The current implementation calculates stored costs in CNY per million tokens.
 It does not fetch provider prices, convert currencies, or claim reproducibility
-for an unrecorded exchange rate. T120 owns the design decision for any additive
-price-source governance or multi-currency contract; it does not authorize a
-network fetch by itself.
+for an unrecorded exchange rate. Multi-currency and remote price collection are
+not planned current work; either would require a new explicit Task.
 
 A user may enter a CNY price directly. If later work supports prices copied from
 a different currency, the stored record must retain:
@@ -310,14 +308,13 @@ is rejected when the pricing revision changes. Versioned JSON export/import is
 local and content-free. The workspace must not call an edit a historical provider
 invoice. It manages the local calculator's reference data.
 
-## Future price governance (T120)
+## Price governance boundary
 
-T120 must decide and document the supported price-source lifecycle, staleness
-signals, manual review path, currency/unit semantics, and migration/recalculation
-rules before the current CNY-only contract expands. Historical Span cost must
-continue to preserve source, effective time, calculation time, and calculator
-version. Automatic scraping, silent conversion, and unreviewed overwrite of
-local pricing records are explicitly out of scope.
+The current CNY-only contract preserves source, effective time, calculation
+time, and calculator version. Automatic scraping, silent conversion, and
+unreviewed overwrite of local pricing records are out of scope. A future
+expansion must begin with a concrete consumer and an additive migration design;
+the cancelled T120 is not a standing placeholder for speculative work.
 
 ## Import, export, reset, and privacy
 

@@ -55,6 +55,10 @@ code-quality verdict.
 
 ## System flow
 
+The diagrams in this document use solid arrows for implemented runtime/data
+flow. Proposed capabilities are named in prose with their roadmap Task; no
+dashed or unlabeled arrow should be read as deployed behavior.
+
 ```text
 Claude Code JSONL ─┐
 Codex rollout JSONL ┤
@@ -84,6 +88,84 @@ in-memory Runtimes without environment-before-import ordering. The
 `doctor`, refreshes source availability without starting imports or HTTP, and
 always closes the Runtime before exit. Opening `doctor` still performs ordinary
 database creation, additive migration, and default reference-data seeding.
+
+## Architecture views
+
+### Runtime composition and module direction
+
+```text
+user / local Agent
+        │
+        ▼
+single agent-profile CLI entry
+        ├── direct commands ──→ AppRuntime ──→ SQLite
+        └── serve ────────────→ Fastify ─────→ AppRuntime ──→ SQLite
+                                  │
+                                  └── same-origin proxy ──→ Next.js Web
+
+apps/web ───────────────→ @agent-profile/contracts
+packages/cli ───────────→ @agent-profile/contracts + Server composition
+apps/server ────────────→ @agent-profile/contracts + @agent-profile/core
+@agent-profile/contracts     (framework-neutral public DTO ownership)
+@agent-profile/core          (parsing and deterministic domain analysis)
+```
+
+These are package and composition boundaries inside one local application, not
+independently deployed services. T130 will tighten DTO ownership and dependency
+checks; T131 may split stable responsibilities inside existing top-level
+packages but does not introduce new services or packages by default.
+
+### Ingestion and replacement sequence
+
+```text
+Scanner / database discovery
+        → Source Adapter (lazy item + stable revision fingerprint)
+        → Import Coordinator (skip/import/update/failure decision)
+        → Session Repository (parse/analyze + atomic replacement)
+        → SQLite Session/Span evidence
+```
+
+Unchanged revisions are skipped. A successful changed item replaces only its
+generated Session/Spans atomically while preserving annotations; a failed or
+unavailable source leaves last-good stored evidence intact.
+
+### Evidence, Task, and feedback layers
+
+```text
+Span/Event → Session analysis → Agent Process Profile / Project Profile
+                                      │
+explicit Task ← Session links + Configuration Snapshots + Outcome evidence
+      │
+      ├──→ Task Profile
+      └──→ Cohort + Experiment → bounded Cohort Runtime Profile
+                                      │
+                                      └──→ opt-in post-run feedback
+
+runtime-event/v1 → bounded local hint policy → explicit adoption record
+```
+
+The arrows show evidence composition, not causal proof. Task membership and
+Outcome evidence are explicit; missing fields stay unavailable. The cohort
+report is descriptive, and feedback/hints are read-only advice that cannot
+mutate Agent configuration.
+
+### Security and multi-agent boundaries
+
+```text
+local histories ──→ loopback-only application ──→ local SQLite
+                              │
+                              └── explicit semantic opt-in only
+                                   → bounded/redacted provider payload
+
+current:  source-native parent/child evidence + explicit Task links
+planned:  T119 typed Task graph + reconciled, non-double-counted attribution
+```
+
+Non-local application access is outside the selected product boundary. T88 only
+removes the remaining source-workspace `HOST` inconsistency. Provider egress is
+a separate request-scoped consent boundary and does not make the application a
+remote service. T119 must not infer multi-agent edges from titles, paths,
+timestamps, or models.
 
 Scanning is revision-based. Each source item provides a source kind, source
 update time, and stable fingerprint. The coordinator skips matching revisions,
@@ -208,9 +290,15 @@ discovery reads a safe primary-Session summary page (default 20, maximum 100),
 ordered by `start_time` and ID with an opaque cursor. It omits Session names,
 local paths, transcript identifiers, Span metadata, and content. The
 compatibility `GET /api/sessions` route retains its existing full-array response
-through the same query service; detailed Session/evidence CLI commands and an
-Outcome-write workflow are not implemented. T115 stages those content-free,
-versioned local Agent interfaces.
+through the same query service. Content-free `diagnosis`/`evidence`, explicit
+Outcome writing, and opt-in Task feedback are implemented as versioned local
+CLI interfaces.
+
+The product security boundary is loopback-only. The distributable CLI already
+enforces that boundary. The source-workspace Server retains a legacy `HOST`
+override, but non-loopback use is unsupported; T88 is the bounded implementation
+task that removes this remaining inconsistency. It is not an open choice between
+local and remote deployment.
 
 The default database is outside application files:
 `~/Library/Application Support/agent-profile/trace.db` on macOS,
@@ -677,19 +765,6 @@ through `nextCursor`, and resets the window when filters or content mode change.
 It does not request evidence while the user remains in the overview, context/cost,
 or tools/chain views.
 
-### Project Profile report contract
-
-`project-profile/v1` describes one project key across its primary Sessions. Its
-scope contains the requested time range, linked/available Session counts,
-sampling state, Agent distribution, and source-kind coverage. Resource metrics
-include token totals, trusted cost coverage, cache/context/duration coverage,
-and normalized tool-call error rates. Tool frequencies and UTC day trends are
-observed process evidence, not repository or delivery-quality evidence.
-
-Unknown pricing is excluded from trusted cost totals, absent source fields are
-reported as partial coverage, and file evidence remains `not_captured`. The
-report never labels a project better, complete, correct, or causally improved.
-
 ### Agent Process Profile report contract
 
 `agent-profile/v1` is the implemented Agent Process Profile: a stable derived
@@ -900,8 +975,8 @@ page exposes the same contract and privacy boundaries.
   availability checks, deduplication, revision replacement, and failure isolation.
 - CLI `sessions` and the compatibility Session-list route share the Server
   discovery service. CLI uses its bounded, path/content-free cursor page; the
-  compatibility route retains its existing unbounded response until T83 changes
-  the public discovery contract.
+  compatibility route retains its existing unbounded response while the public
+  bounded discovery contract is available separately.
 - CLI report commands share the current Statistics/Profile/Task Profile builders
   with their HTTP surfaces. The command layer only wraps the existing results in
   `agent-profile-cli/v1` and preserves report-specific coverage and limitations.
@@ -930,6 +1005,9 @@ page exposes the same contract and privacy boundaries.
 - `agent-profile serve` composes Next standalone, the shared Runtime, and
   Fastify behind one loopback origin. The release archive keeps mutable data
   outside its installation tree and closes all three layers on signals.
+- The supported deployment boundary is local loopback. A source-workspace
+  `HOST` override remains as a compatibility gap tracked by T88; it must not be
+  documented as a supported trusted-network deployment.
 - Root `pnpm dev` uses parallel workspace execution to start the API and Web
   processes together. The API development command runs in watch mode; the Web
   process uses Next.js development reloads.

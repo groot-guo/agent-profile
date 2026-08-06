@@ -5,7 +5,7 @@
 > `cohort-runtime-profile/v1`，T90 已实现只读、显式 opt-in 的
 > `post-run-feedback/v1`。T115 已实现内容受限的 Agent 可消费本地 CLI 接口；更广泛的
 > 回归策略和 live Runtime feedback 仍未实现，依赖顺序见 `profile-evolution-plan.md`
-> 与 T111-T121。
+> 与当前 `roadmap.md`。其中 T111-T118 已完成，T120 已取消；开放范围以 roadmap 为准。
 > 目标：将 Agent Profile 从离线会话观察工具，演进为 Agent Runtime 可消费的性能分析与迭代反馈系统。
 
 ## 文档地位
