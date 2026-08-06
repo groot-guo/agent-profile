@@ -32,20 +32,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   checks
 - documentation: performance, architecture, README, UI guidance, and roadmap
 
-### T132 continuous integration and smoke E2E baseline
-
-- status: planned
-- estimated size/risk: medium / medium
-- purpose: continuously verify the repository's supported local workflow and
-  catch integration regressions that unit tests and builds miss
-- scope: GitHub Actions for lint/test/build/roadmap/boundaries plus a bounded
-  Playwright smoke covering health and primary Web navigation
-- acceptance: CI is deterministic, content-free, and documented; smoke tests
-  run against disposable local data and fail with actionable diagnostics
-- verification: workflow/schema review and local Playwright smoke where the
-  environment supports browser installation
-- documentation: README, architecture/operations guidance, and roadmap
-
 ### T119 unified multi-agent Task graph and resource attribution
 
 - status: planned
@@ -101,6 +87,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T132](roadmap-archive/2026-q3.md#t132) | continuous integration and smoke E2E baseline | completed |
 | [T130](roadmap-archive/2026-q3.md#t130) | HTTP contract and module-boundary governance | completed |
 | [T88](roadmap-archive/2026-q3.md#t88) | enforce the loopback-only product boundary | completed |
 | [T128](roadmap-archive/2026-q3.md#t128) | architecture documentation reconciliation | completed |

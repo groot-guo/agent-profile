@@ -11,3 +11,5 @@ trace.db-shm
 next-env.d.ts
 packages/core/dist/
 .pnpm-store
+test-results/
+playwright-report/

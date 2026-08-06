@@ -856,8 +856,11 @@ producer is `agent-profile/local-git-outcome-adapter`, exposed through
 `GET /api/tasks/:id/outcome-evidence?source=local_git`. It runs only fixed Git
 metadata queries against a linked Session cwd or absolute Task project, returns
 metadata-only local references, and never executes arbitrary commands,
-build/test/lint checks, uploads content, or writes Outcome fields. No remote CI
-or review connector is enabled.
+build/test/lint checks, uploads content, or writes Outcome fields. The outcome
+adapter does not upload evidence to any remote CI or review connector; the
+repository's own content-free CI (see the operations section) runs lint, tests,
+builds, roadmap/boundary checks, and the scale benchmark without processing
+local transcript content.
 
 ### Post-run feedback contract
 

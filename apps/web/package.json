@@ -7,7 +7,8 @@
     "dev": "next dev -H 127.0.0.1 -p 3001",
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 3001",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@agent-profile/core": "workspace:*",
@@ -18,6 +19,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
