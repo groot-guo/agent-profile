@@ -1,4 +1,24 @@
 import { isAbsolute } from 'node:path';
+import {
+  type AttachSessionBody,
+  attachSessionBodySchema,
+  type CreateCohortBody,
+  type CreateConfigurationBody,
+  type CreateExperimentBody,
+  type CreateTaskBody,
+  createCohortBodySchema,
+  createConfigurationBodySchema,
+  createExperimentBodySchema,
+  createTaskBodySchema,
+  type UpdateCohortBody,
+  type UpdateExperimentBody,
+  type UpdateTaskBody,
+  type UpsertOutcomeBody,
+  updateCohortBodySchema,
+  updateExperimentBodySchema,
+  updateTaskBodySchema,
+  upsertOutcomeBodySchema,
+} from '@agent-profile/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { collectLocalGitOutcomeEvidence } from '../local-git-outcome-adapter';
 import { getTaskProfileReport } from '../reports-service';
@@ -14,10 +34,10 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
 
   app.get('/api/tasks', async () => ({ tasks: repository.listTasks() }));
 
-  app.post('/api/tasks', async (request, reply) =>
-    respond(reply, 201, () =>
-      repository.createTask(request.body as Parameters<typeof repository.createTask>[0]),
-    ),
+  app.post<{ Body: CreateTaskBody }>(
+    '/api/tasks',
+    { schema: { body: createTaskBodySchema } },
+    async (request, reply) => respond(reply, 201, () => repository.createTask(request.body)),
   );
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) =>
@@ -79,35 +99,29 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
     },
   );
 
-  app.patch<{ Params: { id: string } }>('/api/tasks/:id', async (request, reply) =>
-    respond(reply, 200, () =>
-      repository.updateTask(
-        request.params.id,
-        request.body as Parameters<typeof repository.updateTask>[1],
-      ),
-    ),
+  app.patch<{ Params: { id: string }; Body: UpdateTaskBody }>(
+    '/api/tasks/:id',
+    { schema: { body: updateTaskBodySchema } },
+    async (request, reply) =>
+      respond(reply, 200, () => repository.updateTask(request.params.id, request.body)),
   );
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/sessions', async (request, reply) =>
     respond(reply, 200, () => ({ sessions: repository.listTaskSessions(request.params.id) })),
   );
 
-  app.post<{ Params: { id: string } }>('/api/tasks/:id/sessions', async (request, reply) =>
-    respond(reply, 201, () =>
-      repository.attachSession(
-        request.params.id,
-        request.body as Parameters<typeof repository.attachSession>[1],
-      ),
-    ),
+  app.post<{ Params: { id: string }; Body: AttachSessionBody }>(
+    '/api/tasks/:id/sessions',
+    { schema: { body: attachSessionBodySchema } },
+    async (request, reply) =>
+      respond(reply, 201, () => repository.attachSession(request.params.id, request.body)),
   );
 
-  app.put<{ Params: { id: string } }>('/api/tasks/:id/outcome', async (request, reply) =>
-    respond(reply, 200, () =>
-      repository.upsertOutcome(
-        request.params.id,
-        request.body as Parameters<typeof repository.upsertOutcome>[1],
-      ),
-    ),
+  app.put<{ Params: { id: string }; Body: UpsertOutcomeBody }>(
+    '/api/tasks/:id/outcome',
+    { schema: { body: upsertOutcomeBodySchema } },
+    async (request, reply) =>
+      respond(reply, 200, () => repository.upsertOutcome(request.params.id, request.body)),
   );
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/profile', async (request, reply) =>
@@ -139,29 +153,26 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
     configurations: repository.listConfigurations(),
   }));
 
-  app.post('/api/config-snapshots', async (request, reply) =>
-    respond(reply, 201, () =>
-      repository.createConfiguration(
-        request.body as Parameters<typeof repository.createConfiguration>[0],
-      ),
-    ),
+  app.post<{ Body: CreateConfigurationBody }>(
+    '/api/config-snapshots',
+    { schema: { body: createConfigurationBodySchema } },
+    async (request, reply) =>
+      respond(reply, 201, () => repository.createConfiguration(request.body)),
   );
 
   app.get('/api/cohorts', async () => ({ cohorts: repository.listCohorts() }));
 
-  app.post('/api/cohorts', async (request, reply) =>
-    respond(reply, 201, () =>
-      repository.createCohort(request.body as Parameters<typeof repository.createCohort>[0]),
-    ),
+  app.post<{ Body: CreateCohortBody }>(
+    '/api/cohorts',
+    { schema: { body: createCohortBodySchema } },
+    async (request, reply) => respond(reply, 201, () => repository.createCohort(request.body)),
   );
 
-  app.patch<{ Params: { id: string } }>('/api/cohorts/:id', async (request, reply) =>
-    respond(reply, 200, () =>
-      repository.updateCohort(
-        request.params.id,
-        request.body as Parameters<typeof repository.updateCohort>[1],
-      ),
-    ),
+  app.patch<{ Params: { id: string }; Body: UpdateCohortBody }>(
+    '/api/cohorts/:id',
+    { schema: { body: updateCohortBodySchema } },
+    async (request, reply) =>
+      respond(reply, 200, () => repository.updateCohort(request.params.id, request.body)),
   );
 
   app.get('/api/experiments', async () => ({ experiments: repository.listExperiments() }));
@@ -170,21 +181,20 @@ export function registerTaskRoutes(app: FastifyInstance, runtime: TaskRuntime) {
     respond(reply, 200, () => repository.buildExperimentProfile(request.params.id)),
   );
 
-  app.post('/api/experiments', async (request, reply) =>
-    respond(reply, 201, () =>
-      repository.createExperiment(
-        request.body as Parameters<typeof repository.createExperiment>[0],
+  app.post<{ Body: CreateExperimentBody }>(
+    '/api/experiments',
+    { schema: { body: createExperimentBodySchema } },
+    async (request, reply) =>
+      respond(reply, 201, () =>
+        repository.createExperiment({ ...request.body, guardrails: request.body.guardrails ?? [] }),
       ),
-    ),
   );
 
-  app.patch<{ Params: { id: string } }>('/api/experiments/:id', async (request, reply) =>
-    respond(reply, 200, () =>
-      repository.updateExperiment(
-        request.params.id,
-        request.body as Parameters<typeof repository.updateExperiment>[1],
-      ),
-    ),
+  app.patch<{ Params: { id: string }; Body: UpdateExperimentBody }>(
+    '/api/experiments/:id',
+    { schema: { body: updateExperimentBodySchema } },
+    async (request, reply) =>
+      respond(reply, 200, () => repository.updateExperiment(request.params.id, request.body)),
   );
 }
 

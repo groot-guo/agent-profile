@@ -138,7 +138,6 @@ describe('Task/Outcome foundations', () => {
     registerTaskRoutes(app, { database });
     for (const payload of [
       { evidence: {} },
-      { evidence: [{ kind: 7 }] },
       { evidence: [{ kind: 'ci', status: 'unknown' }] },
       { evidence: [{ kind: 'ci', status: { toString: null } }] },
       { completedAt: 'not-a-timestamp' },
@@ -354,6 +353,60 @@ describe('Task/Outcome foundations', () => {
       schemaVersion: 'task-profile/v1',
       comparison: { status: 'definition_only' },
     });
+    await app.close();
+  });
+
+  it('rejects malformed mutation payloads through runtime validation', async () => {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    seedSession(database, 'session-validation');
+    const app = Fastify();
+    registerTaskRoutes(app, { database });
+
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/tasks',
+        payload: { title: 'Validation task', type: 'feature' },
+      })
+    ).json();
+    const configuration = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/config-snapshots',
+        payload: { agent: 'codex', sourceHash: 'validation-hash' },
+      })
+    ).json();
+
+    const malformedCases = [
+      { method: 'POST', url: '/api/tasks', payload: { title: 7 } },
+      { method: 'POST', url: '/api/tasks', payload: { type: 'feature' } },
+      { method: 'PATCH', url: `/api/tasks/${task.id}`, payload: { status: 'bogus' } },
+      { method: 'POST', url: '/api/tasks', payload: { title: 'x', type: 'y', status: 'bogus' } },
+      {
+        method: 'POST',
+        url: `/api/tasks/${task.id}/sessions`,
+        payload: { sessionId: '' },
+      },
+      { method: 'POST', url: '/api/config-snapshots', payload: { agent: 'codex' } },
+      { method: 'POST', url: '/api/cohorts', payload: { title: 'Cohort' } },
+      { method: 'POST', url: '/api/cohorts', payload: { title: 'Cohort', definition: 7 } },
+      {
+        method: 'POST',
+        url: '/api/experiments',
+        payload: { title: 'Experiment', cohortId: configuration.id },
+      },
+      {
+        method: 'PATCH',
+        url: `/api/experiments/${configuration.id}`,
+        payload: { status: 'bogus' },
+      },
+    ] as const;
+
+    for (const { method, url, payload } of malformedCases) {
+      const response = await app.inject({ method, url, payload });
+      expect(response.statusCode).toBe(400);
+    }
     await app.close();
   });
 

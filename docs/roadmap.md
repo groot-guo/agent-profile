@@ -6,21 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T130 HTTP contract and module-boundary governance
-
-- status: planned
-- estimated size/risk: medium / medium
-- purpose: make shared DTO ownership and runtime request validation explicit
-  across Web, Server, CLI, and Contracts
-- scope: move duplicate public Web DTOs to `@agent-profile/contracts`, add
-  bounded runtime validation to mutation routes, and extend the architecture
-  boundary checker for prohibited cross-layer dependencies
-- acceptance: public API shapes have one owner; malformed mutation payloads
-  fail predictably; boundary checks cover the intended dependency direction
-  within the single local application
-- verification: focused tests, `pnpm check:boundaries`, lint, and build
-- documentation: ARCHITECTURE and roadmap
-
 ### T131 domain cohesion and responsibility convergence
 
 - status: planned
@@ -116,6 +101,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T130](roadmap-archive/2026-q3.md#t130) | HTTP contract and module-boundary governance | completed |
 | [T88](roadmap-archive/2026-q3.md#t88) | enforce the loopback-only product boundary | completed |
 | [T128](roadmap-archive/2026-q3.md#t128) | architecture documentation reconciliation | completed |
 | [T120](roadmap-archive/2026-q3.md#t120) | Model Catalog governance and multi-currency design | cancelled |

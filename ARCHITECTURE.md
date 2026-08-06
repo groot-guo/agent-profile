@@ -111,9 +111,13 @@ apps/server ────────────→ @agent-profile/contracts + @
 ```
 
 These are package and composition boundaries inside one local application, not
-independently deployed services. T130 will tighten DTO ownership and dependency
-checks; T131 may split stable responsibilities inside existing top-level
-packages but does not introduce new services or packages by default.
+independently deployed services. T130 tightened DTO ownership and dependency
+checks: public mutation request/response shapes live in
+`@agent-profile/contracts` with runtime JSON-schema validation on Server routes,
+and the repository boundary checker rejects Web/CLI imports of Server
+application code and non-type imports of contracts from Web. T131 may split
+stable responsibilities inside existing top-level packages but does not
+introduce new services or packages by default.
 
 ### Ingestion and replacement sequence
 
@@ -242,7 +246,7 @@ as requiring manual action instead of presenting them as retryable parse errors.
 | Component | Current responsibility |
 | --- | --- |
 | `packages/core` (`@agent-profile/core`) | Source parsing helpers, normalized types, deterministic analysis and diagnosis, versioned Agent profile, prompt-review, and Session-evidence reports, tool categorization, pricing calculations |
-| `packages/contracts` (`@agent-profile/contracts`) | Framework-neutral public contracts for implemented cross-package vertical slices; currently import/data-management responses, `agent-profile-cli/v1` reports, and `runtime-event/v1` collector/page contracts |
+| `packages/contracts` (`@agent-profile/contracts`) | Framework-neutral public contracts for implemented cross-package vertical slices; import/data-management responses, Task/Cohort/Experiment/Configuration mutation DTOs with JSON-schema validation, `agent-profile-cli/v1` reports, and `runtime-event/v1` collector/page contracts |
 | `packages/cli` (`@agent-profile/cli`) | Source-workspace `agent-profile` binary, argument/data-path resolution, human/JSON reports, Runtime doctor, and content-free local Agent workflow |
 | `packages/core/src/scanners/transcript.ts` | Source-neutral async JSONL discovery and NDJSON reading shared by Claude Code and Codex, with compatibility sync helpers |
 | `apps/server/src/runtime.ts` | Explicit application lifecycle for one database connection, pricing/context resolvers, import state, clock, and shutdown |

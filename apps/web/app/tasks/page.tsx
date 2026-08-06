@@ -1,10 +1,16 @@
 'use client';
 
 import type {
+  CohortRecord,
+  ConfigurationRecord,
+  ExperimentRecord,
+  TaskRecord,
+  TaskSessionLinkRecord,
+} from '@agent-profile/contracts';
+import type {
   PostRunFeedbackReport,
   SessionSummary,
   TaskAssistanceReport,
-  TaskEvidenceProvenance,
   TaskGitCommitCandidate,
   TaskProfileOutcome,
   TaskProfileReport,
@@ -12,11 +18,7 @@ import type {
 } from '@agent-profile/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { API } from '../config';
-import {
-  allowedExperimentDecisions,
-  type ExperimentDecision,
-  type ExperimentEvidenceStatus,
-} from '../experiment-guardrail';
+import { allowedExperimentDecisions } from '../experiment-guardrail';
 import { sessionDisplayTitle, sessionProject } from '../session-navigation';
 import { C, FS, fmtTokens, R, SP } from '../theme';
 import { Card, Chip, Empty, Notice, SoftButton, StatCard } from '../ui';
@@ -24,60 +26,25 @@ import { OutcomeEditor } from './outcome-editor';
 import { outcomeToDraft } from './outcome-model';
 import styles from './tasks.module.css';
 
-interface TaskRecord {
-  id: string;
-  projectId?: string;
-  title: string;
-  type: string;
-  status: TaskStatus;
-  contentMode: 'structured' | 'local_text';
-  goal: string | null;
-  acceptanceCriteria: string[] | null;
-}
-
-interface Configuration {
-  id: string;
-  agent: string;
-  model?: string;
-  sourceHash: string;
-}
-
-interface Cohort {
-  id: string;
-  title: string;
-  definition: { projectId?: string; type?: string; complexity?: string };
-  status: 'active' | 'archived';
-}
-
-interface Experiment {
-  id: string;
-  title: string;
-  cohortId: string;
-  controlConfigId: string;
-  candidateConfigId: string;
-  primaryMetric: string;
-  guardrails: unknown[];
-  status: 'draft' | 'running' | 'completed' | 'cancelled';
-  evidenceStatus: ExperimentEvidenceStatus;
-  decision: ExperimentDecision | null;
-}
-
 interface TaskDetail {
   task: TaskRecord;
-  sessions: Array<{
-    sessionId: string;
-    configSnapshotId: string | null;
-    role: string;
-    available: boolean;
-    agent: string | null;
-    name: string | null;
-    provenance?: TaskEvidenceProvenance;
-  }>;
+  sessions: TaskSessionLinkRecord[];
   outcome: TaskProfileOutcome | null;
 }
 
 interface TaskFeedbackResponse {
   feedback: PostRunFeedbackReport[];
+}
+
+function cohortDefinitionFields(definition: Record<string, unknown>): {
+  projectId?: string;
+  type?: string;
+  complexity?: string;
+} {
+  const projectId = typeof definition.projectId === 'string' ? definition.projectId : undefined;
+  const type = typeof definition.type === 'string' ? definition.type : undefined;
+  const complexity = typeof definition.complexity === 'string' ? definition.complexity : undefined;
+  return { projectId, type, complexity };
 }
 
 const fieldStyle: React.CSSProperties = {
@@ -95,9 +62,9 @@ const fieldStyle: React.CSSProperties = {
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [configurations, setConfigurations] = useState<Configuration[]>([]);
-  const [cohorts, setCohorts] = useState<Cohort[]>([]);
-  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [configurations, setConfigurations] = useState<ConfigurationRecord[]>([]);
+  const [cohorts, setCohorts] = useState<CohortRecord[]>([]);
+  const [experiments, setExperiments] = useState<ExperimentRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [profile, setProfile] = useState<TaskProfileReport | null>(null);
@@ -123,7 +90,7 @@ export default function TasksPage() {
   const [cohortProject, setCohortProject] = useState('');
   const [cohortType, setCohortType] = useState('');
   const [cohortComplexity, setCohortComplexity] = useState('');
-  const [cohortStatus, setCohortStatus] = useState<Cohort['status']>('active');
+  const [cohortStatus, setCohortStatus] = useState<CohortRecord['status']>('active');
   const [editingCohortId, setEditingCohortId] = useState<string | null>(null);
   const [experimentTitle, setExperimentTitle] = useState('');
   const [experimentCohortId, setExperimentCohortId] = useState('');
@@ -352,12 +319,13 @@ export default function TasksPage() {
     setNotice({ kind: 'ok', text: isEditing ? 'Cohort 定义已更新' : 'Cohort 定义已创建' });
   }
 
-  function startCohortEdit(cohort: Cohort) {
+  function startCohortEdit(cohort: CohortRecord) {
     setEditingCohortId(cohort.id);
     setCohortTitle(cohort.title);
-    setCohortProject(cohort.definition.projectId ?? '');
-    setCohortType(cohort.definition.type ?? '');
-    setCohortComplexity(cohort.definition.complexity ?? '');
+    const { projectId, type, complexity } = cohortDefinitionFields(cohort.definition);
+    setCohortProject(projectId ?? '');
+    setCohortType(type ?? '');
+    setCohortComplexity(complexity ?? '');
     setCohortStatus(cohort.status);
   }
 
@@ -391,7 +359,7 @@ export default function TasksPage() {
     });
   }
 
-  function startExperimentEdit(experiment: Experiment) {
+  function startExperimentEdit(experiment: ExperimentRecord) {
     setEditingExperimentId(experiment.id);
     setExperimentTitle(experiment.title);
     setExperimentCohortId(experiment.cohortId);
@@ -405,8 +373,8 @@ export default function TasksPage() {
 
   async function updateExperimentDecision(
     id: string,
-    evidenceStatus: Experiment['evidenceStatus'],
-    decision: Experiment['decision'],
+    evidenceStatus: ExperimentRecord['evidenceStatus'],
+    decision: ExperimentRecord['decision'],
   ) {
     const response = await send(`/experiments/${id}`, 'PATCH', { evidenceStatus, decision });
     if (!response) return;
@@ -868,7 +836,9 @@ export default function TasksPage() {
                   <select
                     style={fieldStyle}
                     value={cohortStatus}
-                    onChange={(event) => setCohortStatus(event.target.value as Cohort['status'])}
+                    onChange={(event) =>
+                      setCohortStatus(event.target.value as CohortRecord['status'])
+                    }
                   >
                     <option value="active">active</option>
                     <option value="archived">archived</option>
@@ -908,8 +878,9 @@ export default function TasksPage() {
                     >
                       <strong>{cohort.title}</strong>
                       <span style={{ color: C.sub, fontSize: FS.cap }}>
-                        {cohort.status} · {cohort.definition.projectId ?? '所有项目'} ·{' '}
-                        {cohort.definition.type ?? '所有类型'}
+                        {cohort.status} ·{' '}
+                        {cohortDefinitionFields(cohort.definition).projectId ?? '所有项目'} ·{' '}
+                        {cohortDefinitionFields(cohort.definition).type ?? '所有类型'}
                       </span>
                       <SoftButton onClick={() => startCohortEdit(cohort)}>编辑</SoftButton>
                     </div>
@@ -1018,7 +989,7 @@ export default function TasksPage() {
                         onChange={(event) =>
                           updateExperimentDecision(
                             experiment.id,
-                            event.target.value as Experiment['evidenceStatus'],
+                            event.target.value as ExperimentRecord['evidenceStatus'],
                             experiment.decision,
                           )
                         }
@@ -1034,7 +1005,7 @@ export default function TasksPage() {
                           updateExperimentDecision(
                             experiment.id,
                             experiment.evidenceStatus,
-                            (event.target.value || null) as Experiment['decision'],
+                            (event.target.value || null) as ExperimentRecord['decision'],
                           )
                         }
                       >

@@ -1,20 +1,30 @@
 #!/usr/bin/env node
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO_ROOT = process.argv[2] ? resolve(process.argv[2]) : DEFAULT_REPO_ROOT;
 const SERVER_SRC = join(REPO_ROOT, 'apps/server/src');
+const WEB_SRC = join(REPO_ROOT, 'apps/web');
+const CLI_SRC = join(REPO_ROOT, 'packages/cli/src');
 const CONTRACTS_SRC = join(REPO_ROOT, 'packages/contracts/src');
 const violations = [];
 
 function walk(dir, visit) {
+  if (!existsSync(dir)) return;
   for (const entry of readdirSync(dir)) {
     const fullPath = join(dir, entry);
     const stat = statSync(fullPath);
-    if (stat.isDirectory()) walk(fullPath, visit);
-    else if (entry.endsWith('.ts') && !entry.endsWith('.test.ts')) {
+    if (stat.isDirectory()) {
+      if (entry === '.next' || entry === '.next-dev' || entry === 'node_modules') return;
+      walk(fullPath, visit);
+    } else if (
+      (entry.endsWith('.ts') || entry.endsWith('.tsx')) &&
+      !entry.endsWith('.test.ts') &&
+      !entry.endsWith('.test.tsx') &&
+      !entry.endsWith('.d.ts')
+    ) {
       visit(relative(REPO_ROOT, fullPath), readFileSync(fullPath, 'utf8'));
     }
   }
@@ -56,8 +66,31 @@ function checkServer(filePath, content) {
   }
 }
 
+function checkWeb(filePath, content) {
+  const serverImport = /from ['"](?:\.\.?\/)+(?:server|trace-server)[^'"]*['"]/;
+  if (serverImport.test(content)) {
+    violations.push(`${filePath}: Web must not import server application code`);
+  }
+  const schemaValueImport =
+    /import\s+(?!type\b)(?:\{[^}]*\}|\*\s+as\s+\w+)\s+from\s+['"]@agent-profile\/contracts['"]/;
+  if (schemaValueImport.test(content)) {
+    violations.push(
+      `${filePath}: Web must import only types from @agent-profile/contracts, not runtime schema values`,
+    );
+  }
+}
+
+function checkCli(filePath, content) {
+  const serverImport = /from ['"](?:\.\.?\/)+apps\/server[^'"]*['"]/;
+  if (serverImport.test(content)) {
+    violations.push(`${filePath}: CLI must not import server application code directly`);
+  }
+}
+
 walk(CONTRACTS_SRC, checkContracts);
 walk(SERVER_SRC, checkServer);
+walk(WEB_SRC, checkWeb);
+walk(CLI_SRC, checkCli);
 
 if (violations.length > 0) {
   process.stderr.write(

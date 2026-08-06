@@ -66,3 +66,49 @@ export interface ResetResponse {
     experiments: number;
   };
 }
+
+export interface ScanBody {
+  dir: string;
+  agent?: string;
+}
+
+export interface ImportBody {
+  sources?: ImportSourceId[];
+}
+
+export interface ResetBody {
+  confirmation?: string;
+}
+
+export const SCAN_BODY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['dir'],
+  properties: {
+    dir: { type: 'string', minLength: 1, maxLength: 2_000 },
+    agent: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+export const IMPORT_BODY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    sources: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'string',
+        enum: ['claude-code', 'codex', 'zed', 'mimo-code', 'opencode'],
+      },
+    },
+  },
+} as const;
+
+export const RESET_BODY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    confirmation: { type: 'string', maxLength: 100 },
+  },
+} as const;

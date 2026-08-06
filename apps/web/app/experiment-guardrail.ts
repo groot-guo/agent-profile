@@ -1,6 +1,6 @@
-export type ExperimentEvidenceStatus = 'not_collected' | 'insufficient_evidence' | 'ready';
+import type { ExperimentDecision, ExperimentEvidenceStatus } from '@agent-profile/contracts';
 
-export type ExperimentDecision = 'keep' | 'rollback' | 'insufficient_evidence';
+export type { ExperimentDecision, ExperimentEvidenceStatus };
 
 export function allowedExperimentDecisions(
   evidenceStatus: ExperimentEvidenceStatus,

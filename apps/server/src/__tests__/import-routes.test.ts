@@ -58,6 +58,43 @@ describe('import status routes', () => {
     expect(response.statusCode).toBe(400);
   });
 
+  it('rejects malformed scan and import payloads through runtime validation', async () => {
+    const malformedImports = await app.inject({
+      method: 'POST',
+      url: '/api/imports',
+      payload: { sources: [7] },
+    });
+    expect(malformedImports.statusCode).toBe(400);
+
+    const malformedRebuild = await app.inject({
+      method: 'POST',
+      url: '/api/imports/rebuild',
+      payload: { sources: [7] },
+    });
+    expect(malformedRebuild.statusCode).toBe(400);
+
+    const missingDir = await app.inject({
+      method: 'POST',
+      url: '/api/scan',
+      payload: {},
+    });
+    expect(missingDir.statusCode).toBe(400);
+
+    const malformedDir = await app.inject({
+      method: 'POST',
+      url: '/api/scan',
+      payload: { dir: '' },
+    });
+    expect(malformedDir.statusCode).toBe(400);
+
+    const malformedReset = await app.inject({
+      method: 'POST',
+      url: '/api/data-management/reset',
+      payload: { confirmation: 7 },
+    });
+    expect(malformedReset.statusCode).toBe(400);
+  });
+
   it('waits for direct compatibility scans before closing the Runtime database', async () => {
     const scanDirectory = mkdtempSync(join(tmpdir(), 'agent-profile-close-scan-'));
     const closingRuntime = createRuntime({
@@ -92,6 +129,7 @@ describe('import status routes', () => {
   });
 
   it('requires explicit confirmation and resets only generated analysis data', async () => {
+    await waitForIdleImport();
     runtime.database
       .prepare(
         `INSERT INTO sessions (id, file_path, agent, start_time, imported_at, tags)
@@ -134,4 +172,13 @@ describe('import status routes', () => {
       count: 0,
     });
   });
+
+  async function waitForIdleImport(): Promise<void> {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const status = await app.inject({ method: 'GET', url: '/api/imports/status' });
+      if (!status.json().active) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error('import job did not become idle');
+  }
 });

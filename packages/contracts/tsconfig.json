@@ -4,5 +4,5 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/common.ts", "src/index.ts"]
+  "include": ["src"]
 }
