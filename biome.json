@@ -12,6 +12,7 @@
       "!**/dist",
       "!**/node_modules",
       "!**/.next",
+      "!**/*.css",
       "!**/*.config.js",
       "!docs/zh",
       "!**/next-env.d.ts"
