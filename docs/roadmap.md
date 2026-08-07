@@ -8,7 +8,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ### T131 domain cohesion and responsibility convergence
 
-- status: planned
+- status: in_progress
 - estimated size/risk: large / medium
 - purpose: improve cohesion where responsibilities are either duplicated across
   modules or concentrated in oversized orchestration files, without making the
@@ -31,6 +31,11 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 - verification: focused Web/Server/CLI tests, production build, lint, and scale
   checks
 - documentation: performance, architecture, README, UI guidance, and roadmap
+- progress (2026-08-07): extracted CLI report formatting into
+  `packages/cli/src/format.ts` (runner.ts 1047 → 876 lines) and Session-detail
+  analysis panels into `apps/web/app/session/[id]/analysis-panels.tsx`
+  (page.tsx 2054 → 1668 lines). Remaining: Server capability modules, Web
+  feature-local data/state extraction, and CLI argument parsing split.
 
 ### T119 unified multi-agent Task graph and resource attribution
 
