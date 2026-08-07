@@ -13,8 +13,9 @@ import type {
   ImportJobStatusResponse,
 } from '@agent-profile/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseCliArguments, resolveDatabasePath } from './arguments';
 import type { CliDependencies, CliRuntime } from './runner';
-import { parseCliArguments, resolveDatabasePath, runCli } from './runner';
+import { runCli } from './runner';
 
 function createDependencies(): {
   dependencies: CliDependencies;
