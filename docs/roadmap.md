@@ -6,70 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T131 domain cohesion and responsibility convergence
-
-- status: in_progress
-- estimated size/risk: large / medium
-- purpose: improve cohesion where responsibilities are either duplicated across
-  modules or concentrated in oversized orchestration files, without making the
-  repository more fragmented
-- scope: preserve the existing `apps/web`, `apps/server`, `packages/cli`,
-  `packages/core`, and `packages/contracts` top-level boundaries; organize
-  Server internals around existing capabilities, keep Web page data/state/view
-  responsibilities together in feature-local modules, and split CLI commands
-  behind the single `agent-profile` entry point
-- dependencies: T128 establishes target module views; T130 defines DTO
-  ownership before Web API modules are extracted; T121 may run in parallel only
-  where file ownership does not overlap
-- implementation rule: do not create a file solely to satisfy a line-count
-  target; extract only a stable responsibility with a clear caller and owner;
-  do not create additional shared packages for feature-local code
-- acceptance: duplicated concepts have one owner; extracted units improve
-  cohesion and have focused tests; CLI remains one command; priority files move
-  toward the 800-line guideline; remaining exceptions are recorded with
-  rationale and follow-up scope
-- verification: focused Web/Server/CLI tests, production build, lint, and scale
-  checks
-- documentation: performance, architecture, README, UI guidance, and roadmap
-- progress (2026-08-07): extracted CLI report formatting into
-  `packages/cli/src/format.ts` and argument parsing into `arguments.ts`
-  (runner.ts 1047 → 539 lines); Server task validation helpers into
-  `task-validation.ts` and row mappers into `task-mappers.ts`
-  (task-repository 1159 → 846 lines); Session-detail analysis panels,
-  ContextChart, and diagnosis panels into feature-local modules
-  (session/[id]/page.tsx 2054 → 1153 lines); home session-list UI into
-  `session-list-ui.tsx` (app/page.tsx 1206 → 1028 lines). Remaining: Server
-  capability modules (database.ts, routes sessions/stats), Task page and
-  settings/stats page component extraction, and the remaining Session-detail
-  SidechainSummary/ToolTimeline/TagEditor split.
-
-### T119 unified multi-agent Task graph and resource attribution
-
-- status: planned
-- estimated size/risk: large / high; it extends Session relationship semantics
-  and changes resource aggregation scope
-- purpose: show what primary, continuation, subagent, verification, and
-  source-native child Sessions contributed to one Task without inferring
-  unsupported relationships or double-counting resource use
-- scope: define a typed Task graph over explicit Task links and source-native
-  relationships, show relationship coverage/unavailable parents, add opt-in
-  task-level resource attribution with source provenance, and leave unsupported
-  inferred edges absent
-- dependencies: T87 source-native Codex parent links and T113 Task-link
-  confirmation; migration/backfill review is required for any persisted graph
-- risks and assumptions: titles, paths, timestamps, or model names are not
-  sufficient evidence for an inferred parent; a child record may be stored but
-  excluded from primary Session aggregates
-- acceptance: graph/report makes explicit versus source-native versus missing
-  relationships distinguishable; aggregated Task totals reconcile without
-  double counting; unavailable/deleted source Sessions stay visible as coverage
-  limits
-- verification: Core graph/attribution fixtures, repository migration tests,
-  cross-source integration tests, UI graph accessibility check, and scale
-  benchmark extension
-- documentation: update multi-agent ingestion, profile model, task/outcome,
-  architecture, stats, README, Chinese overview, and roadmap
-
 ### T121 large-history Task workflow and detail virtualization
 
 - status: planned
@@ -98,6 +34,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T131](roadmap-archive/2026-q3.md#t131) | domain cohesion and responsibility convergence | completed |
 | [T132](roadmap-archive/2026-q3.md#t132) | continuous integration and smoke E2E baseline | completed |
 | [T130](roadmap-archive/2026-q3.md#t130) | HTTP contract and module-boundary governance | completed |
 | [T88](roadmap-archive/2026-q3.md#t88) | enforce the loopback-only product boundary | completed |

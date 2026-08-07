@@ -117,7 +117,10 @@ checks: public mutation request/response shapes live in
 and the repository boundary checker rejects Web/CLI imports of Server
 application code and non-type imports of contracts from Web. T131 may split
 stable responsibilities inside existing top-level packages but does not
-introduce new services or packages by default.
+introduce new services or packages by default. T131 has been applied: CLI
+formatting/argument parsing, Server task validation/row mappers/database
+schema, and Web Session/home/stats/model-catalog/layout feature-local modules
+were extracted from oversized files without changing behavior or boundaries.
 
 ### Ingestion and replacement sequence
 
