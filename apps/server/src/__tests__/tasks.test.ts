@@ -495,6 +495,100 @@ describe('Task/Outcome foundations', () => {
     expect(withoutOptIn.json()).toEqual({ error: 'post_run_feedback_opt_in_required' });
     await app.close();
   });
+
+  it('loads source-native Task graph edges without double counting child evidence', () => {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    seedSession(database, 'graph-parent');
+    seedSession(database, 'graph-child');
+    seedSession(database, 'graph-solo');
+    database
+      .prepare(
+        `INSERT INTO session_relationships (
+          child_session_id, parent_session_id, source_kind, relation_kind, updated_at
+        ) VALUES (?, ?, 'codex', 'source_parent', 1)`,
+      )
+      .run('graph-child', 'graph-parent');
+    const repository = new TaskRepository(database);
+    const task = repository.createTask({ title: 'Graph task', type: 'feature' });
+    repository.attachSession(task.id, { sessionId: 'graph-parent', role: 'primary' });
+    repository.attachSession(task.id, { sessionId: 'graph-child', role: 'subagent' });
+    repository.attachSession(task.id, { sessionId: 'graph-solo', role: 'verification' });
+
+    const profile = repository.buildProfile(task.id);
+    expect(profile.graph.edges).toHaveLength(1);
+    expect(profile.graph.edges[0]).toMatchObject({
+      from: 'graph-child',
+      to: 'graph-parent',
+      kind: 'source_parent',
+      source: 'codex',
+      counterpartAvailable: true,
+      counterpartLinked: true,
+    });
+    expect(profile.graph.coverage.relationships).toEqual({
+      captured: 1,
+      partial: 0,
+      absent: 1,
+    });
+    // Each session is stored once and aggregated once; the child is not summed
+    // a second time through the parent edge.
+    expect(profile.profile.linkedSessions).toBe(3);
+    expect(profile.profile.totalTokens).toBe(57);
+    expect(profile.profile.toolCalls).toBe(3);
+    expect(profile.graph.attribution).toEqual([
+      expect.objectContaining({
+        agent: 'codex',
+        linkedSessions: 3,
+        availableSessions: 3,
+      }),
+    ]);
+  });
+
+  it('distinguishes stored-but-unlinked counterparts from unavailable ones', () => {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    seedSession(database, 'unlinked-parent');
+    seedSession(database, 'linked-child');
+    seedSession(database, 'orphan-child');
+    database
+      .prepare(
+        `INSERT INTO session_relationships (
+          child_session_id, parent_session_id, source_kind, relation_kind, updated_at
+        ) VALUES (?, ?, 'codex', 'source_parent', 1)`,
+      )
+      .run('linked-child', 'unlinked-parent');
+    database
+      .prepare(
+        `INSERT INTO session_relationships (
+          child_session_id, parent_session_id, source_kind, relation_kind, updated_at
+        ) VALUES (?, ?, 'codex', 'source_parent', 1)`,
+      )
+      .run('orphan-child', 'missing-parent');
+    const repository = new TaskRepository(database);
+    const task = repository.createTask({ title: 'Counterpart task', type: 'feature' });
+    repository.attachSession(task.id, { sessionId: 'linked-child', role: 'subagent' });
+    repository.attachSession(task.id, { sessionId: 'orphan-child', role: 'subagent' });
+
+    const profile = repository.buildProfile(task.id);
+    const byFrom = Object.fromEntries(profile.graph.edges.map((edge) => [edge.from, edge]));
+    expect(byFrom['linked-child']).toMatchObject({
+      from: 'linked-child',
+      to: 'unlinked-parent',
+      counterpartAvailable: true,
+      counterpartLinked: false,
+    });
+    expect(byFrom['orphan-child']).toMatchObject({
+      from: 'orphan-child',
+      to: 'missing-parent',
+      counterpartAvailable: false,
+      counterpartLinked: false,
+    });
+    expect(profile.graph.coverage.relationships).toEqual({
+      captured: 2,
+      partial: 2,
+      absent: 0,
+    });
+  });
 });
 
 function seedSession(database: ReturnType<typeof createDatabase>, id: string) {

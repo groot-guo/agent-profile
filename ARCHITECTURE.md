@@ -165,7 +165,7 @@ local histories ──→ loopback-only application ──→ local SQLite
                                    → bounded/redacted provider payload
 
 current:  source-native parent/child evidence + explicit Task links
-planned:  T119 typed Task graph + reconciled, non-double-counted attribution
+           + T119 typed Task graph with reconciled, non-double-counted attribution
 ```
 
 Non-local application access is outside the selected product boundary. The
@@ -841,7 +841,23 @@ or a claim of live Agent-process state.
 only currently available linked Sessions and exposes linked/available coverage,
 Agent identities, token totals, known-cost coverage, duration, peak context,
 cache behavior, tool-error evidence, attached Configuration Snapshots, explicit
-Outcome fields, matching cohort definitions, and limitations.
+Outcome fields, matching cohort definitions, a typed Task graph, and
+limitations.
+
+The Task graph makes the Task the explicit multi-Agent delivery boundary. Its
+nodes are the linked Sessions with their link role, Agent, and availability;
+its edges come only from stored source-native `session_relationships` rows
+(relation kind `source_parent`) that touch a linked Session. Each edge names
+its source, whether the counterpart Session row is stored, and whether the
+counterpart is also linked to the same Task. Per-Agent attribution counts
+linked/available Sessions and sums tokens, cost, unknown-cost count, tool
+calls, and tool errors once per stored Session. Relationship coverage reports
+`captured` edges, `partial` edges whose counterpart is unavailable or unlinked,
+and `absent` linked Sessions with no stored relationship. Aggregate totals
+reconcile exactly to the linked stored Sessions; a child Session linked to the
+Task is never summed a second time through a parent edge. Missing or
+unavailable relationships remain coverage limitations and are never replaced
+by an edge inferred from titles, paths, timestamps, or model similarity.
 
 Its Outcome coverage is `not_collected`, `partial`, or `verified`; the tracked
 five fields are build, test, lint, Git commit, and human rating. Rework reason,

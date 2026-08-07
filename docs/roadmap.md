@@ -10,6 +10,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T119](roadmap-archive/2026-q3.md#t119) | multi-Agent Task graph and non-double-counted attribution | completed |
 | [T121](roadmap-archive/2026-q3.md#t121) | large-history Task workflow and detail virtualization | completed |
 | [T131](roadmap-archive/2026-q3.md#t131) | domain cohesion and responsibility convergence | completed |
 | [T132](roadmap-archive/2026-q3.md#t132) | continuous integration and smoke E2E baseline | completed |
@@ -138,9 +139,9 @@ cleanup does not silently expand product scope or create more fragmentation.
    combining both risks in one change.
 4. **P2 — establish regression gates:** T132 adds CI; Playwright smoke coverage
    is included only if approved as a maintained project dependency.
-5. **P2 — extend evidence semantics:** T119 follows the stabilized contracts
-   and adds the explicit multi-Agent Task graph/resource attribution without
-   inferred relationships or double counting.
+5. **P2 — extend evidence semantics:** T119 completed the explicit multi-Agent
+   Task graph/resource attribution in `task-profile/v1` without inferred
+   relationships or double counting.
 
 The loopback-only security choice is settled: non-local access is outside the
 product boundary and T88 only closes the remaining source-workspace Server
@@ -148,7 +149,7 @@ escape hatch. T120 is cancelled because no current consumer requires
 multi-currency or remote price governance; the existing CNY-only,
 provenance-preserving Model Catalog contract remains current. T132 may be
 prepared alongside T130 but should land after the intended checks are stable.
-T119 should not be combined with T121/T131 because each changes a different
+T119 was completed separately from T121/T131 because each changes a different
 high-risk evidence or UI boundary. Mobile dashboard navigation remains out of
 scope. No current Task proposes microservice extraction or a new top-level
 package; such a change would require a separate evidence-backed architecture

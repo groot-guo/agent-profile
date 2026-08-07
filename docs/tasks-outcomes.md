@@ -41,7 +41,21 @@ changing existing links.
 currently available linked Sessions and reports linked/available coverage,
 token totals, known-cost coverage, duration, peak context, cache behavior, tool
 errors, Configuration Snapshots, explicit Outcome fields, matching cohort
-definitions, and limitations.
+definitions, a typed Task graph, and limitations.
+
+The Task graph exposes the multi-Agent delivery boundary explicitly. Nodes are
+the linked Sessions with their link role, Agent, and availability. Edges are
+stored source-native `session_relationships` rows (relation kind
+`source_parent`) that touch a linked Session; each edge names its source,
+whether the counterpart Session row exists, and whether the counterpart is also
+linked to the same Task. Per-Agent attribution sums tokens, cost, unknown-cost
+count, tool calls, and tool errors once per stored linked Session. Relationship
+coverage reports captured edges, partial edges (counterpart unavailable or
+unlinked), and absent linked Sessions without a stored relationship. Aggregate
+totals reconcile to the linked stored Sessions, so a child Session linked to
+the Task is never summed twice through a parent edge. Missing or unavailable
+relationships are coverage limitations; no edge is inferred from titles, paths,
+timestamps, or model similarity.
 
 Outcome coverage has three states:
 

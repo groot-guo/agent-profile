@@ -51,9 +51,12 @@ was not used.
 - primary Session lists, statistics, project cohorts, Agent Process Profiles,
   and import-source counts exclude a Codex record only when every stored Span
   is sidechain evidence. The child record remains available by direct stored ID;
-  child-only Sidechain resources are not merged into the parent. T87 completed
-  only the source-native relationship; the unified Task graph and
-  non-double-counted combined attribution remain planned T119 work;
+  child-only Sidechain resources are not merged into the parent. T119 now
+  exposes the source-native relationship as a typed Task graph: `task-profile/v1`
+  reports linked Session nodes, source-parent edges that touch a linked Session,
+  per-Agent attribution, and relationship coverage, and its aggregate totals
+  reconcile to the linked stored Sessions without summing a child Session twice
+  through a parent edge;
 - a non-empty `session_meta.cwd` supplies project evidence; if it is absent,
   navigation and statistics use the stable `Codex 会话记录` source category
   while preserving the missing coverage and raw file path;

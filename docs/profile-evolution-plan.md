@@ -44,7 +44,7 @@ Agent ranking, or automatic prompt/configuration mutation.
 | Can a person or offline Agent form a next-step hypothesis? | Yes, through findings, Profiles, prompt review, and explicit Task/Outcome records. | The hypothesis remains human-mediated and must be verified by a Task Outcome. |
 | Can an Agent consume findings and write a bounded result? | Yes, through the versioned local CLI/API reports, explicit Outcome write, and opt-in post-run report. | It remains local/content-free and does not mutate Agent configuration. |
 | Can the tool solve or prevent a problem during execution? | Only as bounded advice. | T117 can issue an opt-in, short-lived hypothesis from fresh Runtime events plus ready historical evidence; it never mutates configuration or proves a problem is solved. |
-| Can it prove one Agent/configuration is better? | No. | Current cohort output is descriptive and bounded; task difficulty, coverage, uncertainty, and attribution remain limits; T118/T119 extend them. |
+| Can it prove one Agent/configuration is better? | No. | Current cohort output is descriptive and bounded; task difficulty, coverage, uncertainty, and attribution remain limits; T118 extended comparison rigor and T119 added non-double-counted Task attribution. |
 
 ### Material gaps mapped to Tasks
 
@@ -57,9 +57,11 @@ content-free local reports and an explicit write path (T115). T116 adds the
 local Runtime event protocol/collector; T117 now adds bounded in-run advice with
 explicit suppression and adoption records.
 Comparison rigor (T118), typed multi-Agent attribution (T119), and large-history
-ergonomics (T121) are parallel or later tracks. Multi-currency/remote-price work
-has no current consumer and T120 is cancelled. The product boundary is settled
-as loopback-only; the source-workspace Server and the CLI both reject
+ergonomics (T121) are parallel or later tracks; T119 now exposes the typed Task
+graph with non-double-counted attribution in `task-profile/v1`. Multi-currency/
+remote-price work has no current consumer and T120 is cancelled. The product
+boundary is settled as loopback-only; the source-workspace Server and the CLI
+both reject
 non-loopback hosts.
 
 ## Current Boundary

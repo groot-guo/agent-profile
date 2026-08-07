@@ -9,6 +9,7 @@ import {
   type RuntimeProfileComparabilityInput,
   type RuntimeProfileStratumDimension,
   type TaskEvidenceProvenance,
+  type TaskGraphEdge,
   type TaskOutcomeEvidence,
   type TaskProfileConfiguration,
   type TaskProfileOutcome,
@@ -587,12 +588,61 @@ export class TaskRepository {
     const cohortIds = this.listCohorts()
       .filter((cohort) => cohortMatches(cohort, task))
       .map((cohort) => cohort.id);
+    const linkedIds = rows.map((row) => row.session_id);
+    const relationships = this.loadTaskGraphRelationships(linkedIds);
     return buildTaskProfile({
       task,
       configurations,
       sessions: rows.map(mapProfileSession),
+      relationships,
       outcome: this.getOutcome(taskId) ?? undefined,
       cohortIds,
+    });
+  }
+
+  private loadTaskGraphRelationships(linkedIds: string[]): TaskGraphEdge[] {
+    if (linkedIds.length === 0) return [];
+    const placeholders = linkedIds.map(() => '?').join(', ');
+    const edges = this.database
+      .prepare(
+        `SELECT child_session_id, parent_session_id, source_kind
+         FROM session_relationships
+         WHERE child_session_id IN (${placeholders})
+            OR parent_session_id IN (${placeholders})`,
+      )
+      .all(...linkedIds, ...linkedIds) as Array<{
+      child_session_id: string;
+      parent_session_id: string;
+      source_kind: string;
+    }>;
+    const involvedIds = [
+      ...new Set(edges.flatMap((edge) => [edge.child_session_id, edge.parent_session_id])),
+    ];
+    if (involvedIds.length === 0) return [];
+    const involvedPlaceholders = involvedIds.map(() => '?').join(', ');
+    const linkedSet = new Set(linkedIds);
+    const stored = new Set(
+      (
+        this.database
+          .prepare(`SELECT id FROM sessions WHERE id IN (${involvedPlaceholders})`)
+          .all(...involvedIds) as Array<{ id: string }>
+      ).map((row) => row.id),
+    );
+    return edges.map((edge) => {
+      const from = edge.child_session_id;
+      const to = edge.parent_session_id;
+      const fromLinked = linkedSet.has(from);
+      const toLinked = linkedSet.has(to);
+      const fromStored = stored.has(from);
+      const toStored = stored.has(to);
+      return {
+        from,
+        to,
+        kind: 'source_parent' as const,
+        source: edge.source_kind,
+        counterpartAvailable: fromLinked ? toStored : fromStored,
+        counterpartLinked: fromLinked && toLinked,
+      };
     });
   }
 

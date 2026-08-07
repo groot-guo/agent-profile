@@ -71,10 +71,60 @@ export interface TaskProfileSessionSample {
   toolErrors?: number;
 }
 
+export type TaskGraphEdgeKind = 'source_parent';
+
+export interface TaskGraphEdge {
+  /** Child Session id (the requester of the relationship). */
+  from: string;
+  /** Parent Session id (the relationship target). */
+  to: string;
+  kind: TaskGraphEdgeKind;
+  /** Source that captured the relationship, e.g. `codex`. */
+  source: string;
+  /** Whether the counterpart Session row exists in storage. */
+  counterpartAvailable: boolean;
+  /** Whether the counterpart is also linked to this Task. */
+  counterpartLinked: boolean;
+}
+
+export interface TaskGraphNode {
+  id: string;
+  available: boolean;
+  role: TaskProfileSessionSample['role'];
+  agent?: string;
+}
+
+export interface TaskGraphAttribution {
+  agent: string;
+  linkedSessions: number;
+  availableSessions: number;
+  totalTokens: number;
+  totalCost: number;
+  costUnknownCount: number;
+  toolCalls: number;
+  toolErrors: number;
+}
+
+export interface TaskGraphCoverage {
+  relationships: {
+    captured: number;
+    partial: number;
+    absent: number;
+  };
+}
+
+export interface TaskGraph {
+  nodes: TaskGraphNode[];
+  edges: TaskGraphEdge[];
+  attribution: TaskGraphAttribution[];
+  coverage: TaskGraphCoverage;
+}
+
 export interface TaskProfileInput {
   task: TaskProfileTask;
   configurations: TaskProfileConfiguration[];
   sessions: TaskProfileSessionSample[];
+  relationships?: TaskGraphEdge[];
   outcome?: TaskProfileOutcome;
   cohortIds?: string[];
   generatedAt?: number;
@@ -105,6 +155,7 @@ export interface TaskProfileReport {
     status: 'not_requested' | 'definition_only';
     interpretation: string;
   };
+  graph: TaskGraph;
   coverage: {
     sessions: { linked: number; available: number; ratio: number };
     outcome: {
@@ -118,6 +169,45 @@ export interface TaskProfileReport {
 
 export function buildTaskProfile(input: TaskProfileInput): TaskProfileReport {
   const available = input.sessions.filter((session) => session.available);
+  const relationships = input.relationships ?? [];
+  const linkedIds = new Set(input.sessions.map((session) => session.id));
+  const graphEdges = relationships
+    .filter((edge) => linkedIds.has(edge.from) || linkedIds.has(edge.to))
+    .map((edge) => ({
+      ...edge,
+      counterpartLinked: linkedIds.has(edge.from) && linkedIds.has(edge.to),
+    }));
+  const attributionByAgent = new Map<string, TaskGraphAttribution>();
+  for (const session of input.sessions) {
+    if (!session.agent) continue;
+    const entry = attributionByAgent.get(session.agent) ?? {
+      agent: session.agent,
+      linkedSessions: 0,
+      availableSessions: 0,
+      totalTokens: 0,
+      totalCost: 0,
+      costUnknownCount: 0,
+      toolCalls: 0,
+      toolErrors: 0,
+    };
+    entry.linkedSessions += 1;
+    if (session.available) {
+      entry.availableSessions += 1;
+      entry.totalTokens +=
+        (session.inputTokens ?? 0) +
+        (session.cacheCreationTokens ?? 0) +
+        (session.cacheReadTokens ?? 0) +
+        (session.outputTokens ?? 0);
+      entry.totalCost += session.totalCost ?? 0;
+      entry.costUnknownCount += session.costUnknownCount ?? 0;
+      entry.toolCalls += session.toolCalls ?? 0;
+      entry.toolErrors += session.toolErrors ?? 0;
+    }
+    attributionByAgent.set(session.agent, entry);
+  }
+  const attribution = [...attributionByAgent.values()].sort((a, b) =>
+    a.agent.localeCompare(b.agent),
+  );
   const totalTokens = available.reduce(
     (sum, session) =>
       sum +
@@ -161,6 +251,52 @@ export function buildTaskProfile(input: TaskProfileInput): TaskProfileReport {
         : 'partial';
   const cohortIds = input.cohortIds ?? [];
   const limitations: string[] = [];
+  const nodeWithEdge = new Set<string>();
+  for (const edge of graphEdges) {
+    nodeWithEdge.add(edge.from);
+    nodeWithEdge.add(edge.to);
+  }
+  const partialEdges = graphEdges.filter(
+    (edge) => !edge.counterpartAvailable || !edge.counterpartLinked,
+  ).length;
+  const absentNodes = input.sessions.filter((session) => !nodeWithEdge.has(session.id)).length;
+  const graph: TaskGraph = {
+    nodes: input.sessions.map((session) => ({
+      id: session.id,
+      available: session.available,
+      role: session.role,
+      agent: session.agent,
+    })),
+    edges: graphEdges,
+    attribution,
+    coverage: {
+      relationships: {
+        captured: graphEdges.length,
+        partial: partialEdges,
+        absent: absentNodes,
+      },
+    },
+  };
+  if (graphEdges.some((edge) => !edge.counterpartAvailable)) {
+    limitations.push(
+      'One or more Task graph edges reference a Session whose stored row is unavailable after local data reset or source changes.',
+    );
+  }
+  if (graphEdges.some((edge) => !edge.counterpartLinked)) {
+    limitations.push(
+      'One or more Task graph edges reference a Session outside the Task; the counterpart is not linked, so combined attribution cannot include it.',
+    );
+  }
+  if (absentNodes > 0) {
+    limitations.push(
+      'One or more linked Sessions have no stored source-native relationship; the Task graph cannot distinguish parent/child evidence for those Sessions.',
+    );
+  }
+  if (graphEdges.length > 0) {
+    limitations.push(
+      'Task graph edges come only from explicit Task links and source-native relationships; child Sessions are never merged into a parent twice.',
+    );
+  }
   if (available.length < input.sessions.length) {
     limitations.push(
       'One or more linked Sessions are currently unavailable after local data reset or source changes.',
@@ -211,6 +347,7 @@ export function buildTaskProfile(input: TaskProfileInput): TaskProfileReport {
       interpretation:
         'No configuration is labelled better without sufficient comparable Tasks and explicit Outcome guardrails.',
     },
+    graph,
     coverage: {
       sessions: {
         linked: input.sessions.length,

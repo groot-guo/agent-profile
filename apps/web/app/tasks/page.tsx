@@ -738,6 +738,32 @@ export default function TasksPage() {
               <div style={{ color: C.sub, fontSize: FS.sm }}>
                 {profile.comparison.interpretation}
               </div>
+              {profile.graph.attribution.length > 0 && (
+                <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                  {profile.graph.attribution.map((entry) => (
+                    <div key={entry.agent} className="ap-row">
+                      <strong>{entry.agent}</strong>
+                      <span style={{ color: C.sub, fontSize: FS.sm }}>
+                        {entry.availableSessions}/{entry.linkedSessions} Session ·{' '}
+                        {fmtTokens(entry.totalTokens)} · ¥{entry.totalCost.toFixed(3)} ·{' '}
+                        {entry.toolCalls} 次工具调用
+                      </span>
+                    </div>
+                  ))}
+                  <Chip
+                    color={
+                      profile.graph.coverage.relationships.partial > 0 ||
+                      profile.graph.coverage.relationships.absent > 0
+                        ? C.medium
+                        : C.cr
+                    }
+                  >
+                    关系覆盖 · {profile.graph.edges.length} 边 /{' '}
+                    {profile.graph.coverage.relationships.partial} 部分 /{' '}
+                    {profile.graph.coverage.relationships.absent} 缺失
+                  </Chip>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
                 {profile.limitations.map((item) => (
                   <Chip key={item} color={C.medium}>

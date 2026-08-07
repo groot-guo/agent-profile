@@ -212,7 +212,10 @@ OpenCode 数据库以只读方式打开。当前 Session 行保存 input、outpu
   人工评分、返工原因、完成时间和最多 50 条结构化证据，并生成带
   Session/Outcome/成本覆盖度和限制的 `task-profile/v1`；页面显示的五项 Outcome
   coverage 与报告合同一致，缺失值不会被当作失败。`verified` 只表示五项字段齐全，
-  不表示所有已记录检查都通过。
+  不表示所有已记录检查都通过。`task-profile/v1` 的 `graph` 段以显式 Task 为多 Agent
+  交付边界：节点为关联 Session（含 link role、Agent 与可用性），边仅来自存储的
+  source-native 父子关系，并提供按 Agent 的非重复归属与关系覆盖度；缺失或不可用的
+  关系只会作为 coverage limitation，不会从标题、路径、时间或模型相似度推断边。
 - 在 `/settings/models` 按 observed raw-model 身份维护四类 Token 定价与上下文窗口；
   未定价/不支持模型优先，配置保存不自动改写历史，成本重算必须先 preview 再明确确认。
 - 导出 Session 数据和分析报告。
