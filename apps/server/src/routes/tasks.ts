@@ -24,7 +24,8 @@ import { collectLocalGitOutcomeEvidence } from '../local-git-outcome-adapter';
 import { getTaskProfileReport } from '../reports-service';
 import type { AppRuntime } from '../runtime';
 import { buildTaskAssistanceReport } from '../task-assistance';
-import { TaskModelError, TaskRepository } from '../task-repository';
+import { TaskRepository } from '../task-repository';
+import { TaskModelError } from '../task-validation';
 
 type TaskRuntime = Pick<AppRuntime, 'database'>;
 
