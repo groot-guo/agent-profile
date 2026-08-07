@@ -22,6 +22,8 @@ Session、记录版本/Hash 配置快照和显式 Outcome，生成带覆盖度�
 任务页还可从观测 Session 显式预填新 Task 的标题/项目，并读取 `task-assistance/v1` 的
 同项目、七天时间窗口候选。每个 Session/Git 建议都要单独确认；确认数据保留 producer、
 时间、来源和相关性依据，Git 建议只进入未保存的 Outcome 草稿，不代表验证通过。
+任务页不加载完整 Session 数组：Session 选择器使用 `session-discovery/v2` 有界搜索
+（50 行窗口 + keyset cursor），大历史保持可交互，已关联 Session 列表仍保持完整。
 
 T115 还提供 `diagnosis`、`evidence`、显式确认的 `task-outcome` 和 opt-in 的
 `task-feedback` CLI workflow。它们在 `--json` 下输出 `agent-profile-cli/v1`，默认只返回

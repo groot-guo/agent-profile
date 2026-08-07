@@ -159,6 +159,22 @@ default no-content query derives content availability/truncation flags in SQLite
 without selecting metadata text into Node; opt-in preview loads only the current
 page's relevant fields.
 
+## Measured T121 Task-workspace bounded search
+
+The final T121 run on 2026-08-07 used the same Node v24.18.0 / Darwin arm64
+fixture and passed every budget. The Task workspace no longer loads the
+compatibility full-array Session list; its Session pickers use the bounded
+`session-discovery/v2` contract with a 50-row window.
+
+| Workload | Median time | Response size |
+| --- | ---: | ---: |
+| Task Session search (`/api/session-discovery?limit=50&q=fixture`) | 2.3 ms | 30,470 bytes |
+
+The search window is capped at 50 rows with an explicit matched/total count and
+keyset cursor, so a 500-Session history never transfers or renders more than
+the current window. Response-size regression checks now cover this Task-workflow
+path.
+
 ## Desktop regression budgets
 
 | Guard | Budget |
@@ -173,6 +189,7 @@ page's relevant fields.
 | Analysis summary median / response | 4,000 ms / 500,000 bytes |
 | Evidence median / response | 2,000 ms / 4,000,000 bytes |
 | Evidence page median / response | 500 ms / 250,000 bytes |
+| Task Session search median / response | 300 ms / 200,000 bytes |
 
 These intentionally generous guards cover slower developer/CI machines while
 still detecting order-of-magnitude latency changes, accidental response
@@ -194,9 +211,11 @@ response must state whether evidence became windowed or paged.
   temporary allocation, SQLite/native memory, and V8 retained heap.
 - The timing guard is intentionally desktop-oriented and should be compared by
   workload and report schema, not used to rank machines or Agents.
-- T83's bounded Session discovery/statistics and T84's bounded detail/evidence
-  workloads are now part of the benchmark. Compatibility full-array/full-detail
-  routes remain regression baselines. T121 is responsible for adding
-  reproducible browser-facing Task-workspace and rendered-list budgets; this
-  fixture currently does not measure browser rendering, DOM/React memory,
-  interaction latency, or Task linking over very large histories.
+- T83's bounded Session discovery/statistics, T84's bounded detail/evidence,
+  and T121's bounded Task-workspace Session search workloads are now part of
+  the benchmark. Compatibility full-array/full-detail routes remain regression
+  baselines. The fixture still does not measure browser rendering, DOM/React
+  memory, interaction latency, or Task linking over very large histories; the
+  Web-facing Task picker search is covered by the bounded endpoint regression
+  guard and the Playwright smoke assertion that the Task workspace never
+  requests the full-array Session list.

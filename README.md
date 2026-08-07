@@ -253,8 +253,11 @@ bounded `task-assistance/v1` candidate report. Candidates use a matching project
 key and seven-day local time window. Each Session link and Git evidence candidate
 must be accepted separately; accepted Session links retain producer/time/source
 provenance, while Git candidates enter the Outcome draft and require an explicit
-save. No candidate marks build, test, lint, or delivery success, and raw prompt
-or transcript content is not used.
+save. The workspace never loads the full Session array: its Session pickers use
+the bounded `session-discovery/v2` search with a 50-row window and a keyset
+cursor, so large histories stay interactive while the linked-Session list
+remains complete. No candidate marks build, test, lint, or delivery success,
+and raw prompt or transcript content is not used.
 
 The approved read-only `outcome-evidence/v1` local Git adapter is available only
 after an explicit source selection through

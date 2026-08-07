@@ -381,6 +381,14 @@ set-based queries instead of loading all Session rows into JavaScript. The
 legacy `/api/sessions` full-array route remains available for compatibility and
 is still measured as a regression baseline.
 
+The Task workspace follows the same bounded-data contract. Its Session
+pickers (new-Task prefill and Session attachment) query `session-discovery/v2`
+with a 50-row window, project/Agent/ID text search, and a keyset cursor instead
+of loading the compatibility full Session array. Linked Sessions are read from
+the Task detail route, and picker results exclude already-linked IDs. The
+Task workspace therefore never requests `GET /api/sessions`; the full-array
+route remains a compatibility/regression surface only.
+
 The Stats workspace exposes `project-profile/v1` for one selected `project_key`
 and optional millisecond time range. The Server keeps at most 1,000 newest
 matching primary Sessions and 10,000 normalized tool events; the report marks

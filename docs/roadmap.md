@@ -6,34 +6,11 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T121 large-history Task workflow and detail virtualization
-
-- status: planned
-- estimated size/risk: medium / medium; it completes the bounded-data contract
-  in surfaces that still rely on compatibility full-array responses
-- purpose: keep Task linking and Session detail usable for large local history
-  without loading every Session or rendering every event at once
-- scope: replace Task workspace full Session loading with bounded discovery and
-  search, virtualize or window large evidence/detail lists, preserve deep links
-  and evidence coverage, and extend the representative scale benchmark with
-  browser-facing and Task-workflow checks where reproducible
-- dependencies: T83/T84 bounded contracts and T112 evidence navigation
-- risks and assumptions: a smaller window must never be represented as complete
-  evidence; compatibility endpoints remain explicit until a versioned removal
-  plan exists
-- acceptance: Task workspace uses bounded selection, detail lists have stable
-  virtual/window behavior, selected evidence remains reachable, and performance
-  budgets protect the revised paths without weakening coverage semantics
-- verification: focused Web tests, production build, browser checks at desktop
-  and mobile widths, scale benchmark extension, and response-size regression
-  checks
-- documentation: update performance, architecture, README, UI guidance, and
-  roadmap
-
 ## Terminal Task Index
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T121](roadmap-archive/2026-q3.md#t121) | large-history Task workflow and detail virtualization | completed |
 | [T131](roadmap-archive/2026-q3.md#t131) | domain cohesion and responsibility convergence | completed |
 | [T132](roadmap-archive/2026-q3.md#t132) | continuous integration and smoke E2E baseline | completed |
 | [T130](roadmap-archive/2026-q3.md#t130) | HTTP contract and module-boundary governance | completed |

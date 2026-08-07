@@ -4,12 +4,12 @@ import type {
   CohortRecord,
   ConfigurationRecord,
   ExperimentRecord,
+  SessionDiscoveryItem,
   TaskRecord,
   TaskSessionLinkRecord,
 } from '@agent-profile/contracts';
 import type {
   PostRunFeedbackReport,
-  SessionSummary,
   TaskAssistanceReport,
   TaskGitCommitCandidate,
   TaskProfileOutcome,
@@ -24,6 +24,7 @@ import { C, FS, fmtTokens, R, SP } from '../theme';
 import { Card, Chip, Empty, Notice, SoftButton, StatCard } from '../ui';
 import { OutcomeEditor } from './outcome-editor';
 import { outcomeToDraft } from './outcome-model';
+import { SessionPicker } from './session-picker';
 import styles from './tasks.module.css';
 
 interface TaskDetail {
@@ -35,6 +36,8 @@ interface TaskDetail {
 interface TaskFeedbackResponse {
   feedback: PostRunFeedbackReport[];
 }
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 function cohortDefinitionFields(definition: Record<string, unknown>): {
   projectId?: string;
@@ -61,7 +64,6 @@ const fieldStyle: React.CSSProperties = {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [configurations, setConfigurations] = useState<ConfigurationRecord[]>([]);
   const [cohorts, setCohorts] = useState<CohortRecord[]>([]);
   const [experiments, setExperiments] = useState<ExperimentRecord[]>([]);
@@ -77,8 +79,8 @@ export default function TasksPage() {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('feature');
   const [projectId, setProjectId] = useState('');
-  const [sourceSessionId, setSourceSessionId] = useState('');
-  const [sessionId, setSessionId] = useState('');
+  const [sourceSession, setSourceSession] = useState<SessionDiscoveryItem | null>(null);
+  const [attachSession, setAttachSession] = useState<SessionDiscoveryItem | null>(null);
   const [configId, setConfigId] = useState('');
   const [role, setRole] = useState('primary');
   const [agent, setAgent] = useState('codex');
@@ -101,21 +103,17 @@ export default function TasksPage() {
   const [editingExperimentId, setEditingExperimentId] = useState<string | null>(null);
 
   const loadBase = useCallback(async () => {
-    const [taskResponse, sessionResponse, configResponse, cohortResponse, experimentResponse] =
-      await Promise.all([
-        fetch(`${API}/tasks`),
-        fetch(`${API}/sessions`),
-        fetch(`${API}/config-snapshots`),
-        fetch(`${API}/cohorts`),
-        fetch(`${API}/experiments`),
-      ]);
+    const [taskResponse, configResponse, cohortResponse, experimentResponse] = await Promise.all([
+      fetch(`${API}/tasks`),
+      fetch(`${API}/config-snapshots`),
+      fetch(`${API}/cohorts`),
+      fetch(`${API}/experiments`),
+    ]);
     const taskJson = await taskResponse.json();
-    const sessionJson = await sessionResponse.json();
     const configJson = await configResponse.json();
     const cohortJson = await cohortResponse.json();
     const experimentJson = await experimentResponse.json();
     setTasks(taskJson.tasks ?? []);
-    setSessions(Array.isArray(sessionJson) ? sessionJson : []);
     setConfigurations(configJson.configurations ?? []);
     setCohorts(cohortJson.cohorts ?? []);
     setExperiments(experimentJson.experiments ?? []);
@@ -175,7 +173,6 @@ export default function TasksPage() {
     () => new Set(detail?.sessions.map((item) => item.sessionId) ?? []),
     [detail],
   );
-  const availableSessions = sessions.filter((item) => !linkedIds.has(item.id));
   const suggestedSessions =
     assistance?.candidates.sessions.filter((item) => !dismissedAssistance.has(item.suggestionId)) ??
     [];
@@ -192,17 +189,16 @@ export default function TasksPage() {
     });
     if (!response) return;
     setTitle('');
-    setSourceSessionId('');
+    setSourceSession(null);
     await loadBase();
     setSelectedId(response.id);
     setNotice({ kind: 'ok', text: '任务已创建' });
   }
 
   function prefillTaskFromSession() {
-    const source = sessions.find((session) => session.id === sourceSessionId);
-    if (!source) return;
-    setProjectId(sessionProject(source));
-    if (!title.trim()) setTitle(`复盘 ${sessionDisplayTitle(source)}`);
+    if (!sourceSession) return;
+    setProjectId(sessionProject(sourceSession));
+    if (!title.trim()) setTitle(`复盘 ${sessionDisplayTitle(sourceSession)}`);
     setNotice({ kind: 'ok', text: '已从本地 Session 预填项目和标题；不会自动关联 Session' });
   }
 
@@ -219,15 +215,16 @@ export default function TasksPage() {
     setNotice({ kind: 'ok', text: '配置快照已创建' });
   }
 
-  async function attachSession() {
+  async function attachSelectedSession() {
     if (!selectedId) return;
+    if (!attachSession) return;
     const response = await send(`/tasks/${selectedId}/sessions`, 'POST', {
-      sessionId,
+      sessionId: attachSession.id,
       configSnapshotId: configId || undefined,
       role,
     });
     if (!response) return;
-    setSessionId('');
+    setAttachSession(null);
     await loadDetail(selectedId);
     await loadAssistance(selectedId);
     setNotice({ kind: 'ok', text: 'Session 已关联' });
@@ -430,19 +427,13 @@ export default function TasksPage() {
                 placeholder="任务标题"
               />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-                <select
-                  style={fieldStyle}
-                  value={sourceSessionId}
-                  onChange={(event) => setSourceSessionId(event.target.value)}
-                >
-                  <option value="">从观测 Session 预填（可选）</option>
-                  {sessions.slice(0, 50).map((session) => (
-                    <option key={session.id} value={session.id}>
-                      {sessionDisplayTitle(session)}
-                    </option>
-                  ))}
-                </select>
-                <SoftButton disabled={!sourceSessionId} onClick={prefillTaskFromSession}>
+                <SessionPicker
+                  excludeIds={EMPTY_IDS}
+                  value={sourceSession}
+                  onChange={setSourceSession}
+                  placeholder="从观测 Session 预填（可选）"
+                />
+                <SoftButton disabled={!sourceSession} onClick={prefillTaskFromSession}>
                   预填
                 </SoftButton>
               </div>
@@ -545,18 +536,12 @@ export default function TasksPage() {
 
             <Card title="Session 与配置" meta={`${detail.sessions.length} linked`}>
               <div className={styles.sessionAttachGrid}>
-                <select
-                  style={fieldStyle}
-                  value={sessionId}
-                  onChange={(event) => setSessionId(event.target.value)}
-                >
-                  <option value="">选择 Session</option>
-                  {availableSessions.map((session) => (
-                    <option key={session.id} value={session.id}>
-                      {sessionDisplayTitle(session)}
-                    </option>
-                  ))}
-                </select>
+                <SessionPicker
+                  excludeIds={linkedIds}
+                  value={attachSession}
+                  onChange={setAttachSession}
+                  placeholder="搜索并选择 Session"
+                />
                 <select
                   style={fieldStyle}
                   value={configId}
@@ -578,7 +563,11 @@ export default function TasksPage() {
                     <option key={value}>{value}</option>
                   ))}
                 </select>
-                <SoftButton variant="primary" disabled={!sessionId} onClick={attachSession}>
+                <SoftButton
+                  variant="primary"
+                  disabled={!attachSession}
+                  onClick={attachSelectedSession}
+                >
                   关联
                 </SoftButton>
               </div>

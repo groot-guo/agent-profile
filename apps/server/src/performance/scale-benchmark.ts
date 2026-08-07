@@ -46,7 +46,8 @@ interface BenchmarkReport {
     | 'analysis'
     | 'analysisSummary'
     | 'evidence'
-    | 'evidencePage',
+    | 'evidencePage'
+    | 'taskSessionSearch',
     EndpointMeasurement
   >;
   process: { startMaxRssBytes: number; finalMaxRssBytes: number; growthBytes: number };
@@ -67,6 +68,7 @@ const DESKTOP_BUDGETS = {
     analysisSummary: { medianMs: 4_000, responseBytes: 500_000 },
     evidence: { medianMs: 2_000, responseBytes: 4_000_000 },
     evidencePage: { medianMs: 500, responseBytes: 250_000 },
+    taskSessionSearch: { medianMs: 300, responseBytes: 200_000 },
   } satisfies Record<string, EndpointBudget>,
 };
 
@@ -163,6 +165,16 @@ try {
           throw new Error(
             'Evidence page response does not preserve total scope and bounded window',
           );
+        }
+      },
+    ),
+    taskSessionSearch: await measureEndpoint(
+      app,
+      '/api/session-discovery?limit=50&q=fixture',
+      (body) => {
+        const count = discoverySessionCount(body);
+        if (count === null || count > 50 || discoveryTotal(body) !== fixture.sessions) {
+          throw new Error('Task Session search response is unbounded or incomplete');
         }
       },
     ),
