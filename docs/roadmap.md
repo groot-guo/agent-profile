@@ -32,10 +32,14 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   checks
 - documentation: performance, architecture, README, UI guidance, and roadmap
 - progress (2026-08-07): extracted CLI report formatting into
-  `packages/cli/src/format.ts` (runner.ts 1047 → 876 lines) and Session-detail
-  analysis panels into `apps/web/app/session/[id]/analysis-panels.tsx`
-  (page.tsx 2054 → 1668 lines). Remaining: Server capability modules, Web
-  feature-local data/state extraction, and CLI argument parsing split.
+  `packages/cli/src/format.ts`, Session-detail analysis panels into
+  `apps/web/app/session/[id]/analysis-panels.tsx` (page.tsx 2054 → 1668
+  lines), Server task validation helpers into `task-validation.ts` and row
+  mappers into `task-mappers.ts` (task-repository 1159 → 846 lines), and CLI
+  argument parsing into `packages/cli/src/arguments.ts` (runner.ts 1047 →
+  539 lines). Remaining: Server capability modules (database.ts, routes
+  sessions/stats), Web feature-local data/state extraction, and the Session
+  detail ContextChart/DiagnosisList component split.
 
 ### T119 unified multi-agent Task graph and resource attribution
 
