@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
-import { applyMigrations, createDatabase, lookupPricing } from '../database';
+import { createDatabase, lookupPricing } from '../database';
+import { applyMigrations } from '../schema';
 
 // Pre-migration baseline: every base-schema column that is NOT added by a
 // migration. Keeping this in sync with `createBaseSchema` is enforced by the
