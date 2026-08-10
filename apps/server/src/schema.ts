@@ -456,6 +456,43 @@ const MIGRATIONS: Migration[] = [
       addColumn(database, 'session_relationships', 'agent_path', 'TEXT');
     },
   },
+  {
+    version: 18,
+    name: 'codex_session_scoped_span_ids',
+    up(database) {
+      const temporaryPrefix = '__agent_profile_codex_scope__';
+      database.exec(`
+        UPDATE spans
+        SET id = '${temporaryPrefix}' || session_id || ':' || id
+        WHERE id NOT LIKE 'codex:%'
+          AND EXISTS (
+            SELECT 1 FROM sessions
+            WHERE sessions.id = spans.session_id
+              AND (sessions.agent = 'codex' OR sessions.source_kind = 'codex')
+          );
+
+        UPDATE spans
+        SET parent_id = '${temporaryPrefix}' || session_id || ':' || parent_id
+        WHERE parent_id IS NOT NULL
+          AND id LIKE '${temporaryPrefix}%'
+          AND EXISTS (
+            SELECT 1 FROM spans parent
+            WHERE parent.session_id = spans.session_id
+              AND parent.id = '${temporaryPrefix}' || spans.session_id || ':' || spans.parent_id
+          );
+
+        UPDATE spans
+        SET id = 'codex:' || session_id || ':' ||
+          substr(id, length('${temporaryPrefix}' || session_id || ':') + 1)
+        WHERE id LIKE '${temporaryPrefix}%';
+
+        UPDATE spans
+        SET parent_id = 'codex:' || session_id || ':' ||
+          substr(parent_id, length('${temporaryPrefix}' || session_id || ':') + 1)
+        WHERE parent_id LIKE '${temporaryPrefix}%';
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {

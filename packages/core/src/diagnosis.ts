@@ -1,4 +1,5 @@
 import type { Pricing, SessionDetail, Span } from './types';
+import { isCrossSessionSpan } from './types';
 
 // ===== 诊断结果结构 =====
 
@@ -148,8 +149,9 @@ export async function diagnoseSession(
 
   // P2.19 LLM 语义诊断（注入 llmDiagnoser 才跑；定性结果 wastedTokens=0，靠 severity 排序）
   if (options.llmDiagnoser) {
-    const thinkings = detail.spans.filter((s) => s.type === 'thinking');
-    const tools = detail.spans.filter((s) => s.type === 'tool_call');
+    const ownedSpans = detail.spans.filter((span) => !isCrossSessionSpan(span));
+    const thinkings = ownedSpans.filter((s) => s.type === 'thinking');
+    const tools = ownedSpans.filter((s) => s.type === 'tool_call');
     const ctx: LlmDiagnoseContext = {
       sessionId: detail.id,
       taskTitle: detail.name,
@@ -190,13 +192,16 @@ export function diagnoseSessionSync(
   const pricingLookup = options.pricingLookup ?? (() => undefined);
   const ctxWindowLookup = options.contextWindowLookup ?? (() => undefined);
 
-  const turns = detail.spans
+  const ownedSpans = detail.spans.filter((span) => !isCrossSessionSpan(span));
+  const ownedDetail =
+    ownedSpans.length === detail.spans.length ? detail : { ...detail, spans: ownedSpans };
+  const turns = ownedSpans
     .filter((s): s is Span => s.type === 'llm_turn')
     .sort((a, b) => a.startTime - b.startTime);
-  const tools = detail.spans
+  const tools = ownedSpans
     .filter((s): s is Span => s.type === 'tool_call')
     .sort((a, b) => a.startTime - b.startTime);
-  const thinkings = detail.spans.filter((s) => s.type === 'thinking');
+  const thinkings = ownedSpans.filter((s) => s.type === 'thinking');
 
   const mainModel = turns.find((turn) => turn.model)?.model;
   const mainPricing = pricingLookup(mainModel);
@@ -211,8 +216,8 @@ export function diagnoseSessionSync(
   const findings: DiagnosisFinding[] = [
     ...detectRepeatedRead(tools, t, costOfTokens),
     ...detectLargeOutput(turns, tools, t, costOfTokens),
-    ...detectLowCache(detail, turns, t, costOfTokens),
-    ...detectContextBloat(detail, turns, t, ctxWindowLookup, costOfTokens),
+    ...detectLowCache(ownedDetail, turns, t, costOfTokens),
+    ...detectContextBloat(ownedDetail, turns, t, ctxWindowLookup, costOfTokens),
     ...detectLongThinking(thinkings, t, costOfTokens),
     ...detectRepeatedFailure(tools, turns, t, costOfTokens),
     ...detectReadScope(tools, t, costOfTokens),

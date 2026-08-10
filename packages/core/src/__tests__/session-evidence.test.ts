@@ -218,6 +218,46 @@ describe('session evidence report', () => {
       status: 'partial',
     });
   });
+
+  it('preserves ownership states instead of collapsing references into missing parents', () => {
+    const report = buildSessionEvidenceReport(session(), [
+      makeSpan({
+        id: 'cross',
+        type: 'llm_turn',
+        name: 'cross-session',
+        startTime: 100,
+        metadata: { ownershipStatus: 'cross_session', sourceSessionId: 'parent-session' },
+      }),
+      makeSpan({
+        id: 'source-user',
+        type: 'answer',
+        name: 'source-user',
+        startTime: 101,
+        metadata: { ownershipStatus: 'source_user', text: 'answer' },
+      }),
+      makeSpan({
+        id: 'corrupt',
+        type: 'thinking',
+        name: 'corrupt',
+        startTime: 102,
+        metadata: { ownershipStatus: 'corrupted_ownership' },
+      }),
+      makeSpan({
+        id: 'not-captured',
+        type: 'answer',
+        name: 'not-captured',
+        startTime: 103,
+        metadata: { ownershipStatus: 'not_captured', text: 'answer' },
+      }),
+    ]);
+
+    expect(report.events.map((event) => event.parentLink)).toEqual([
+      'cross_session',
+      'source_user',
+      'corrupted_ownership',
+      'not_captured',
+    ]);
+  });
 });
 
 function session(): Pick<SessionSummary, 'id' | 'name' | 'agent' | 'startTime' | 'endTime'> {

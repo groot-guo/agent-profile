@@ -113,6 +113,7 @@ describe('database migrations', () => {
       { version: 15, name: 'evidence_safe_cost_status' },
       { version: 16, name: 'retire_synthetic_zero_price_seed' },
       { version: 17, name: 'source_native_relationship_evidence' },
+      { version: 18, name: 'codex_session_scoped_span_ids' },
     ]);
 
     const legacySession = database
@@ -149,7 +150,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(17);
+    expect(count.count).toBe(18);
     expect(columnsOf(database, 'session_relationships')).toEqual(
       expect.arrayContaining([
         'call_started_at',
@@ -195,6 +196,50 @@ describe('database migrations', () => {
     expect(database.prepare('SELECT name FROM schema_migrations WHERE version = ?').get(9)).toEqual(
       { name: 'model_catalog_span_provenance_recovery' },
     );
+    database.close();
+  });
+
+  it('backfills Codex Span IDs and same-Session parent references without touching annotations', () => {
+    const database = createDatabase(':memory:');
+    database
+      .prepare(
+        `INSERT INTO sessions (id, file_path, agent, start_time, tags, notes)
+         VALUES (?, ?, 'codex', ?, ?, ?)`,
+      )
+      .run('legacy-codex', '/tmp/legacy-codex.jsonl', 100, 'keep-tag', 'keep-note');
+    database
+      .prepare(
+        `INSERT INTO spans (id, session_id, parent_id, type, name, start_time)
+         VALUES (?, ?, ?, 'llm_turn', 'turn', ?)`,
+      )
+      .run('legacy-turn', 'legacy-codex', null, 100);
+    database
+      .prepare(
+        `INSERT INTO spans (id, session_id, parent_id, type, name, start_time)
+         VALUES (?, ?, ?, 'answer', 'answer', ?)`,
+      )
+      .run('legacy-answer', 'legacy-codex', 'legacy-turn', 101);
+    database.prepare('DELETE FROM schema_migrations WHERE version = 18').run();
+
+    applyMigrations(database);
+
+    expect(
+      database
+        .prepare(
+          `SELECT id, parent_id as parentId
+           FROM spans WHERE session_id = ? ORDER BY start_time`,
+        )
+        .all('legacy-codex'),
+    ).toEqual([
+      { id: 'codex:legacy-codex:legacy-turn', parentId: null },
+      {
+        id: 'codex:legacy-codex:legacy-answer',
+        parentId: 'codex:legacy-codex:legacy-turn',
+      },
+    ]);
+    expect(
+      database.prepare('SELECT tags, notes FROM sessions WHERE id = ?').get('legacy-codex'),
+    ).toEqual({ tags: 'keep-tag', notes: 'keep-note' });
     database.close();
   });
 

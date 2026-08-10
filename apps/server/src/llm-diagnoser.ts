@@ -74,16 +74,25 @@ interface PromptBuildResult {
   payload: SemanticDiagnosisReport['payload'];
 }
 
+function spanReference(index: number): string {
+  return `span-${index + 1}`;
+}
+
 function buildPrompt(ctx: LlmDiagnoseContext): PromptBuildResult {
   const taskTitle = redactSensitiveText(ctx.taskTitle || 'Unknown', MAX_TASK_TITLE_CHARACTERS);
-  const thinkingItems = ctx.thinkingTexts.slice(0, 5).map((thinking) => {
+  const thinkingItems = ctx.thinkingTexts.slice(0, 5).map((thinking, index) => {
     const text = redactSensitiveText(thinking.text, MAX_THINKING_CHARACTERS);
-    return { id: thinking.spanId.slice(0, 8), text };
+    return { id: spanReference(index), text };
   });
-  const toolItems = ctx.toolCallSequence.slice(0, 20).map((tool) => {
+  const toolItems = ctx.toolCallSequence.slice(0, 20).map((tool, index) => {
     const name = redactSensitiveText(tool.name, MAX_TOOL_INPUT_CHARACTERS);
     const input = redactSensitiveText(tool.input, MAX_TOOL_INPUT_CHARACTERS);
-    return { isError: tool.isError, name, input, id: tool.spanId.slice(0, 8) };
+    return {
+      isError: tool.isError,
+      name,
+      input,
+      id: spanReference(ctx.thinkingTexts.length + index),
+    };
   });
   const redactions = [
     taskTitle.redactions,
@@ -295,9 +304,9 @@ export function createLlmDiagnoser(
     }
 
     const spanIdsByReference = new Map<string, string>(
-      [...ctx.thinkingTexts, ...ctx.toolCallSequence].flatMap((item) => [
+      [...ctx.thinkingTexts, ...ctx.toolCallSequence].flatMap((item, index) => [
         [item.spanId, item.spanId],
-        [item.spanId.slice(0, 8), item.spanId],
+        [spanReference(index), item.spanId],
       ]),
     );
     const call =

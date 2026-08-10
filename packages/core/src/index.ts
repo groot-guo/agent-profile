@@ -215,3 +215,4 @@ export {
   type VerificationStatus,
 } from './task-profile';
 export type * from './types';
+export { isCrossSessionSpan } from './types';

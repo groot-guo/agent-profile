@@ -207,6 +207,36 @@ describe('analyzeSession', () => {
     expect(summary.totalCost).toBe(0);
   });
 
+  it('excludes cross-session evidence from child session aggregates', () => {
+    const spans: Span[] = [
+      makeTurn({
+        id: 'inherited',
+        model: 'unknown-model',
+        inputTokens: 900,
+        outputTokens: 90,
+        metadata: { ownershipStatus: 'cross_session' },
+      }),
+      makeTurn({
+        id: 'child',
+        model: 'deepseek-v4-flash',
+        inputTokens: 1_000_000,
+        startTime: 2000,
+      }),
+    ];
+    const parsed: ParsedSession = {
+      sessionId: 'sess-1',
+      meta: { filePath: '/tmp/test.jsonl', startTime: 1000, messageCount: 2, agent: 'codex' },
+      spans,
+    };
+
+    const { summary } = analyzeSession(parsed, pricingLookup);
+    expect(summary.inputTokens).toBe(1_000_000);
+    expect(summary.outputTokens).toBe(0);
+    expect(summary.costUnknownCount).toBe(0);
+    expect(summary.costStatus).toBe('complete');
+    expect(summary.messageCount).toBe(2);
+  });
+
   it('sets cost for priced models', () => {
     const spans: Span[] = [
       makeTurn({

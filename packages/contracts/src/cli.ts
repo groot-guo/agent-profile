@@ -255,12 +255,7 @@ export interface CliDiagnosisReport {
     semantic: {
       requested: boolean;
       consent: 'not_granted' | 'granted';
-      status:
-        | 'not_requested'
-        | 'not_configured'
-        | 'insufficient_evidence'
-        | 'completed'
-        | 'failed';
+      status: 'not_requested' | 'not_configured' | 'insufficient_evidence' | 'completed' | 'failed';
       provider: 'anthropic' | 'openai' | null;
       audit: {
         recorded: boolean;
@@ -276,7 +271,14 @@ export interface CliDiagnosisReport {
 export type CliEvidenceSpanType = 'llm_turn' | 'tool_call' | 'thinking' | 'answer';
 export type CliEvidenceLane = 'main' | 'sidechain';
 export type CliEvidenceOutcome = 'observed_error' | 'no_error_observed' | 'not_applicable';
-export type CliEvidenceParentLink = 'root' | 'linked' | 'missing_parent';
+export type CliEvidenceParentLink =
+  | 'root'
+  | 'linked'
+  | 'missing_parent'
+  | 'cross_session'
+  | 'source_user'
+  | 'corrupted_ownership'
+  | 'not_captured';
 
 export interface CliEvidenceCoverage {
   observed: number;

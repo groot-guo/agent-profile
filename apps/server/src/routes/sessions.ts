@@ -15,6 +15,7 @@ import {
   type DiagnosisResult,
   diagnoseSessionSync,
   type EfficiencyScore,
+  isCrossSessionSpan,
   SESSION_ANALYSIS_SCHEMA_VERSION,
   type SessionDetail,
   type SessionSummary,
@@ -29,6 +30,7 @@ import {
   listPrimarySessionSummaries,
   SessionDiscoveryError,
 } from '../session-discovery-service';
+import { ownershipExcludedExpression } from '../session-evidence-service';
 import { loadSessionRelationships } from '../session-relationships';
 import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
@@ -302,10 +304,13 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
   app.get<{ Params: { id: string } }>('/api/session/:id/context', async (req) => {
     const rows = db
       .prepare(
-        `SELECT start_time as startTime, context_tokens as contextTokens,
-              input_tokens as inputTokens, cache_creation_tokens as cacheCreationTokens,
-              cache_read_tokens as cacheReadTokens, model
-       FROM spans WHERE session_id = ? AND type = 'llm_turn' ORDER BY start_time ASC`,
+        `SELECT start_time AS startTime, context_tokens AS contextTokens,
+          input_tokens AS inputTokens, cache_creation_tokens AS cacheCreationTokens,
+          cache_read_tokens AS cacheReadTokens, model
+         FROM spans s
+         WHERE s.session_id = ? AND s.type = 'llm_turn'
+           AND NOT ${ownershipExcludedExpression('s.')}
+         ORDER BY s.start_time ASC, s.id ASC`,
       )
       .all(req.params.id) as {
       startTime: number;
@@ -313,9 +318,12 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
       inputTokens: number;
       cacheCreationTokens: number;
       cacheReadTokens: number;
-      model?: string;
+      model: string | null;
     }[];
-    return rows.map((r) => ({ ...r, contextWindow: getModelContext(r.model) ?? null }));
+    return rows.map((span) => ({
+      ...span,
+      contextWindow: getModelContext(span.model ?? undefined) ?? null,
+    }));
   });
 
   // Detail-page data is derived from the same span set. Serve it in one read so
@@ -354,7 +362,7 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
     const analysis = await buildSessionAnalysisMetrics(runtime, session, spans);
 
     const context = spans
-      .filter((span) => span.type === 'llm_turn')
+      .filter((span) => !isCrossSessionSpan(span) && span.type === 'llm_turn')
       .map((span) => ({
         startTime: span.startTime,
         contextTokens: span.contextTokens,

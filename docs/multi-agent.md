@@ -54,6 +54,14 @@ was not used.
   import order does not discard metadata already supplied by the other side;
 - the parent Session may be unavailable or absent locally, so detail must
   distinguish linked, parent-unavailable, and not-captured states;
+- normalized Codex Span IDs use `codex:<session>:<source-id>` and same-Session
+  parent IDs use the same scope. A copied parent context in a child rollout is
+  retained as evidence with `ownershipStatus=cross_session`, but its inherited
+  model and token values are not attributed to the child. Child Session token,
+  cost, context, cache, analysis, and diagnosis aggregates exclude those
+  inherited blocks while evidence remains available for audit. Evidence APIs
+  also preserve `source_user`, `corrupted_ownership`, and `not_captured`
+  ownership states when the source marks them;
 - titles, `cwd`, source paths, timestamps, models, and other sources' event-level
   parent IDs must not be used to infer a persisted Session relationship;
 - primary Session lists, statistics, project cohorts, Agent Process Profiles,

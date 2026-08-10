@@ -35,6 +35,7 @@ import {
 import { ContextChart } from './context-chart';
 import { DiagnosisList, SemanticDiagnosisDisclosure } from './diagnosis-panels';
 import { parseEvidenceSpanIds } from './evidence-data';
+import { isCrossSessionEvidence } from './evidence-display';
 import { EvidencePanel } from './evidence-panel';
 import { cacheAbsenceLabel, contextAbsenceLabel, costAbsenceDisplay } from './session-absence';
 import {
@@ -110,10 +111,11 @@ async function loadSessionAnalysis(id: string, signal: AbortSignal): Promise<Ses
 function buildLegacyAnalysisWindows(
   spans: Span[],
 ): Pick<SessionAnalysis, 'spanSummary' | 'toolWindow' | 'sidechainTurnWindow'> {
-  const turns = spans.filter((span) => span.type === 'llm_turn');
-  const mainTools = spans.filter((span) => span.type === 'tool_call' && !span.isSidechain);
+  const ownedSpans = spans.filter((span) => !isCrossSessionEvidence(span));
+  const turns = ownedSpans.filter((span) => span.type === 'llm_turn');
+  const mainTools = ownedSpans.filter((span) => span.type === 'tool_call' && !span.isSidechain);
   const sidechainTurns = turns.filter((turn) => turn.isSidechain);
-  const sidechainTools = spans.filter((span) => span.type === 'tool_call' && span.isSidechain);
+  const sidechainTools = ownedSpans.filter((span) => span.type === 'tool_call' && span.isSidechain);
   const toolStats = new Map<string, { total: number; errors: number }>();
   for (const tool of mainTools) {
     const current = toolStats.get(tool.name) ?? { total: 0, errors: 0 };
@@ -128,7 +130,7 @@ function buildLegacyAnalysisWindows(
   );
   return {
     spanSummary: {
-      events: spans.length,
+      events: ownedSpans.length,
       llmTurns: turns.length,
       mainToolCalls: mainTools.length,
       sidechainToolCalls: sidechainTools.length,
@@ -326,8 +328,7 @@ export default function SessionPage() {
 
   const dur = data.endTime ? data.endTime - data.startTime : 0;
   const llmTurnCount = spanSummary.llmTurns;
-  const totalInputTokens =
-    data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens;
+  const totalInputTokens = data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens;
   const contextAbsence = contextAbsenceLabel(data, llmTurnCount);
   const cacheAbsence = cacheAbsenceLabel(data, totalInputTokens);
   const costAbsence = costAbsenceDisplay(data);

@@ -111,6 +111,16 @@ export interface Span {
   metadata?: Record<string, unknown>;
 }
 
+export function isCrossSessionSpan(span: Pick<Span, 'metadata'>): boolean {
+  const ownership = span.metadata?.ownershipStatus ?? span.metadata?.parentStatus;
+  return (
+    ownership === 'cross_session' ||
+    ownership === 'source_user' ||
+    ownership === 'corrupted_ownership' ||
+    ownership === 'not_captured'
+  );
+}
+
 /**
  * Source-faithful token usage origin. Absent means the source did not capture
  * usage for this Span; the numeric zero on the Span is "not captured", never a

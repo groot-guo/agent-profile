@@ -272,6 +272,69 @@ describe('session evidence route', () => {
     });
     await app.close();
   });
+
+  it('returns ownership states and omits LLM fields from non-LLM blocks', async () => {
+    const { app, database } = createApp();
+    database
+      .prepare(
+        `INSERT INTO sessions (id, file_path, agent, start_time, end_time)
+         VALUES ('ownership-session', 'fixture://ownership', 'codex', 100, 200)`,
+      )
+      .run();
+    const insert = database.prepare(
+      `INSERT INTO spans (
+        id, session_id, type, name, start_time, model, cost, cost_unknown, metadata
+      ) VALUES (?, 'ownership-session', ?, ?, ?, ?, ?, 0, ?)`,
+    );
+    insert.run(
+      'cross',
+      'llm_turn',
+      'cross-session',
+      100,
+      'parent-model',
+      1,
+      JSON.stringify({ ownershipStatus: 'cross_session', sourceSessionId: 'parent-session' }),
+    );
+    insert.run(
+      'thinking',
+      'thinking',
+      'thinking',
+      101,
+      'inherited-model',
+      2,
+      JSON.stringify({ ownershipStatus: 'source_user', thinking: 'bounded' }),
+    );
+    database
+      .prepare(
+        `INSERT INTO spans (
+          id, session_id, parent_id, type, name, start_time, metadata
+        ) VALUES ('answer', 'ownership-session', 'cross', 'answer', 'answer', 102, ?)`,
+      )
+      .run(JSON.stringify({ ownershipStatus: 'cross_session', text: 'bounded' }));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/session/ownership-session/evidence-page?content=preview',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ parentLink: 'cross_session', model: 'parent-model' }),
+        expect.objectContaining({
+          parentLink: 'source_user',
+          model: null,
+          metrics: expect.objectContaining({ cost: null, costCurrency: null }),
+        }),
+      ]),
+    );
+    expect(response.json().coverage.parentLinks).toMatchObject({
+      observed: 0,
+      total: 1,
+      status: 'not_captured',
+    });
+    await app.close();
+  });
 });
 
 function createApp() {

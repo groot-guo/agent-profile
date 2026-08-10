@@ -462,7 +462,7 @@ improve throughput.
 | Agent | Local source | Import model |
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
-| Codex | dated rollout JSONL plus the read-only `~/.codex/state_*.sqlite` metadata database | parser-contract revision plus file mtime/size and matched state-record fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), exact state-record title/agent identity, captured `session_meta.cwd` project evidence when present, per-turn `turn_context.payload.model`, response items, events, and call IDs |
+| Codex | dated rollout JSONL plus the read-only `~/.codex/state_*.sqlite` metadata database | parser-contract revision plus file mtime/size and matched state-record fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), exact state-record title/agent identity, captured `session_meta.cwd` project evidence when present, per-turn `turn_context.payload.model`, response items, events, and call IDs; generated Span IDs are scoped as `codex:<session>:<source-id>` |
 | Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `mimo-v2` parser-contract revision plus `time_updated`, message/part counts, and a hashed `external_import` metadata fingerprint; exact `cc` imports whose absolute `source_path` is below `~/.claude/projects` are excluded before message/part loading, while native and ambiguous rows remain source-visible |
 | OpenCode | `opencode.db` SQLite database | parser-contract version plus `time_updated` and message/part counts; changed Session rows and their message/part evidence are loaded lazily from a read-only connection |
@@ -529,8 +529,12 @@ child rollout.
 Each modern Codex LLM turn takes its model from that turn's captured
 `turn_context.payload.model`. `session_meta.model_provider` is provider evidence,
 not a concrete model, and is never promoted into `Span.model`. Advancing the
-Codex parser revision to `codex-v5` makes an ordinary sync atomically replace
-stale provider-labelled rows once; no generated-data reset is required.
+Codex parser revision to `codex-v6` makes an ordinary sync atomically replace
+stale provider-labelled rows once; no generated-data reset is required. Codex
+Span IDs and same-Session parent IDs are scoped with the normalized Session ID,
+so parent and child rollouts cannot overwrite each other when source turn IDs
+are reused. Migration 18 backfills the same scope for existing Codex rows while
+preserving Session annotations.
 Migrated Codex rollouts without `turn_context` (including review-mode records)
 name process turns in `task_started` while messages carry their real LLM turn in
 `internal_chat_message_metadata_passthrough.turn_id`. The parser prefers that
@@ -538,7 +542,13 @@ per-message turn id when present, so assistant answers link to the LLM turn that
 actually produced them instead of a process turn with no LLM evidence; a
 review-mode Session then shows one root LLM turn (with no captured token
 telemetry) and its answer beneath it, rather than a dangling "parent not
-captured" relationship.
+captured" relationship. Child rollouts that contain a copied parent context
+are merged by raw turn ID; those inherited blocks remain inspectable but carry
+`ownershipStatus=cross_session`, omit inherited model/token values, and expose
+that cross-Session status in evidence instead of attributing parent usage to
+the child. Session token, cost, context, cache, analysis, and diagnosis
+aggregates exclude those inherited blocks; the evidence surface retains them
+for auditability.
 
 ## Persistence model
 
@@ -550,7 +560,8 @@ captured" relationship.
   token totals; context, cache, cost, duration, annotation tags, and notes.
 - `spans` — normalized `llm_turn`, `thinking`, `answer`, and `tool_call`
   evidence, token/context/cost fields, selected pricing model/revision, timing,
-  parent/sidechain links, tool input/output metadata, and truncation-safe content.
+  Session-scoped IDs, parent/sidechain links, ownership status, tool
+  input/output metadata, and truncation-safe content.
 - `session_relationships` — source-native child-to-parent Session IDs, source
   kind, import update time, optional child agent identity, and optional
   source-captured call/callback evidence. It deliberately permits an
@@ -609,6 +620,11 @@ Migration v7 (`bounded_session_evidence`) adds
 `idx_spans_session_time_id` on `spans(session_id, start_time, id)`. Existing
 rows need no data backfill: the index provides stable keyset order for bounded
 evidence pages while the stored Session/Span model remains unchanged.
+
+Migration v18 (`codex_session_scoped_span_ids`) backfills Codex-generated Span
+and same-Session parent IDs through a temporary prefix before writing the
+`codex:<session>:<source-id>` form. It is additive, idempotent, and does not
+rewrite Session annotations or unresolved parent references.
 
 Prompt-review requests and results are not part of this persistence model. The
 server processes prompt text within one request and neither inserts it into
@@ -820,9 +836,11 @@ maximum limit of 200. Server-side type, main/Sidechain lane, and outcome filters
 return explicit loaded, matched, and total counts. Every matching event remains
 reachable by following `nextCursor`; global sequence and root/linked/missing-parent
 status are still computed against the complete stored Session even when a parent
-is outside the current page. Each event exposes:
+is outside the current page. Ownership-aware references additionally expose
+`cross_session`, `source_user`, `corrupted_ownership`, and `not_captured` when
+the source marks those states. Each event exposes:
 
-- root/linked/missing-parent relationship and main/sidechain lane;
+- root/linked/missing-parent or ownership-aware relationship and main/sidechain lane;
 - start time, captured end time/duration, model identity, token/context,
   output-size, and known cost fields;
 - `observed_error`, `no_error_observed`, or `not_applicable` outcome wording;
@@ -844,7 +862,10 @@ per available field after common secret redaction. It also reports whether the
 parser had already truncated the stored source. There is no full-raw-content mode
 in either evidence API.
 
-`session-analysis/v1` powers the first Session-detail render. It omits the
+Answer and thinking blocks keep their own content evidence but do not display
+LLM model, token, or cost fields; those fields are applicable only to an
+`llm_turn` and remain explicitly not captured when the source did not provide
+them. `session-analysis/v1` powers the first Session-detail render. It omits the
 complete Span array and all metadata/content while retaining the existing
 analysis, diagnosis, efficiency, attribution, performance, and score results.
 Its context series contains at most 240 representative points, the main-chain

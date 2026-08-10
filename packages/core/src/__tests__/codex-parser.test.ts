@@ -80,6 +80,145 @@ describe('parseCodexTranscript', () => {
     expect(parsed?.spans.every((span) => span.isSidechain)).toBe(true);
   });
 
+  it('scopes inherited parent-context spans and does not attribute parent usage to a child', () => {
+    const entries: CodexEntry[] = [
+      {
+        timestamp: '2026-08-10T06:53:00.000Z',
+        type: 'session_meta',
+        payload: {
+          id: 'child-session',
+          session_id: 'parent-session',
+          parent_thread_id: 'parent-session',
+        },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.001Z',
+        type: 'session_meta',
+        payload: { id: 'parent-session', session_id: 'parent-session' },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.002Z',
+        type: 'event_msg',
+        payload: { type: 'task_started', turn_id: 'parent-turn' },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.003Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'inherited answer' }],
+          internal_chat_message_metadata_passthrough: { turn_id: 'parent-turn' },
+        },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.004Z',
+        type: 'turn_context',
+        payload: { turn_id: 'parent-turn', model: 'parent-model' },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.005Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: { last_token_usage: { input_tokens: 900, output_tokens: 90 } },
+        },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.006Z',
+        type: 'turn_context',
+        payload: { turn_id: 'parent-turn-2', model: 'parent-model-2' },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.006Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'second inherited answer' }],
+          internal_chat_message_metadata_passthrough: { turn_id: 'parent-turn-2' },
+        },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.006Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: { last_token_usage: { input_tokens: 800, output_tokens: 80 } },
+        },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.007Z',
+        type: 'event_msg',
+        payload: { type: 'task_started', turn_id: 'child-turn' },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.008Z',
+        type: 'turn_context',
+        payload: { turn_id: 'child-turn', model: 'child-model' },
+      },
+      {
+        timestamp: '2026-08-10T06:53:00.009Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: { last_token_usage: { input_tokens: 9, output_tokens: 3 } },
+        },
+      },
+    ];
+
+    const parsed = parseCodexTranscript(entries, { filePath: '/codex/child-context.jsonl' });
+    const spans = parsed?.spans ?? [];
+    expect(new Set(spans.map((span) => span.id)).size).toBe(spans.length);
+    expect(spans.every((span) => span.id.startsWith('codex:child-session:'))).toBe(true);
+    expect(spans.filter((span) => span.id.includes('parent-turn'))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'llm_turn',
+          model: undefined,
+          inputTokens: 0,
+          outputTokens: 0,
+          metadata: expect.objectContaining({
+            ownershipStatus: 'cross_session',
+            sourceSessionId: 'parent-session',
+            tokenUsageSource: 'not_captured',
+          }),
+        }),
+        expect.objectContaining({
+          type: 'answer',
+          parentId: 'codex:child-session:parent-turn',
+          metadata: expect.objectContaining({ ownershipStatus: 'cross_session' }),
+        }),
+      ]),
+    );
+    expect(spans.filter((span) => span.id.includes('parent-turn-2'))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'llm_turn',
+          model: undefined,
+          inputTokens: 0,
+          outputTokens: 0,
+          metadata: expect.objectContaining({ ownershipStatus: 'cross_session' }),
+        }),
+        expect.objectContaining({
+          type: 'answer',
+          parentId: 'codex:child-session:parent-turn-2',
+          metadata: expect.objectContaining({ ownershipStatus: 'cross_session' }),
+        }),
+      ]),
+    );
+    expect(spans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'codex:child-session:child-turn',
+          inputTokens: 9,
+          outputTokens: 3,
+          model: 'child-model',
+        }),
+      ]),
+    );
+  });
+
   it('uses the exact state-record title instead of agent reasoning text', () => {
     const entries = rollout({ id: 'titled-thread', session_id: 'titled-thread' });
     entries.splice(2, 0, {
@@ -94,6 +233,67 @@ describe('parseCodexTranscript', () => {
     });
 
     expect(parsed?.meta.name).toBe('修复 Codex 会话关系');
+  });
+
+  it('keeps a live child turn owned by the child when no task boundary is captured', () => {
+    const entries: CodexEntry[] = [
+      {
+        timestamp: '2026-08-10T06:54:00.000Z',
+        type: 'session_meta',
+        payload: { id: 'child-session', parent_thread_id: 'parent-session' },
+      },
+      {
+        timestamp: '2026-08-10T06:54:00.001Z',
+        type: 'session_meta',
+        payload: { id: 'parent-session' },
+      },
+      {
+        timestamp: '2026-08-10T06:54:00.002Z',
+        type: 'turn_context',
+        payload: { turn_id: 'parent-turn', model: 'parent-model' },
+      },
+      {
+        timestamp: '2026-08-10T06:54:00.003Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: { last_token_usage: { input_tokens: 900, output_tokens: 90 } },
+        },
+      },
+      {
+        timestamp: '2026-08-10T06:54:00.004Z',
+        type: 'turn_context',
+        payload: { turn_id: 'child-turn', model: 'child-model' },
+      },
+      {
+        timestamp: '2026-08-10T06:54:00.005Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: { last_token_usage: { input_tokens: 9, output_tokens: 3 } },
+        },
+      },
+    ];
+
+    const parsed = parseCodexTranscript(entries, { filePath: '/codex/child-context.jsonl' });
+    const spans = parsed?.spans ?? [];
+    expect(parsed?.meta.messageCount).toBe(1);
+    expect(spans).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'codex:child-session:parent-turn',
+          model: undefined,
+          inputTokens: 0,
+          metadata: expect.objectContaining({ ownershipStatus: 'cross_session' }),
+        }),
+        expect.objectContaining({
+          id: 'codex:child-session:child-turn',
+          model: 'child-model',
+          inputTokens: 9,
+          outputTokens: 3,
+        }),
+      ]),
+    );
   });
 
   it('keeps a missing source title absent instead of deriving one from reasoning', () => {
@@ -366,8 +566,8 @@ describe('parseCodexTranscript', () => {
     const answers = parsed?.spans.filter((span) => span.type === 'answer') ?? [];
     expect(answers).toHaveLength(1);
     // answer 必须归属到消息真实 LLM turn，而不是 task_started 的进程 turn。
-    expect(answers[0].parentId).toBe('review-process-turn');
-    expect(answers[0].id).toMatch(/^review-process-turn-answer-/);
+    expect(answers[0].parentId).toBe('codex:review-session:review-process-turn');
+    expect(answers[0].id).toMatch(/^codex:review-session:review-process-turn-answer-/);
   });
 
   it('keeps model identity unknown when only a provider is captured', () => {

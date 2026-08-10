@@ -537,8 +537,18 @@ describe('session ingestion boundary', () => {
         )
         .all('modern-codex-session'),
     ).toEqual([
-      { id: 'modern-turn', model: 'gpt-5.6-sol', inputTokens: 100, outputTokens: 15 },
-      { id: 'modern-turn-2', model: 'gpt-5.6-sol', inputTokens: 100, outputTokens: 15 },
+      {
+        id: 'codex:modern-codex-session:modern-turn',
+        model: 'gpt-5.6-sol',
+        inputTokens: 100,
+        outputTokens: 15,
+      },
+      {
+        id: 'codex:modern-codex-session:modern-turn-2',
+        model: 'gpt-5.6-sol',
+        inputTokens: 100,
+        outputTokens: 15,
+      },
     ]);
 
     appendFileSync(
@@ -602,7 +612,7 @@ describe('session ingestion boundary', () => {
 
     const adapter = new TranscriptSourceAdapter(directory, 'codex');
     const [item] = await adapter.discover();
-    expect(item.revision.fingerprint).toMatch(/^file:codex-v5:/);
+    expect(item.revision.fingerprint).toMatch(/^file:codex-v6:/);
     expect(await importFromSource(adapter, repository)).toMatchObject({
       imported: 0,
       updated: 0,

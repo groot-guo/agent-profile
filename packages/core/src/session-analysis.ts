@@ -1,4 +1,5 @@
 import type { Span } from './types';
+import { isCrossSessionSpan } from './types';
 
 export const SESSION_ANALYSIS_SCHEMA_VERSION = 'session-analysis/v1' as const;
 export const MAX_ANALYSIS_CONTEXT_POINTS = 240;
@@ -74,11 +75,13 @@ export function buildSessionAnalysisWindows(
   spans: Span[],
   contextWindowLookup: (model?: string) => number | undefined,
 ): SessionAnalysisWindows {
-  const ordered = [...spans].sort((left, right) =>
-    left.startTime === right.startTime
-      ? left.id.localeCompare(right.id)
-      : left.startTime - right.startTime,
-  );
+  const ordered = spans
+    .filter((span) => !isCrossSessionSpan(span))
+    .sort((left, right) =>
+      left.startTime === right.startTime
+        ? left.id.localeCompare(right.id)
+        : left.startTime - right.startTime,
+    );
   const turns = ordered.filter((span) => span.type === 'llm_turn');
   const tools = ordered.filter((span) => span.type === 'tool_call');
   const mainTools = tools.filter((span) => !span.isSidechain);

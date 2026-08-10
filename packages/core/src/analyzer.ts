@@ -15,6 +15,7 @@ import type {
   ThinkingActionRatio,
   ToolSuccessRate,
 } from './types';
+import { isCrossSessionSpan } from './types';
 
 export interface FileMeta {
   mtime: number;
@@ -46,6 +47,13 @@ export function analyzeSession(
 
   for (const span of parsed.spans) {
     if (span.type === 'llm_turn') {
+      if (isCrossSessionSpan(span)) {
+        span.contextTokens = 0;
+        span.cost = 0;
+        span.costUnknown = true;
+        span.costStatus = 'token_usage_not_captured';
+        continue;
+      }
       span.contextTokens =
         (span.inputTokens || 0) + (span.cacheCreationTokens || 0) + (span.cacheReadTokens || 0);
       const pricing = pricingLookup(span.model, span.startTime);
@@ -161,13 +169,14 @@ function extractFilePath(toolInput: unknown): string | undefined {
 const FILE_TOOLS = new Set(['Read', 'Write', 'Edit']);
 
 export function analyzeEfficiency(spans: Span[]): EfficiencyMetrics {
-  const tools = spans
+  const ownedSpans = spans.filter((span) => !isCrossSessionSpan(span));
+  const tools = ownedSpans
     .filter((s) => s.type === 'tool_call')
     .sort((a, b) => a.startTime - b.startTime);
-  const turns = spans
+  const turns = ownedSpans
     .filter((s) => s.type === 'llm_turn')
     .sort((a, b) => a.startTime - b.startTime);
-  const thinkings = spans.filter((s) => s.type === 'thinking');
+  const thinkings = ownedSpans.filter((s) => s.type === 'thinking');
 
   // 1. Tool success rates
   const toolStats = new Map<string, { total: number; errors: number }>();
@@ -312,10 +321,11 @@ export function calcEfficiencyScore(
 }
 
 export function analyzeCostAttribution(spans: Span[], wastedCost?: number): CostAttribution {
-  const turns = spans
+  const ownedSpans = spans.filter((span) => !isCrossSessionSpan(span));
+  const turns = ownedSpans
     .filter((s) => s.type === 'llm_turn')
     .sort((a, b) => a.startTime - b.startTime);
-  const tools = spans.filter((s) => s.type === 'tool_call');
+  const tools = ownedSpans.filter((s) => s.type === 'tool_call');
 
   const totalCost = turns.reduce((s, t) => s + (t.cost || 0), 0);
 
@@ -417,10 +427,11 @@ function latencyStats(durations: number[]): LatencyStats {
 }
 
 export function analyzePerformance(spans: Span[]): PerformanceMetrics {
-  const turns = spans
+  const ownedSpans = spans.filter((span) => !isCrossSessionSpan(span));
+  const turns = ownedSpans
     .filter((s) => s.type === 'llm_turn')
     .sort((a, b) => a.startTime - b.startTime);
-  const tools = spans.filter((s) => s.type === 'tool_call');
+  const tools = ownedSpans.filter((s) => s.type === 'tool_call');
 
   // Turn latency
   const turnDurations = turns
@@ -515,6 +526,7 @@ export interface ToolParamAnalysis {
 
 export function analyzeToolParams(spans: Span[]): ToolParamAnalysis {
   const tools = spans
+    .filter((span) => !isCrossSessionSpan(span))
     .filter((s) => s.type === 'tool_call')
     .sort((a, b) => a.startTime - b.startTime);
 

@@ -260,9 +260,11 @@ function loadAggregates(
         COALESCE(SUM(CASE WHEN s.type <> 'tool_call' THEN 1 ELSE 0 END), 0) AS notApplicable,
         COALESCE(SUM(CASE WHEN s.end_time IS NOT NULL AND s.end_time >= s.start_time THEN 1 ELSE 0 END), 0) AS timingObserved,
         COALESCE(SUM(CASE WHEN s.parent_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS parentCandidates,
-        COALESCE(SUM(CASE WHEN s.parent_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM spans parent WHERE parent.session_id = s.session_id AND parent.id = s.parent_id
-        ) THEN 1 ELSE 0 END), 0) AS parentObserved,
+        COALESCE(SUM(CASE WHEN s.parent_id IS NOT NULL
+          AND NOT ${ownershipExcludedExpression('s.')}
+          AND EXISTS (
+            SELECT 1 FROM spans parent WHERE parent.session_id = s.session_id AND parent.id = s.parent_id
+          ) THEN 1 ELSE 0 END), 0) AS parentObserved,
         COALESCE(SUM(CASE WHEN s.type = 'tool_call' AND ${jsonAvailable('s.', 'input')} THEN 1 ELSE 0 END), 0) AS toolInputsObserved,
         COALESCE(SUM(CASE WHEN s.type = 'tool_call' AND ${jsonAvailable('s.', 'output')} THEN 1 ELSE 0 END), 0) AS toolOutputsObserved,
         COALESCE(SUM(CASE WHEN s.type = 'llm_turn' AND NULLIF(TRIM(s.model), '') IS NOT NULL THEN 1 ELSE 0 END), 0) AS modelObserved,
@@ -295,6 +297,30 @@ function loadRows(
           s.id,
           s.parent_id AS parentId,
           CASE
+            WHEN json_valid(s.metadata) AND COALESCE(
+              json_extract(s.metadata, '$.ownershipStatus'),
+              json_extract(s.metadata, '$.parentStatus')
+            ) IN (
+              'cross_session', 'source_user', 'corrupted_ownership', 'not_captured'
+            ) THEN COALESCE(
+              json_extract(s.metadata, '$.ownershipStatus'),
+              json_extract(s.metadata, '$.parentStatus')
+            )
+            WHEN json_valid(s.metadata)
+              AND COALESCE(
+                json_extract(s.metadata, '$.sourceSessionId'),
+                json_extract(s.metadata, '$.parentSessionId'),
+                json_extract(s.metadata, '$.sourceParentSessionId')
+              ) IS NOT NULL
+              AND COALESCE(
+                json_extract(s.metadata, '$.sourceSessionId'),
+                json_extract(s.metadata, '$.parentSessionId'),
+                json_extract(s.metadata, '$.sourceParentSessionId')
+              ) <> s.session_id
+              THEN 'cross_session'
+            WHEN json_valid(s.metadata)
+              AND json_extract(s.metadata, '$.parentSource') = 'user'
+              THEN 'source_user'
             WHEN s.parent_id IS NULL THEN 'root'
             WHEN EXISTS (
               SELECT 1 FROM spans parent
@@ -463,7 +489,7 @@ function toEvidenceEvent(row: EvidenceRow, content: EvidenceContentMode): Sessio
     startTime: row.startTime,
     endTime,
     durationMs: endTime === null ? null : endTime - row.startTime,
-    model: row.model,
+    model: isLlmTurn ? row.model : null,
     coverage: {
       tokenUsage: {
         status: !isLlmTurn
@@ -484,7 +510,7 @@ function toEvidenceEvent(row: EvidenceRow, content: EvidenceContentMode): Sessio
           (row.tokenUsageSource === null || row.tokenUsageSource === 'not_captured') &&
           row.stubTurn === 1,
       },
-      modelCaptured: row.modelCaptured === 1,
+      modelCaptured: isLlmTurn && row.modelCaptured === 1,
     },
     metrics: {
       inputTokens: row.inputTokens,
@@ -493,8 +519,8 @@ function toEvidenceEvent(row: EvidenceRow, content: EvidenceContentMode): Sessio
       outputTokens: row.outputTokens,
       contextTokens: row.contextTokens,
       outputBytes: row.outputBytes,
-      cost: row.costUnknown === 1 ? null : row.cost,
-      costCurrency: row.costUnknown === 1 ? null : row.costCurrency,
+      cost: !isLlmTurn || row.costUnknown === 1 ? null : row.cost,
+      costCurrency: !isLlmTurn || row.costUnknown === 1 ? null : row.costCurrency,
     },
     content: {
       status: fields.some((field) => field.status === 'available') ? 'available' : 'not_captured',
@@ -597,6 +623,23 @@ function jsonTruncated(prefix: string, field: ContentFieldName): string {
   return `(CASE WHEN ${jsonAvailable(prefix, field)} THEN
     INSTR(${value}, '[truncated ') > 0 AND INSTR(${value}, ' chars]') > 0
     ELSE 0 END)`;
+}
+
+export function ownershipExcludedExpression(prefix: string): string {
+  const ownership = `COALESCE(
+    json_extract(${prefix}metadata, '$.ownershipStatus'),
+    json_extract(${prefix}metadata, '$.parentStatus')
+  )`;
+  const sourceSession = `COALESCE(
+    json_extract(${prefix}metadata, '$.sourceSessionId'),
+    json_extract(${prefix}metadata, '$.parentSessionId'),
+    json_extract(${prefix}metadata, '$.sourceParentSessionId')
+  )`;
+  return `(json_valid(${prefix}metadata) AND (
+    ${ownership} IN ('cross_session', 'source_user', 'corrupted_ownership', 'not_captured')
+    OR (${sourceSession} IS NOT NULL AND ${sourceSession} <> ${prefix}session_id)
+    OR json_extract(${prefix}metadata, '$.parentSource') = 'user'
+  ))`;
 }
 
 function evidenceQueryKey(sessionId: string, options: NormalizedOptions): string {

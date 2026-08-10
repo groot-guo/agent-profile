@@ -7,7 +7,14 @@ export const MAX_EVIDENCE_PREVIEW_CHARACTERS = 500;
 export type EvidenceContentMode = 'none' | 'preview';
 export type EvidenceLane = 'main' | 'sidechain';
 export type EvidenceOutcome = 'observed_error' | 'no_error_observed' | 'not_applicable';
-export type ParentLinkStatus = 'root' | 'linked' | 'missing_parent';
+export type ParentLinkStatus =
+  | 'root'
+  | 'linked'
+  | 'missing_parent'
+  | 'cross_session'
+  | 'source_user'
+  | 'corrupted_ownership'
+  | 'not_captured';
 export type EvidenceFieldStatus = 'available' | 'not_captured';
 export type CoverageStatus = 'complete' | 'partial' | 'not_captured' | 'not_applicable';
 export type TokenCoverageStatus = 'captured' | 'not_captured' | 'not_applicable';
@@ -153,7 +160,7 @@ export function buildSessionEvidenceReport(
     );
   const spanIds = new Set(spans.map((span) => span.id));
   const events = ordered.map(({ span }, index) =>
-    toEvidenceEvent(span, index + 1, spanIds, contentMode),
+    toEvidenceEvent(session.id, span, index + 1, spanIds, contentMode),
   );
   const toolEvents = events.filter((event) => event.type === 'tool_call');
   const turnEvents = events.filter((event) => event.type === 'llm_turn');
@@ -228,6 +235,7 @@ export function buildSessionEvidenceReport(
 }
 
 function toEvidenceEvent(
+  sessionId: string,
   span: Span,
   sequence: number,
   spanIds: Set<string>,
@@ -242,7 +250,7 @@ function toEvidenceEvent(
     sequence,
     id: span.id,
     parentId,
-    parentLink: parentId === null ? 'root' : spanIds.has(parentId) ? 'linked' : 'missing_parent',
+    parentLink: resolveParentLink(sessionId, span, spanIds),
     type: span.type,
     name: span.name,
     lane: span.isSidechain ? 'sidechain' : 'main',
@@ -255,7 +263,7 @@ function toEvidenceEvent(
     startTime: span.startTime,
     endTime,
     durationMs: endTime === null ? null : endTime - span.startTime,
-    model: span.model ?? null,
+    model: isLlmTurn ? (span.model ?? null) : null,
     coverage: {
       tokenUsage: {
         status: !isLlmTurn
@@ -264,17 +272,19 @@ function toEvidenceEvent(
             ? 'not_captured'
             : 'captured',
         source: tokenUsageSource,
-        classified: isLlmTurn && tokenUsageSource !== null && tokenUsageSource !== 'not_captured'
-          ? tokenUsageSource === 'total_tokens_fallback'
-            ? false
-            : (span.metadata?.tokenUsageClassified as boolean) ?? true
-          : false,
+        classified:
+          isLlmTurn && tokenUsageSource !== null && tokenUsageSource !== 'not_captured'
+            ? tokenUsageSource === 'total_tokens_fallback'
+              ? false
+              : ((span.metadata?.tokenUsageClassified as boolean) ?? true)
+            : false,
         stubTurn:
           isLlmTurn &&
           (tokenUsageSource === null || tokenUsageSource === 'not_captured') &&
           span.metadata?.stubTurn === true,
       },
-      modelCaptured: span.model !== undefined && span.model !== null && span.model.trim() !== '',
+      modelCaptured:
+        isLlmTurn && span.model !== undefined && span.model !== null && span.model.trim() !== '',
     },
     metrics: {
       inputTokens: span.inputTokens,
@@ -283,14 +293,46 @@ function toEvidenceEvent(
       outputTokens: span.outputTokens,
       contextTokens: span.contextTokens,
       outputBytes: span.outputBytes,
-      cost: span.costUnknown ? null : span.cost,
-      costCurrency: span.costUnknown ? null : (span.costCurrency ?? null),
+      cost: !isLlmTurn || span.costUnknown ? null : span.cost,
+      costCurrency: !isLlmTurn || span.costUnknown ? null : (span.costCurrency ?? null),
     },
     content: {
       status: fields.some((field) => field.status === 'available') ? 'available' : 'not_captured',
       fields,
     },
   };
+}
+
+function resolveParentLink(sessionId: string, span: Span, spanIds: Set<string>): ParentLinkStatus {
+  const ownership = span.metadata?.ownershipStatus ?? span.metadata?.parentStatus;
+  if (isParentLinkStatus(ownership) && ownership !== 'root' && ownership !== 'linked') {
+    return ownership;
+  }
+  const sourceSessionId = [
+    span.metadata?.sourceSessionId,
+    span.metadata?.parentSessionId,
+    span.metadata?.sourceParentSessionId,
+  ].find((value): value is string => typeof value === 'string');
+  if (typeof sourceSessionId === 'string' && sourceSessionId !== span.sessionId) {
+    return 'cross_session';
+  }
+  if (span.metadata?.parentSource === 'user') return 'source_user';
+  if (span.sessionId !== sessionId) return 'corrupted_ownership';
+  const parentId = span.parentId ?? null;
+  if (parentId === null) return 'root';
+  return spanIds.has(parentId) ? 'linked' : 'missing_parent';
+}
+
+function isParentLinkStatus(value: unknown): value is ParentLinkStatus {
+  return (
+    value === 'root' ||
+    value === 'linked' ||
+    value === 'missing_parent' ||
+    value === 'cross_session' ||
+    value === 'source_user' ||
+    value === 'corrupted_ownership' ||
+    value === 'not_captured'
+  );
 }
 
 function tokenUsageOrigin(span: Span): TokenUsageSource | 'not_captured' | null {

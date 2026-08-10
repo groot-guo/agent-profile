@@ -15,6 +15,7 @@ import { API } from '../../config';
 import { C, FS, fmtBytes, fmtDuration, fmtTime, fmtTokens, R, SP } from '../../theme';
 import { Card, Chip, Empty, Notice } from '../../ui';
 import { type EvidencePageFilters, evidencePageUrl, mergeEvidenceEvents } from './evidence-data';
+import { evidenceMetricKind, shouldShowTokenMetrics } from './evidence-display';
 
 export function EvidencePanel({
   sessionId,
@@ -405,11 +406,14 @@ function EvidenceRow({
   onToggle: () => void;
 }) {
   const color = eventColor(event);
-  const totalTokens =
-    event.metrics.inputTokens +
-    event.metrics.cacheCreationTokens +
-    event.metrics.cacheReadTokens +
-    event.metrics.outputTokens;
+  const showTokenMetrics = shouldShowTokenMetrics(event);
+  const totalTokens = showTokenMetrics
+    ? event.metrics.inputTokens +
+      event.metrics.cacheCreationTokens +
+      event.metrics.cacheReadTokens +
+      event.metrics.outputTokens
+    : 0;
+  const metricKind = evidenceMetricKind(event);
   return (
     <article style={{ borderBottom: `1px solid ${C.borderSoft}` }}>
       <button
@@ -451,7 +455,11 @@ function EvidenceRow({
           <Chip color={color}>{typeLabel(event.type)}</Chip>
           {event.lane === 'sidechain' && <Chip color={C.cc}>Sidechain</Chip>}
           {event.outcome === 'observed_error' && <Chip color={C.high}>观察到错误</Chip>}
-          {event.parentLink === 'missing_parent' && <Chip color={C.medium}>父级未采集</Chip>}
+          {event.parentLink !== 'root' && event.parentLink !== 'linked' && (
+            <Chip color={event.parentLink === 'cross_session' ? C.cc : C.medium}>
+              {parentLabel(event.parentLink)}
+            </Chip>
+          )}
         </span>
         <span
           className="tnum"
@@ -485,13 +493,24 @@ function EvidenceRow({
             id {event.id}
             {event.parentId && ` · parent ${event.parentId} (${parentLabel(event.parentLink)})`}
           </div>
-          <div className="tnum" style={{ marginTop: SP.xs }}>
-            model {event.model ?? 'not captured'} · output {fmtBytes(event.metrics.outputBytes)} ·
-            cost{' '}
-            {event.metrics.cost === null
-              ? 'unknown'
-              : `${event.metrics.costCurrency ?? 'currency unknown'} ${event.metrics.cost.toFixed(6)}`}
-          </div>
+          {metricKind === 'llm' ? (
+            <div className="tnum" style={{ marginTop: SP.xs }}>
+              model {event.model ?? 'not captured'} ·{' '}
+              {showTokenMetrics
+                ? `tokens ${fmtTokens(totalTokens)}`
+                : `tokens ${event.coverage.tokenUsage.status === 'not_captured' ? 'not captured' : 'not applicable'}`}{' '}
+              · cost{' '}
+              {event.metrics.cost === null
+                ? 'unknown'
+                : `${event.metrics.costCurrency ?? 'currency unknown'} ${event.metrics.cost.toFixed(6)}`}
+            </div>
+          ) : metricKind === 'tool' ? (
+            <div className="tnum" style={{ marginTop: SP.xs }}>
+              tool output {fmtBytes(event.metrics.outputBytes)}
+            </div>
+          ) : (
+            <div style={{ marginTop: SP.xs }}>LLM 用量：不适用；仅展示该 block 自身证据</div>
+          )}
           {event.content.fields.length > 0 && (
             <div style={{ display: 'grid', gap: SP.sm, marginTop: SP.sm }}>
               {event.content.fields.map((field) => (
@@ -559,7 +578,11 @@ function coverageLabel(status: CoverageStatus) {
 }
 
 function parentLabel(status: SessionEvidenceEvent['parentLink']) {
+  if (status === 'root') return '根事件';
   if (status === 'linked') return '已关联';
   if (status === 'missing_parent') return '父级未采集';
-  return '根事件';
+  if (status === 'cross_session') return '跨 Session 父级';
+  if (status === 'source_user') return '来源用户父级';
+  if (status === 'corrupted_ownership') return '归属异常';
+  return '未采集';
 }

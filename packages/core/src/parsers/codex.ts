@@ -5,6 +5,7 @@ import type {
   Span,
   SpanType,
 } from '../types';
+import { isCrossSessionSpan } from '../types';
 
 export interface CodexEntry {
   timestamp: string;
@@ -229,6 +230,125 @@ function sourceChildLineage(
   );
 }
 
+type CodexOwnershipStatus =
+  | 'cross_session'
+  | 'source_user'
+  | 'corrupted_ownership'
+  | 'not_captured';
+
+function scopedCodexSpanId(sessionId: string, sourceId: string): string {
+  return `codex:${sessionId}:${sourceId}`;
+}
+
+function turnIdentity(entries: CodexEntry[]): string | undefined {
+  const turnContext = entries.find((entry) => entry.type === 'turn_context');
+  const contextTurnId = nonEmptyString(turnContext?.payload.turn_id);
+  if (contextTurnId) return contextTurnId;
+  const passthroughTurnId = entries
+    .filter((entry) => entry.type === 'response_item' && entry.payload?.type === 'message')
+    .map(
+      (entry) =>
+        (entry.payload as Record<string, unknown>)?.internal_chat_message_metadata_passthrough as
+          | { turn_id?: unknown }
+          | undefined,
+    )
+    .map((metadata) => nonEmptyString(metadata?.turn_id))
+    .find((value): value is string => value !== undefined);
+  if (passthroughTurnId) return passthroughTurnId;
+  const taskTurnId = entries.find(
+    (entry) => entry.type === 'event_msg' && entry.payload?.type === 'task_started',
+  )?.payload.turn_id;
+  return nonEmptyString(taskTurnId);
+}
+
+function mergeTurnBuckets(turns: CodexEntry[][]): CodexEntry[][] {
+  const merged: CodexEntry[][] = [];
+  for (const turn of turns) {
+    const previous = merged.at(-1);
+    const turnId = turnIdentity(turn);
+    if (previous && turnId && turnIdentity(previous) === turnId) {
+      previous.push(...turn);
+    } else {
+      merged.push([...turn]);
+    }
+  }
+  return merged;
+}
+
+function inheritedTurnIds(
+  entries: CodexEntry[],
+  sessionId: string,
+  sourceParentSessionId: string | undefined,
+): Set<string> {
+  if (!sourceParentSessionId) return new Set();
+  const parentMetaIndex = entries.findIndex((entry, index) => {
+    if (index === 0 || entry.type !== 'session_meta') return false;
+    const id = nonEmptyString(entry.payload.id) ?? nonEmptyString(entry.payload.session_id);
+    return id === sourceParentSessionId && id !== sessionId;
+  });
+  if (parentMetaIndex < 0) return new Set();
+  const firstBoundaryIndex = entries.findIndex(
+    (entry, index) =>
+      index > parentMetaIndex &&
+      (entry.type === 'turn_context' ||
+        (entry.type === 'event_msg' && entry.payload?.type === 'task_started')),
+  );
+  if (firstBoundaryIndex < 0) return new Set();
+
+  const turnIds = new Set<string>();
+  const addTurnId = (entry: CodexEntry): void => {
+    if (entry.type !== 'turn_context' && entry.type !== 'event_msg') return;
+    const turnId = nonEmptyString(entry.payload.turn_id);
+    if (turnId) turnIds.add(turnId);
+  };
+  addTurnId(entries[firstBoundaryIndex]);
+
+  // The copied parent context starts at its first boundary and ends when the
+  // child starts its own live turn. Parent snapshots can contain many
+  // turn_context records, so keep the complete range instead of only the first
+  // turn ID. The first task_started belongs to the copied parent boundary;
+  // the next one is the child boundary in the rollout format.
+  const childBoundaryIndex = entries.findIndex(
+    (entry, index) =>
+      index > firstBoundaryIndex &&
+      entry.type === 'event_msg' &&
+      entry.payload?.type === 'task_started',
+  );
+  if (childBoundaryIndex >= 0) {
+    for (const entry of entries.slice(firstBoundaryIndex, childBoundaryIndex)) addTurnId(entry);
+    return turnIds;
+  }
+
+  // Without an explicit child task_started, only extend the inherited range
+  // across turn_context boundaries that have another copied parent session_meta
+  // before them. A later context without that marker is the live child turn.
+  let previousBoundaryIndex = firstBoundaryIndex;
+  let previousTurnId = nonEmptyString(entries[firstBoundaryIndex].payload.turn_id);
+  for (let index = firstBoundaryIndex + 1; index < entries.length; index++) {
+    const entry = entries[index];
+    if (
+      entry.type !== 'turn_context' &&
+      !(entry.type === 'event_msg' && entry.payload?.type === 'task_started')
+    ) {
+      continue;
+    }
+    const turnId = nonEmptyString(entry.payload.turn_id);
+    const hasCopiedParentMeta = entries
+      .slice(previousBoundaryIndex + 1, index)
+      .some((candidate) => {
+        if (candidate.type !== 'session_meta') return false;
+        const id =
+          nonEmptyString(candidate.payload.id) ?? nonEmptyString(candidate.payload.session_id);
+        return id === sourceParentSessionId && id !== sessionId;
+      });
+    if (!turnId || (!hasCopiedParentMeta && turnId !== previousTurnId)) break;
+    addTurnId(entry);
+    previousBoundaryIndex = index;
+    previousTurnId = turnId;
+  }
+  return turnIds;
+}
+
 function makeSpan(p: {
   id: string;
   sessionId: string;
@@ -246,11 +366,21 @@ function makeSpan(p: {
   isSidechain?: boolean;
   outputBytes?: number;
   metadata?: Record<string, unknown>;
+  ownershipStatus?: CodexOwnershipStatus;
+  sourceSessionId?: string;
 }): Span {
+  const metadata =
+    p.ownershipStatus || p.sourceSessionId
+      ? {
+          ...p.metadata,
+          ...(p.ownershipStatus ? { ownershipStatus: p.ownershipStatus } : {}),
+          ...(p.sourceSessionId ? { sourceSessionId: p.sourceSessionId } : {}),
+        }
+      : p.metadata;
   return {
-    id: p.id,
+    id: scopedCodexSpanId(p.sessionId, p.id),
     sessionId: p.sessionId,
-    parentId: p.parentId ?? null,
+    parentId: p.parentId ? scopedCodexSpanId(p.sessionId, p.parentId) : null,
     type: p.type,
     name: p.name,
     startTime: p.startTime,
@@ -267,7 +397,7 @@ function makeSpan(p: {
     costStatus: 'unknown_pricing',
     isError: !!p.isError,
     isSidechain: !!p.isSidechain,
-    metadata: p.metadata,
+    metadata,
   };
 }
 
@@ -350,7 +480,7 @@ export function parseCodexTranscript(
   // 4. 按 turn_context / task_started 分组。迁移历史没有 turn_context，
   // 因此 user message 也必须算作回合证据；现代 rollout 的上下文快照里
   // 会重复 user message，不能把它误建成额外回合。
-  const turns: CodexEntry[][] = [];
+  let turns: CodexEntry[][] = [];
   const isolatedTurnContexts: CodexEntry[] = [];
   let currentTurn: CodexEntry[] = [];
   const hasTurnContent = (turnEntries: CodexEntry[]): boolean =>
@@ -398,6 +528,7 @@ export function parseCodexTranscript(
       isolatedTurnContexts.push(currentTurn[0]);
     }
   }
+  turns = mergeTurnBuckets(turns);
 
   // 5. 计算 session 时间范围
   const tsRows = sorted.filter((e) => e.timestamp);
@@ -425,11 +556,14 @@ export function parseCodexTranscript(
       : undefined;
 
   const spans: Span[] = [];
+  const inheritedIds = inheritedTurnIds(sorted, sessionId, sourceParentSessionId);
 
   // 6. 把孤立 turn_context 转成 stub llm_turn spans（无 token 遥测）。
   for (const context of isolatedTurnContexts) {
     const turnId = (context.payload.turn_id as string) || `turn-stub-${context.timestamp}`;
-    const model = typeof context.payload.model === 'string' ? context.payload.model : undefined;
+    const inherited = inheritedIds.has(turnId);
+    const model =
+      !inherited && typeof context.payload.model === 'string' ? context.payload.model : undefined;
     const startTime = context.timestamp ? toMs(context.timestamp) : sessionStart;
     spans.push(
       makeSpan({
@@ -441,6 +575,9 @@ export function parseCodexTranscript(
         endTime: startTime,
         model,
         isSidechain,
+        ...(inherited
+          ? { ownershipStatus: 'cross_session' as const, sourceSessionId: sourceParentSessionId }
+          : {}),
         metadata: {
           tokenUsageSource: 'not_captured',
           tokenUsageClassified: false,
@@ -484,23 +621,8 @@ export function parseCodexTranscript(
     // 迁移历史（无 turn_context）中，assistant/user 消息通过
     // internal_chat_message_metadata_passthrough.turn_id 标注真实 LLM turn；
     // task_started 命名的可能是进程 turn（如 review mode），不能作为消息归属。
-    const passthroughTurnId = turnEntries
-      .filter((entry) => entry.type === 'response_item' && entry.payload?.type === 'message')
-      .map(
-        (entry) =>
-          (entry.payload as Record<string, unknown>)?.internal_chat_message_metadata_passthrough as
-            | { turn_id?: unknown }
-            | undefined,
-      )
-      .find((meta) => typeof meta?.turn_id === 'string' && meta.turn_id.trim())?.turn_id as
-      | string
-      | undefined;
-    const turnId =
-      (turnContext?.payload.turn_id as string) ||
-      passthroughTurnId?.trim() ||
-      undefined ||
-      (taskStarted?.payload.turn_id as string) ||
-      `turn-${turnIndex + 1}-${turnStart}`;
+    const turnId = turnIdentity(turnEntries) ?? `turn-${turnIndex + 1}-${turnStart}`;
+    const inherited = inheritedIds.has(turnId);
 
     // token 取该 turn 内最后一个 token_count 的 last_token_usage
     let inputTokens = 0,
@@ -508,7 +630,7 @@ export function parseCodexTranscript(
       outputTokens = 0;
     let tokenUsageFallback = false;
     let tokenUsageCaptured = false;
-    for (let i = turnEntries.length - 1; i >= 0; i--) {
+    for (let i = turnEntries.length - 1; i >= 0 && !inherited; i--) {
       const e = turnEntries[i];
       if (e.type === 'event_msg' && e.payload && e.payload.type === 'token_count') {
         const lastUsage = (e.payload.info as Record<string, unknown>)?.last_token_usage as
@@ -541,14 +663,17 @@ export function parseCodexTranscript(
         id: turnId,
         sessionId,
         type: 'llm_turn',
-        name: model || 'codex',
+        name: inherited ? 'codex (cross-session context)' : model || 'codex',
         startTime: turnStart,
         endTime: turnEnd,
         inputTokens,
         cacheReadTokens,
         outputTokens,
-        model,
+        model: inherited ? undefined : model,
         isSidechain,
+        ...(inherited
+          ? { ownershipStatus: 'cross_session' as const, sourceSessionId: sourceParentSessionId }
+          : {}),
         metadata: tokenUsageFallback
           ? { tokenUsageSource: 'total_tokens_fallback', tokenUsageClassified: false }
           : tokenUsageCaptured
@@ -582,6 +707,12 @@ export function parseCodexTranscript(
               startTime: turnStart,
               endTime: turnEnd,
               isSidechain,
+              ...(inherited
+                ? {
+                    ownershipStatus: 'cross_session' as const,
+                    sourceSessionId: sourceParentSessionId,
+                  }
+                : {}),
               metadata: { thinking: truncate(text) },
             }),
           );
@@ -604,6 +735,12 @@ export function parseCodexTranscript(
               startTime: turnStart,
               endTime: turnEnd,
               isSidechain,
+              ...(inherited
+                ? {
+                    ownershipStatus: 'cross_session' as const,
+                    sourceSessionId: sourceParentSessionId,
+                  }
+                : {}),
               metadata: { thinking: truncate(text) },
             }),
           );
@@ -630,6 +767,12 @@ export function parseCodexTranscript(
           startTime: turnStart,
           endTime: turnEnd,
           isSidechain,
+          ...(inherited
+            ? {
+                ownershipStatus: 'cross_session' as const,
+                sourceSessionId: sourceParentSessionId,
+              }
+            : {}),
           metadata: { text: truncate(text) },
         }),
       );
@@ -657,6 +800,12 @@ export function parseCodexTranscript(
             endTime: result ? toMs(result.entry.timestamp) : turnEnd,
             isError: result?.isError,
             isSidechain,
+            ...(inherited
+              ? {
+                  ownershipStatus: 'cross_session' as const,
+                  sourceSessionId: sourceParentSessionId,
+                }
+              : {}),
             outputBytes,
             metadata: {
               input: input != null ? truncate(safeStringify(input)) : undefined,
@@ -684,7 +833,8 @@ export function parseCodexTranscript(
       sourceAgentRole: nonEmptyString(opts.sourceAgentRole),
       sourceAgentPath: nonEmptyString(opts.sourceAgentPath),
       sourceChildLineage: childLineage.length > 0 ? childLineage : undefined,
-      messageCount: turns.length,
+      messageCount: spans.filter((span) => span.type === 'llm_turn' && !isCrossSessionSpan(span))
+        .length,
       agent: 'codex',
     },
     spans,

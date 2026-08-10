@@ -14,7 +14,7 @@ import {
 import { type CodexStateMetadataIndex, loadCodexStateMetadataIndex } from './codex-state-metadata';
 import type { SourceAdapter, SourceItem, SourceRevision } from './types';
 
-const CODEX_PARSER_REVISION = 'codex-v5';
+const CODEX_PARSER_REVISION = 'codex-v6';
 const MAX_CHECKPOINTS = 128;
 
 interface TranscriptCheckpoint {
