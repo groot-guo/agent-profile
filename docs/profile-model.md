@@ -58,6 +58,15 @@ configuration version when known, project or cohort, time range, Session/Task
 sample count, source coverage, and metric provenance. Distributions, not a
 single score, describe process behavior.
 
+Model identity is an evidence boundary, not a display shortcut. A canonical
+display identity, a pricing alias, a context-window equivalence, and a billing
+identity are separate claims. The Model Catalog separates observed raw labels
+into `billable`, `review_required`, and `excluded` groups (T135); opaque
+rolling labels and provider-managed routes need explicit audited evidence
+before they can contribute pricing or context configuration, and synthetic
+placeholders are never billable. Statistics retain raw-label inspectability,
+and no automatic name-similarity alias may turn one label into another.
+
 - Higher/lower token, cost, duration, cache, tool-error, or Sidechain values are
   observations, not a quality ranking.
 - Process efficiency and diagnosis are hypotheses about execution behavior.

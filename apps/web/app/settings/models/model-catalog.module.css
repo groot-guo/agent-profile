@@ -108,6 +108,19 @@
   padding: 6px;
 }
 
+.identityGroup + .identityGroup {
+  margin-top: 12px;
+}
+
+.identityGroupLabel {
+  margin: 0 6px 4px;
+  color: var(--c-mute);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .modelButton {
   display: block;
   width: 100%;

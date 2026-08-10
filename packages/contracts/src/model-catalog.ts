@@ -3,6 +3,15 @@ export const MODEL_CATALOG_CALCULATOR_VERSION = 'v1' as const;
 
 export type ModelCatalogSourceKind = 'bundled' | 'manual' | 'imported' | 'legacy';
 export type ModelCatalogPricingStatus = 'active' | 'superseded' | 'unsupported';
+export type ModelIdentityKind =
+  | 'model'
+  | 'provider_only'
+  | 'runtime_mode'
+  | 'synthetic'
+  | 'opaque'
+  | 'review_required'
+  | 'unknown';
+export type BillingEligibility = 'billable' | 'review_required' | 'excluded';
 
 export interface ModelCatalogPricingRecord {
   model: string;
@@ -44,6 +53,8 @@ export interface ModelCatalogContextRecord {
 
 export interface ModelCatalogInventoryItem {
   model: string;
+  identityKind: ModelIdentityKind;
+  billingEligibility: BillingEligibility;
   observedSpans: number;
   observedSessions: number;
   latestObservedAt: number;

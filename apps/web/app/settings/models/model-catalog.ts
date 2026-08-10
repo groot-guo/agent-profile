@@ -4,6 +4,7 @@ import type {
 } from '@agent-profile/contracts';
 
 export type CatalogPriority = 'unsupported' | 'unpriced' | 'context-missing' | 'configured';
+export type CatalogIdentityGroup = 'billable' | 'review' | 'excluded';
 
 export interface PricingDraft {
   inputPrice: string;
@@ -30,6 +31,18 @@ export function catalogPriority(item: ModelCatalogInventoryItem): CatalogPriorit
   if (!item.pricingKnown) return 'unpriced';
   if (!item.contextKnown) return 'context-missing';
   return 'configured';
+}
+
+export function catalogIdentityGroup(item: ModelCatalogInventoryItem): CatalogIdentityGroup {
+  if (item.billingEligibility === 'billable') return 'billable';
+  if (item.billingEligibility === 'excluded') return 'excluded';
+  return 'review';
+}
+
+export function identityGroupLabel(group: CatalogIdentityGroup): string {
+  if (group === 'billable') return '可计费模型';
+  if (group === 'excluded') return '排除标签';
+  return '待审查标签';
 }
 
 const PRIORITY_ORDER: Record<CatalogPriority, number> = {

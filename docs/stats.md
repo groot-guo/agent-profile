@@ -44,6 +44,23 @@ not providing a concrete model; unrecognized versions/modes remain separate.
 This grouping never changes the persisted Span model or makes an unpriced raw
 label eligible for a canonical model's price.
 
+The Model Catalog inventory (T135) additionally classifies every observed raw
+label into a billing-eligibility group that is visible in the settings page:
+
+- `billable` — explicit concrete model identities that the catalog can
+  configure;
+- `review_required` — opaque rolling labels (`astron-code-latest`), managed
+  provider routes (`big-pickle`), and unverified custom labels that need
+  explicit audited evidence before pricing or context configuration;
+- `excluded` — synthetic placeholders (`<synthetic>`) and runtime modes
+  (`codex-auto-review`) that are never billable and stay out of price-edit
+  candidates.
+
+Raw labels remain inspectable in statistics and the catalog list; only an
+explicit audited pricing alias or manual configuration can move a
+review-required label into billable pricing. Automatic name-similarity aliases
+are prohibited.
+
 | Dimension | Current metrics |
 | --- | --- |
 | Agent | session count, tokens, cost, average cache-hit rate |

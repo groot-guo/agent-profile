@@ -9,7 +9,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
 import { Notice } from '../../ui';
-import { sortCatalogModels } from './model-catalog';
+import {
+  catalogIdentityGroup,
+  identityGroupLabel,
+  sortCatalogModels,
+  type CatalogIdentityGroup,
+} from './model-catalog';
 import styles from './model-catalog.module.css';
 import { type Feedback, ModelEditor, priorityLabel, responseJson } from './model-editor';
 
@@ -206,24 +211,29 @@ function ModelCatalogWorkspace() {
               {!isLoading && filteredModels.length === 0 && (
                 <div className={styles.empty}>没有匹配的 observed 模型。</div>
               )}
-              {filteredModels.map((item) => {
-                const priority = priorityLabel(item);
-                return (
-                  <button
-                    key={item.model}
-                    className={styles.modelButton}
-                    type="button"
-                    aria-current={selected?.model === item.model}
-                    onClick={() => selectModel(item.model)}
-                  >
-                    <span className={styles.modelName}>{item.model}</span>
-                    <span className={styles.modelMeta}>
-                      <span>{priority.text}</span>
-                      <span className="tnum">{item.observedSpans} spans</span>
-                    </span>
-                  </button>
-                );
-              })}
+              {groupCatalogModels(filteredModels).map(([group, items]) => (
+                <div key={group} className={styles.identityGroup}>
+                  <div className={styles.identityGroupLabel}>{identityGroupLabel(group)}</div>
+                  {items.map((item) => {
+                    const priority = priorityLabel(item);
+                    return (
+                      <button
+                        key={item.model}
+                        className={styles.modelButton}
+                        type="button"
+                        aria-current={selected?.model === item.model}
+                        onClick={() => selectModel(item.model)}
+                      >
+                        <span className={styles.modelName}>{item.model}</span>
+                        <span className={styles.modelMeta}>
+                          <span>{priority.text}</span>
+                          <span className="tnum">{item.observedSpans} spans</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </aside>
 
@@ -247,4 +257,19 @@ function ModelCatalogWorkspace() {
       </main>
     </div>
   );
+}
+
+function groupCatalogModels(
+  models: ModelCatalogInventoryItem[],
+): Array<[CatalogIdentityGroup, ModelCatalogInventoryItem[]]> {
+  const groups: Record<CatalogIdentityGroup, ModelCatalogInventoryItem[]> = {
+    billable: [],
+    review: [],
+    excluded: [],
+  };
+  for (const item of models) groups[catalogIdentityGroup(item)].push(item);
+  return (['billable', 'review', 'excluded'] as const).map((group) => [
+    group,
+    groups[group],
+  ]);
 }

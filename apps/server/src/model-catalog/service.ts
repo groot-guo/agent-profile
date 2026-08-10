@@ -3,6 +3,7 @@ import {
   COST_CALCULATOR_VERSION,
   COST_CURRENCY,
   COST_UNIT,
+  identifyModel,
   calcCost,
   isRuntimeMode,
   type Pricing,
@@ -326,7 +327,6 @@ export class ModelCatalogService {
     if (!input.rawModel || !input.pricingModel || input.rawModel === input.pricingModel) {
       throw new Error('invalid_pricing_alias');
     }
-    this.assertConfigurableModel(input.rawModel);
     this.assertConfigurableModel(input.pricingModel);
     const previous = this.listAliases(input.rawModel)[0];
     const revision = (previous?.revision ?? 0) + 1;
@@ -375,8 +375,11 @@ export class ModelCatalogService {
         const pricing = this.applicablePricingRecord(row.model, at);
         const pricingAlias = this.listAliases(row.model)[0] ?? null;
         const context = this.listContexts(row.model)[0] ?? null;
+        const identity = identifyModel(row.model);
         return {
           ...row,
+          identityKind: identity.kind,
+          billingEligibility: identity.billingEligibility,
           pricing,
           pricingAlias,
           context,
@@ -390,8 +393,16 @@ export class ModelCatalogService {
   }
 
   private assertConfigurableModel(model: string): void {
-    if (!isRuntimeMode(model)) return;
-    const error = new Error('runtime_mode_not_configurable') as Error & { statusCode: number };
+    const identity = identifyModel(model);
+    if (
+      identity.kind !== 'runtime_mode' &&
+      identity.kind !== 'synthetic' &&
+      identity.kind !== 'opaque' &&
+      identity.kind !== 'review_required'
+    ) {
+      return;
+    }
+    const error = new Error('model_not_configurable') as Error & { statusCode: number };
     error.statusCode = 400;
     throw error;
   }
@@ -475,14 +486,16 @@ export class ModelCatalogService {
         updatedSpans++;
       }
       const updateSession = this.database.prepare(
-        `UPDATE sessions SET total_cost = ?, cost_unknown_count = ?, cost_currency = ?,
+        `UPDATE sessions SET total_cost = ?, cost_unknown_count = ?,
+          cost_currency = ?,
           cost_calculated_at = ?, cost_calculator_version = ? WHERE id = ?`,
       );
       if (Object.keys(preview.scope).length === 0) {
         this.database
           .prepare(
             `UPDATE sessions SET total_cost = 0, cost_unknown_count = 0,
-              cost_currency = ?, cost_calculated_at = ?, cost_calculator_version = ?
+              cost_currency = ?,
+              cost_calculated_at = ?, cost_calculator_version = ?
              WHERE id IS NOT NULL`,
           )
           .run(COST_CURRENCY, executedAt, COST_CALCULATOR_VERSION);
@@ -494,7 +507,10 @@ export class ModelCatalogService {
               COALESCE(SUM(cost_unknown), 0) as unknownCount
              FROM spans WHERE session_id = ? AND type = 'llm_turn'`,
           )
-          .get(sessionId) as { totalCost: number; unknownCount: number };
+          .get(sessionId) as {
+          totalCost: number;
+          unknownCount: number;
+        };
         updateSession.run(
           totals.totalCost,
           totals.unknownCount,
@@ -555,13 +571,20 @@ export class ModelCatalogService {
     if (!Array.isArray(input.pricingAliases)) {
       throw new Error('invalid_model_catalog_payload');
     }
-    for (const row of input.pricing) this.validatePricing(row);
-    for (const row of input.modelContext) {
+    const filteredPricing = input.pricing.filter((row) => !this.isExcludedIdentity(row.model));
+    const filteredContext = input.modelContext.filter(
+      (row) => !this.isExcludedIdentity(row.model),
+    );
+    const filteredAliases = input.pricingAliases.filter(
+      (row) => !this.isExcludedIdentity(row.rawModel),
+    );
+    for (const row of filteredPricing) this.validatePricing(row);
+    for (const row of filteredContext) {
       if (!row.model || !Number.isInteger(row.contextWindow) || row.contextWindow < 1) {
         throw new Error('invalid_model_context_payload');
       }
     }
-    for (const row of input.pricingAliases) {
+    for (const row of filteredAliases) {
       if (!row.rawModel || !row.pricingModel || row.pricingEquivalent !== true) {
         throw new Error('invalid_pricing_alias');
       }
@@ -569,14 +592,11 @@ export class ModelCatalogService {
     let pricingCount = 0;
     let contextCount = 0;
     this.database.transaction(() => {
-      for (const row of input.pricing) {
+      for (const row of filteredPricing) {
         this.upsertPricing(row, 'imported');
         pricingCount++;
       }
-      for (const row of input.modelContext) {
-        if (!row.model || !Number.isInteger(row.contextWindow) || row.contextWindow < 1) {
-          throw new Error('invalid_model_context_payload');
-        }
+      for (const row of filteredContext) {
         this.upsertContext(
           {
             model: row.model,
@@ -588,11 +608,37 @@ export class ModelCatalogService {
         );
         contextCount++;
       }
-      for (const row of input.pricingAliases) {
+      for (const row of filteredAliases) {
         this.upsertAlias(row, 'imported');
       }
     })();
     return { pricing: pricingCount, modelContext: contextCount };
+  }
+
+  private isExcludedIdentity(model: string): boolean {
+    const identity = identifyModel(model);
+    return identity.kind === 'runtime_mode' || identity.kind === 'synthetic';
+  }
+
+  private asCoreSpan(span: CatalogSpan): Span {
+    return {
+      id: span.id,
+      sessionId: span.sessionId,
+      type: 'llm_turn',
+      name: '',
+      startTime: span.startTime,
+      inputTokens: span.inputTokens,
+      cacheCreationTokens: span.cacheCreationTokens,
+      cacheReadTokens: span.cacheReadTokens,
+      outputTokens: span.outputTokens,
+      contextTokens: 0,
+      outputBytes: 0,
+      model: span.model,
+      cost: span.cost,
+      costUnknown: span.costUnknown,
+      isError: false,
+      isSidechain: false,
+    };
   }
 
   private validatePricing(row: PricingRecord): void {
@@ -658,7 +704,8 @@ export class ModelCatalogService {
         `SELECT id, session_id as sessionId, model, start_time as startTime,
           input_tokens as inputTokens, cache_creation_tokens as cacheCreationTokens,
           cache_read_tokens as cacheReadTokens, output_tokens as outputTokens,
-          cost, cost_unknown as costUnknown FROM spans WHERE ${conditions.join(' AND ')}
+          cost, cost_unknown as costUnknown
+         FROM spans WHERE ${conditions.join(' AND ')}
          ORDER BY start_time, id`,
       )
       .all(...parameters) as CatalogSpan[];
@@ -682,24 +729,4 @@ export class ModelCatalogService {
     };
   }
 
-  private asCoreSpan(span: CatalogSpan): Span {
-    return {
-      id: span.id,
-      sessionId: span.sessionId,
-      type: 'llm_turn',
-      name: '',
-      startTime: span.startTime,
-      inputTokens: span.inputTokens,
-      cacheCreationTokens: span.cacheCreationTokens,
-      cacheReadTokens: span.cacheReadTokens,
-      outputTokens: span.outputTokens,
-      contextTokens: 0,
-      outputBytes: 0,
-      model: span.model,
-      cost: span.cost,
-      costUnknown: span.costUnknown,
-      isError: false,
-      isSidechain: false,
-    };
-  }
 }

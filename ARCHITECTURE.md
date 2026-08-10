@@ -639,6 +639,16 @@ from available source histories when recovery is necessary.
   assigned pricing or context configuration. `openai` and `litellm` remain
   provider-only. Unknown model values remain distinct; this grouping never
   rewrites stored evidence or changes raw-model pricing lookup.
+- The Model Catalog inventory classifies observed raw labels by billing
+  eligibility (T135): `billable` for concrete model identities,
+  `review_required` for opaque rolling labels (`astron-code-latest`),
+  provider-managed routes (`big-pickle`), and unverified custom labels, and
+  `excluded` for synthetic placeholders (`<synthetic>`) and runtime modes.
+  Pricing and context configuration is rejected for excluded and
+  review-required labels unless an explicit audited pricing alias points at a
+  configurable model; automatic name-similarity aliases are prohibited.
+  Configuration import skips excluded labels instead of failing on legacy
+  synthetic rows.
 - Cost attribution distributes an LLM turn's cost across tool categories used
   by that turn and shows tool-free turns separately. It is an analytical
   allocation, not a provider invoice.

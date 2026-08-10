@@ -2,6 +2,7 @@ import type { ModelCatalogInventoryItem } from '@agent-profile/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   buildPricingPayload,
+  catalogIdentityGroup,
   catalogPriority,
   formatCatalogDate,
   isPreviewCurrent,
@@ -15,6 +16,8 @@ function inventory(
 ): ModelCatalogInventoryItem {
   return {
     model,
+    identityKind: 'model',
+    billingEligibility: 'billable',
     observedSpans: 1,
     observedSessions: 1,
     latestObservedAt: 100,
@@ -97,5 +100,33 @@ describe('Model Catalog workspace view model', () => {
   it('keeps the epoch-zero applicability time distinct from missing time', () => {
     expect(formatCatalogDate(0)).not.toBe('未记录');
     expect(formatCatalogDate()).toBe('未记录');
+  });
+
+  it('groups inventory into billable, review, and excluded identity buckets', () => {
+    expect(catalogIdentityGroup(inventory('gpt-5.6-sol'))).toBe('billable');
+    expect(
+      catalogIdentityGroup(
+        inventory('astron-code-latest', {
+          identityKind: 'opaque',
+          billingEligibility: 'review_required',
+        }),
+      ),
+    ).toBe('review');
+    expect(
+      catalogIdentityGroup(
+        inventory('<synthetic>', {
+          identityKind: 'synthetic',
+          billingEligibility: 'excluded',
+        }),
+      ),
+    ).toBe('excluded');
+    expect(
+      catalogIdentityGroup(
+        inventory('custom-label', {
+          identityKind: 'unknown',
+          billingEligibility: 'review_required',
+        }),
+      ),
+    ).toBe('review');
   });
 });

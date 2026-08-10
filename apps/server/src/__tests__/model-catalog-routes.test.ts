@@ -29,7 +29,13 @@ describe('Model Catalog routes', () => {
         ) VALUES ('catalog-span', 'catalog-session', 'llm_turn', 'turn', 1000,
           'route-model', 100, 20, 10, 30, 0, 1),
           ('catalog-runtime-span', 'catalog-session', 'llm_turn', 'auto-review', 1001,
-          'codex-auto-review', 100, 20, 10, 30, 0, 1)`,
+          'codex-auto-review', 100, 20, 10, 30, 0, 1),
+          ('catalog-synthetic-span', 'catalog-session', 'llm_turn', 'synthetic', 1002,
+          '<synthetic>', 100, 20, 10, 30, 0, 1),
+          ('catalog-opaque-span', 'catalog-session', 'llm_turn', 'opaque', 1003,
+          'astron-code-latest', 100, 20, 10, 30, 0, 1),
+          ('catalog-review-span', 'catalog-session', 'llm_turn', 'review', 1004,
+          'big-pickle', 100, 20, 10, 30, 0, 1)`,
       )
       .run();
     app = createApp(runtime, { logger: false, webOrigins: [] });
@@ -44,11 +50,40 @@ describe('Model Catalog routes', () => {
   it('exposes inventory, pricing history, context, and explicit alias operations', async () => {
     const inventory = await app.inject({ method: 'GET', url: '/api/model-catalog/models' });
     expect(inventory.statusCode).toBe(200);
-    expect(inventory.json().models).toMatchObject([
-      { model: 'route-model', observedSpans: 1, pricingKnown: false },
-    ]);
+    expect(inventory.json().models).toContainEqual(
+      expect.objectContaining({ model: 'route-model', observedSpans: 1, pricingKnown: false }),
+    );
     expect(inventory.json().models).not.toContainEqual(
       expect.objectContaining({ model: 'codex-auto-review' }),
+    );
+    // 三类来源标签仍可在 inventory 中检视，但带审查/排除标记。
+    expect(inventory.json().models).toContainEqual(
+      expect.objectContaining({
+        model: '<synthetic>',
+        identityKind: 'synthetic',
+        billingEligibility: 'excluded',
+      }),
+    );
+    expect(inventory.json().models).toContainEqual(
+      expect.objectContaining({
+        model: 'astron-code-latest',
+        identityKind: 'opaque',
+        billingEligibility: 'review_required',
+      }),
+    );
+    expect(inventory.json().models).toContainEqual(
+      expect.objectContaining({
+        model: 'big-pickle',
+        identityKind: 'review_required',
+        billingEligibility: 'review_required',
+      }),
+    );
+    expect(inventory.json().models).toContainEqual(
+      expect.objectContaining({
+        model: 'route-model',
+        identityKind: 'unknown',
+        billingEligibility: 'review_required',
+      }),
     );
 
     const pricing = await app.inject({
@@ -97,7 +132,7 @@ describe('Model Catalog routes', () => {
       },
     });
     expect(pricing.statusCode).toBe(400);
-    expect(pricing.json()).toMatchObject({ message: 'runtime_mode_not_configurable' });
+    expect(pricing.json()).toMatchObject({ message: 'model_not_configurable' });
 
     const context = await app.inject({
       method: 'PUT',
@@ -105,7 +140,53 @@ describe('Model Catalog routes', () => {
       payload: { contextWindow: 128000 },
     });
     expect(context.statusCode).toBe(400);
-    expect(context.json()).toMatchObject({ message: 'runtime_mode_not_configurable' });
+    expect(context.json()).toMatchObject({ message: 'model_not_configurable' });
+  });
+
+  it('rejects pricing and context configuration for synthetic, opaque, and review labels', async () => {
+    for (const model of ['<synthetic>', 'astron-code-latest', 'big-pickle']) {
+      const pricing = await app.inject({
+        method: 'POST',
+        url: `/api/model-catalog/models/${encodeURIComponent(model)}/pricing`,
+        payload: {
+          inputPrice: 1,
+          cacheCreationPrice: 1,
+          cacheReadPrice: 0.1,
+          outputPrice: 2,
+        },
+      });
+      expect(pricing.statusCode).toBe(400);
+      expect(pricing.json()).toMatchObject({ message: 'model_not_configurable' });
+
+      const context = await app.inject({
+        method: 'PUT',
+        url: `/api/model-catalog/models/${encodeURIComponent(model)}/context`,
+        payload: { contextWindow: 128000 },
+      });
+      expect(context.statusCode).toBe(400);
+      expect(context.json()).toMatchObject({ message: 'model_not_configurable' });
+    }
+  });
+
+  it('allows an explicit audited alias for a provider-managed route label', async () => {
+    const alias = await app.inject({
+      method: 'PUT',
+      url: '/api/model-catalog/models/big-pickle/pricing-alias',
+      payload: {
+        pricingModel: 'route-model',
+        pricingEquivalent: true,
+        sourceReference: 'local:audit-2026-08-10',
+      },
+    });
+    expect(alias.statusCode).toBe(200);
+    expect(alias.json()).toMatchObject({
+      rawModel: 'big-pickle',
+      pricingModel: 'route-model',
+      sourceKind: 'manual',
+    });
+    expect(runtime.pricingResolver('big-pickle', 1000)).toMatchObject({
+      pricingModel: 'route-model',
+    });
   });
 
   it('keeps preview read-only and rejects execute after pricing revision changes', async () => {

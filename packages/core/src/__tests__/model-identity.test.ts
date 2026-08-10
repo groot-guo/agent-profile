@@ -36,4 +36,27 @@ describe('identifyModel', () => {
     expect(identifyModel('glm-5-2-origin')).toMatchObject({ kind: 'unknown' });
     expect(identifyModel()).toMatchObject({ key: 'unknown', kind: 'unknown' });
   });
+
+  it('separates synthetic, opaque, and provider-managed review labels', () => {
+    expect(identifyModel('<synthetic>')).toMatchObject({
+      kind: 'synthetic',
+      billingEligibility: 'excluded',
+    });
+    expect(identifyModel('astron-code-latest')).toMatchObject({
+      kind: 'opaque',
+      billingEligibility: 'review_required',
+    });
+    expect(identifyModel('big-pickle')).toMatchObject({
+      kind: 'review_required',
+      billingEligibility: 'review_required',
+    });
+    expect(identifyModel('gpt-5.6-sol')).toMatchObject({
+      kind: 'model',
+      billingEligibility: 'billable',
+    });
+    expect(identifyModel('codex-auto-review')).toMatchObject({
+      kind: 'runtime_mode',
+      billingEligibility: 'excluded',
+    });
+  });
 });

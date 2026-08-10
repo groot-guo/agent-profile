@@ -6,38 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T135 model observation, identity review, and billing eligibility
-
-- status: planned
-- purpose: separate raw source model labels from verified billable identities
-  so the Model Catalog does not present opaque, provider-only, runtime, or
-  synthetic labels as ordinary configurable models.
-- scope:
-  1. introduce a source-preserving model-observation/review contract with raw
-     label, source kind/field, observed Span and Session coverage, token
-     coverage, identity classification, review provenance, and billing
-     eligibility;
-  2. classify `<synthetic>` as a non-billable synthetic placeholder,
-     `big-pickle` as a provider-managed route pending tariff evidence, and
-     `astron-code-latest` as an opaque rolling source label pending explicit
-     verification; retain all raw values and evidence;
-  3. reuse and extend the existing statistics identity rules in the Model
-     Catalog rather than letting the settings page enumerate unqualified raw
-     labels as price-edit candidates;
-  4. prevent provider-only fallbacks from being represented as concrete model
-     identities and prohibit automatic name-similarity aliases.
-- dependencies: T134 for reliable source-field and coverage evidence.
-- risks and assumptions: a canonical display identity, a pricing alias, a
-  context-window equivalence, and a billing identity are separate claims. A
-  rolling `*-latest` label cannot receive a timeless underlying-model alias.
-- acceptance: the catalog visibly separates billable, review-required, and
-  excluded source labels; only explicit, auditable evidence can enable pricing
-  or context configuration; statistics retain raw-label inspectability.
-- verification plan: core identity tests, Server inventory/API tests, migration
-  tests for legacy labels, and focused Web tests for the three catalog groups.
-- documentation plan: update ARCHITECTURE, `docs/stats.md`,
-  `docs/profile-model.md`, and the Task archive.
-
 ### T136 evidence-safe pricing status and time-effective schedules
 
 - status: planned
@@ -195,6 +163,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T135](roadmap-archive/2026-q3.md#t135) | model observation, identity review, and billing eligibility | completed |
 | [T134](roadmap-archive/2026-q3.md#t134) | source telemetry coverage and Session-relationship integrity | completed |
 | [T133](roadmap-archive/2026-q3.md#t133) | evidence-safe remediation task decomposition | completed |
 | [T119](roadmap-archive/2026-q3.md#t119) | multi-Agent Task graph and non-double-counted attribution | completed |

@@ -1,9 +1,19 @@
-export type ModelIdentityKind = 'model' | 'provider_only' | 'runtime_mode' | 'unknown';
+export type ModelIdentityKind =
+  | 'model'
+  | 'provider_only'
+  | 'runtime_mode'
+  | 'synthetic'
+  | 'opaque'
+  | 'review_required'
+  | 'unknown';
+
+export type BillingEligibility = 'billable' | 'review_required' | 'excluded';
 
 export interface ModelIdentity {
   key: string;
   label: string;
   kind: ModelIdentityKind;
+  billingEligibility: BillingEligibility;
 }
 
 const ALIASES = new Map<string, string>([
@@ -47,6 +57,9 @@ const CONCRETE_MODEL_IDS = new Set([
 
 const PROVIDER_ONLY = new Set(['litellm', 'openai']);
 const RUNTIME_MODES = new Set(['codex-auto-review']);
+const SYNTHETIC_LABELS = new Set(['<synthetic>']);
+const OPAQUE_LABELS = new Set(['astron-code-latest']);
+const REVIEW_REQUIRED_LABELS = new Set(['big-pickle']);
 
 export function isRuntimeMode(raw?: string | null): boolean {
   return RUNTIME_MODES.has(raw?.trim().toLowerCase() ?? '');
@@ -56,7 +69,14 @@ export function isRuntimeMode(raw?: string | null): boolean {
 // source model because an alias alone cannot establish an applicable price.
 export function identifyModel(raw?: string | null): ModelIdentity {
   const value = raw?.trim();
-  if (!value) return { key: 'unknown', label: '未提供模型', kind: 'unknown' };
+  if (!value) {
+    return {
+      key: 'unknown',
+      label: '未提供模型',
+      kind: 'unknown',
+      billingEligibility: 'excluded',
+    };
+  }
 
   const normalized = value.toLowerCase();
   if (RUNTIME_MODES.has(normalized)) {
@@ -64,19 +84,55 @@ export function identifyModel(raw?: string | null): ModelIdentity {
       key: `runtime:${normalized}`,
       label: `${value}（运行模式）`,
       kind: 'runtime_mode',
+      billingEligibility: 'excluded',
+    };
+  }
+  if (SYNTHETIC_LABELS.has(normalized)) {
+    return {
+      key: `synthetic:${normalized}`,
+      label: `${value}（合成占位）`,
+      kind: 'synthetic',
+      billingEligibility: 'excluded',
+    };
+  }
+  if (OPAQUE_LABELS.has(normalized)) {
+    return {
+      key: `opaque:${normalized}`,
+      label: `${value}（滚动标签，待核验）`,
+      kind: 'opaque',
+      billingEligibility: 'review_required',
+    };
+  }
+  if (REVIEW_REQUIRED_LABELS.has(normalized)) {
+    return {
+      key: `review:${normalized}`,
+      label: `${value}（供应商托管路由，待核验）`,
+      kind: 'review_required',
+      billingEligibility: 'review_required',
     };
   }
   const canonical = ALIASES.get(normalized);
   if (canonical || CONCRETE_MODEL_IDS.has(normalized)) {
     const model = canonical ?? normalized;
-    return { key: `model:${model}`, label: model, kind: 'model' };
+    return {
+      key: `model:${model}`,
+      label: model,
+      kind: 'model',
+      billingEligibility: 'billable',
+    };
   }
   if (PROVIDER_ONLY.has(normalized)) {
     return {
       key: `provider:${normalized}`,
       label: `${value}（未提供具体模型）`,
       kind: 'provider_only',
+      billingEligibility: 'excluded',
     };
   }
-  return { key: `unknown:${normalized}`, label: value, kind: 'unknown' };
+  return {
+    key: `unknown:${normalized}`,
+    label: value,
+    kind: 'unknown',
+    billingEligibility: 'review_required',
+  };
 }
