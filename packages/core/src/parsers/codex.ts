@@ -339,8 +339,23 @@ export function parseCodexTranscript(
     const capturedModel = turnContext?.payload.model;
     const model =
       typeof capturedModel === 'string' && capturedModel.trim() ? capturedModel.trim() : undefined;
+    // 迁移历史（无 turn_context）中，assistant/user 消息通过
+    // internal_chat_message_metadata_passthrough.turn_id 标注真实 LLM turn；
+    // task_started 命名的可能是进程 turn（如 review mode），不能作为消息归属。
+    const passthroughTurnId = turnEntries
+      .filter((entry) => entry.type === 'response_item' && entry.payload?.type === 'message')
+      .map(
+        (entry) =>
+          (entry.payload as Record<string, unknown>)
+            ?.internal_chat_message_metadata_passthrough as
+            | { turn_id?: unknown }
+            | undefined,
+      )
+      .find((meta) => typeof meta?.turn_id === 'string' && meta.turn_id.trim())
+      ?.turn_id as string | undefined;
     const turnId =
       (turnContext?.payload.turn_id as string) ||
+      (passthroughTurnId?.trim() || undefined) ||
       (taskStarted?.payload.turn_id as string) ||
       `turn-${turnIndex + 1}-${turnStart}`;
 

@@ -526,6 +526,14 @@ Each modern Codex LLM turn takes its model from that turn's captured
 not a concrete model, and is never promoted into `Span.model`. Advancing the
 Codex parser revision to `codex-v4` makes an ordinary sync atomically replace
 stale provider-labelled rows once; no generated-data reset is required.
+Migrated Codex rollouts without `turn_context` (including review-mode records)
+name process turns in `task_started` while messages carry their real LLM turn in
+`internal_chat_message_metadata_passthrough.turn_id`. The parser prefers that
+per-message turn id when present, so assistant answers link to the LLM turn that
+actually produced them instead of a process turn with no LLM evidence; a
+review-mode Session then shows one root LLM turn (with no captured token
+telemetry) and its answer beneath it, rather than a dangling "parent not
+captured" relationship.
 
 ## Persistence model
 

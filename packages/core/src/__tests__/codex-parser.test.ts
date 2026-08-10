@@ -166,6 +166,65 @@ describe('parseCodexTranscript', () => {
     ).toEqual(['gpt-5.6-sol', 'gpt-5.6-terra']);
   });
 
+  it('attributes migrated assistant messages to their passthrough turn_id instead of task_started', () => {
+    // Codex review-mode rollouts have no turn_context and no token_count. The
+    // task_started event names a process turn, while the assistant message
+    // carries the real LLM turn in internal_chat_message_metadata_passthrough.
+    const entries: CodexEntry[] = [
+      {
+        timestamp: '2026-08-03T13:25:04.000Z',
+        type: 'session_meta',
+        payload: { id: 'review-session', session_id: 'review-session' },
+      },
+      {
+        timestamp: '2026-08-03T13:25:04.100Z',
+        type: 'event_msg',
+        payload: {
+          type: 'entered_review_mode',
+          turn_id: 'review-process-turn',
+        },
+      },
+      {
+        timestamp: '2026-08-03T13:25:04.200Z',
+        type: 'event_msg',
+        payload: {
+          type: 'task_started',
+          turn_id: 'process-turn-a2c6',
+          started_at: 1_780_000_000,
+        },
+      },
+      {
+        timestamp: '2026-08-03T13:25:05.000Z',
+        type: 'event_msg',
+        payload: { type: 'user_message', message: 'Review the changes' },
+      },
+      {
+        timestamp: '2026-08-03T14:27:15.900Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          id: 'msg-1',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'All checks passed.' }],
+          internal_chat_message_metadata_passthrough: { turn_id: 'review-process-turn' },
+        },
+      },
+      {
+        timestamp: '2026-08-03T14:27:15.905Z',
+        type: 'event_msg',
+        payload: { type: 'task_complete', turn_id: 'review-process-turn' },
+      },
+    ];
+
+    const parsed = parseCodexTranscript(entries, { filePath: '/codex/review-mode.jsonl' });
+
+    const answers = parsed?.spans.filter((span) => span.type === 'answer') ?? [];
+    expect(answers).toHaveLength(1);
+    // answer 必须归属到消息真实 LLM turn，而不是 task_started 的进程 turn。
+    expect(answers[0].parentId).toBe('review-process-turn');
+    expect(answers[0].id).toMatch(/^review-process-turn-answer-/);
+  });
+
   it('keeps model identity unknown when only a provider is captured', () => {
     const entries = rollout({ id: 'provider-only-thread', model_provider: 'openai' });
     delete entries[1].payload.model;
