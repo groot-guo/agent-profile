@@ -743,6 +743,11 @@ recalculation contract. Preview is read-only; execute rejects a stale pricing
 revision, recalculates the normalized model/time scope transactionally, rebuilds
 affected Session totals, and records the run. Recompute selects pricing
 independently for each historical LLM Span and records calculator version `v1`.
+After a successful execute, the runtime publishes a content-free
+session-update signal (T137) listing the affected Session IDs so open
+discovery, statistics, Profile, and detail surfaces refetch instead of showing
+stale aggregates. Preview publishes no signal and mutates nothing; a failed run
+leaves all aggregates unchanged.
 Pre-T39 stored costs retain `legacy` provenance until they are imported again or
 recomputed.
 

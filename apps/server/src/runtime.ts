@@ -53,6 +53,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     onError: options.onImportError,
     clock,
   });
+  modelCatalog.onUpdate = (sessionIds) => imports.updates.publish(sessionIds);
   let isClosed = false;
 
   return {

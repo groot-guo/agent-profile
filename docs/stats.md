@@ -39,6 +39,12 @@ Session counts separately; a partial or unknown subtotal is never presented as
 a trusted total. Synthetic placeholder labels are excluded from billing
 entirely and never render as `¥0`.
 
+Previewed historical recalculation (T137) stays read-only and binds Execute to
+the reviewed pricing revision and scope. After a successful run, a content-free
+session-update signal lists the affected Session IDs so open discovery,
+statistics, Profile, and detail surfaces refetch; a failed run leaves all
+aggregates unchanged.
+
 ## Grouped statistics
 
 Model groups use a presentation-only identity contract. Explicit case and

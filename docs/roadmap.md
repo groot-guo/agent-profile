@@ -6,37 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T137 previewed historical cost recalculation and dependent-data refresh
-
-- status: planned
-- purpose: make approved price changes propagate safely from matching LLM Spans
-  to Session, Project, Profile, and comparison reads without stale Web state or
-  accidental broad recalculation.
-- scope:
-  1. keep Preview read-only and bind Execute to the reviewed pricing revision,
-     precise billing identity, and optional time range;
-  2. transactionally update matching Span cost provenance and recompute every
-     affected Session from all of its LLM turns, preserving unknown/excluded
-     coverage;
-  3. record a bounded recalculation audit with before/after coverage and
-     affected scope, without storing source content;
-  4. publish an application data-version/session-update signal after execution
-     so open discovery, statistics, Profile, and detail surfaces refetch;
-  5. make full-dataset recalculation a separately confirmed action rather than
-     an implicit side effect of saving a price revision.
-- dependencies: T136.
-- risks and assumptions: recalculation never changes tokens, context evidence,
-  source model strings, or Session relationships. Scoped runs must not reset
-  unrelated Sessions, and a failed run must leave all aggregates unchanged.
-- acceptance: Preview and Execute report the same deterministic scope; visible
-  aggregates refresh after a successful run; a Session with mixed known and
-  unknown turns retains both its known subtotal and incomplete-coverage status.
-- verification plan: Server transaction/rollback tests, mixed-model Session
-  tests, update-event tests, focused Web refresh tests, and a scale regression
-  check for bounded result payloads.
-- documentation plan: update ARCHITECTURE, `docs/performance.md`,
-  `docs/stats.md`, and the Task archive.
-
 ### T138 server-only semantic Provider configuration and safe LLM analysis
 
 - status: planned
@@ -129,6 +98,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T137](roadmap-archive/2026-q3.md#t137) | previewed historical cost recalculation and dependent-data refresh | completed |
 | [T136](roadmap-archive/2026-q3.md#t136) | evidence-safe pricing status and time-effective schedules | completed |
 | [T135](roadmap-archive/2026-q3.md#t135) | model observation, identity review, and billing eligibility | completed |
 | [T134](roadmap-archive/2026-q3.md#t134) | source telemetry coverage and Session-relationship integrity | completed |

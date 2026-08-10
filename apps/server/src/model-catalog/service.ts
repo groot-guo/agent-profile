@@ -94,7 +94,12 @@ export class ModelCatalogService {
   constructor(
     private readonly database: DatabaseConnection,
     private readonly clock: () => number,
-  ) {}
+  ) {
+    this.onUpdate = undefined;
+  }
+
+  /** Optional hook invoked after a successful recalculation execution. */
+  onUpdate?: (sessionIds: string[]) => void;
 
   seedDefaults(): void {
     seedPricingDefaults(this.database);
@@ -557,6 +562,7 @@ export class ModelCatalogService {
           preview.after.unknown,
         );
     })();
+    this.onUpdate?.(sessionIds);
     return {
       ...preview,
       runId,

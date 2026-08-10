@@ -298,6 +298,40 @@ describe('ModelCatalogService', () => {
     await runtime.close();
   });
 
+  it('publishes a session-update signal after successful recalculation execution', async () => {
+    const runtime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+      clock: () => 3000,
+    });
+    insertSessionAndSpan(runtime.database, {
+      sessionId: 'refresh-session',
+      spanId: 'refresh-span',
+      model: 'gpt-4o',
+      startTime: 1000,
+      unknown: true,
+    });
+
+    const preview = runtime.modelCatalog.previewRecalculation({ models: ['gpt-4o'] });
+    const before = await runtime.imports.updates.waitFor(0, 0);
+    // Preview 是只读的，不得发布任何刷新信号。
+    expect((await runtime.imports.updates.waitFor(before.version, 0)).version).toBe(
+      before.version,
+    );
+    const result = runtime.modelCatalog.executeRecalculation(
+      preview.scope,
+      preview.pricingRevision,
+    );
+    expect(result.status).toBe('completed');
+
+    const after = await runtime.imports.updates.waitFor(before.version, 0);
+    expect(after.version).toBeGreaterThan(before.version);
+    expect(after.sessionIds).toContain('refresh-session');
+    expect(after.reset).toBe(false);
+    await runtime.close();
+  });
+
   it('rolls back Span updates and audit insertion when Session rebuild fails', async () => {
     const runtime = createRuntime({
       database: createDatabase(':memory:'),
