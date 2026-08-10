@@ -76,7 +76,35 @@ describe('diagnosis route semantic consent boundary', () => {
     expect(response.statusCode).toBe(400);
     await app.close();
   });
-});
+
+  it('suppresses semantic conclusions when no LLM turn has captured telemetry', async () => {
+    const { app, database, diagnoser } = createApp();
+    insertSession(database);
+    // 把 session 的唯一 turn 标记为 stub（token 未捕获），语义推断必须被抑制。
+    database
+      .prepare(
+        `INSERT INTO spans (
+          id, session_id, type, name, start_time, model, metadata
+        ) VALUES ('stub-turn', 'session-1', 'llm_turn', 'codex', 100, 'gpt-5.6-sol',
+          '{"tokenUsageSource":"not_captured","stubTurn":true}')`,
+      )
+      .run();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/session/session-1/diagnosis?semantic=opt_in',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().semantic).toMatchObject({
+      requested: true,
+      consent: 'granted',
+      status: 'insufficient_evidence',
+      payload: { mode: 'not_sent', rawContentIncluded: false },
+    });
+    expect(diagnoser.diagnoseWithMetadata).not.toHaveBeenCalled();
+    await app.close();
+  });
 
 function createApp() {
   const database = createDatabase(':memory:');
@@ -118,8 +146,23 @@ function createApp() {
       clock: () => 1000,
       pricingResolver: () => undefined,
       contextWindowResolver: () => undefined,
+      auditStore,
+      provider: {
+        status: () => ({
+          configured: true,
+          provider: 'openai' as const,
+          model: 'route-model',
+          endpointHost: 'api.example.com',
+          endpointLocality: 'external' as const,
+          configSource: 'file' as const,
+          testStatus: 'passed' as const,
+          restartRequired: false,
+          keyConfigured: true,
+        }),
+        configure: () => undefined,
+        diagnoser: () => diagnoser,
+      },
     },
-    { semanticDiagnoser: diagnoser, auditStore },
   );
   return { app, database, diagnoser, auditStore };
 }
@@ -132,3 +175,4 @@ function insertSession(database: DatabaseConnection): void {
     )
     .run();
 }
+});

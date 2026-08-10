@@ -123,6 +123,17 @@ coverage plus Session-level `tokenUsage` coverage. A turn with
 `tokenUsageSource=not_captured` or `stubTurn=true` has no measured token or
 cost evidence; heuristic findings that depend on token volume must not treat
 that absence as a zero-usage turn.
+
+Semantic Provider configuration is server-only (T138). `GET /api/provider/status`
+returns non-secret status (provider, model, endpoint host, loopback/external
+locality, configuration source, test status, restart requirements) and
+`PUT /api/provider/configuration` stores the key in a `0600` `provider.json`
+file in the application data directory; the key never reaches browser state,
+localStorage, SQLite, logs, exports, or source files. Environment variables
+remain a legacy fallback. Every LLM-assisted entry point reports
+`not_configured`, `insufficient_evidence`, `completed`, or `failed` before any
+payload is sent, and semantic conclusions are suppressed when the structural
+token/model telemetry required for the claim is not captured.
 Any future change to rules, thresholds, semantic prompts, providers, evidence
 coverage, or displayed confidence must start with a task in `roadmap.md` and
 must update this document after implementation.

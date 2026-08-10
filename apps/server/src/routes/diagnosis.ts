@@ -8,7 +8,6 @@ import {
 } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import {
-  createLlmDiagnoser,
   createSemanticDiagnosisAuditStore,
   type SemanticDiagnoser,
   type SemanticDiagnosisAuditStore,
@@ -16,13 +15,16 @@ import {
 import type { AppRuntime } from '../runtime';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
-const llmDiagnoser = createLlmDiagnoser();
-
-type DiagnosisRuntime = Pick<AppRuntime, 'pricingResolver' | 'contextWindowResolver'>;
+type DiagnosisRuntime = Pick<AppRuntime, 'pricingResolver' | 'contextWindowResolver'> & {
+  provider?: AppRuntime['provider'];
+};
 type DiagnosisRouteRuntime = Pick<
   AppRuntime,
   'clock' | 'database' | 'pricingResolver' | 'contextWindowResolver'
->;
+> & {
+  provider?: AppRuntime['provider'];
+  auditStore?: SemanticDiagnosisAuditStore;
+};
 
 interface DiagnoseDetailOptions {
   semanticOptIn?: boolean;
@@ -68,9 +70,23 @@ export async function diagnoseDetail(
     return { ...base, semantic: notRequestedSemanticReport() };
   }
 
-  const diagnoser = options.semanticDiagnoser ?? llmDiagnoser;
+  const diagnoser = options.semanticDiagnoser ?? runtime.provider?.diagnoser() ?? null;
   if (!diagnoser) {
     const semantic = notConfiguredSemanticReport();
+    recordAudit(detail.id, semantic, options);
+    return { ...base, semantic };
+  }
+
+  // 证据不足时抑制语义结论：若没有任何可观察的 LLM turn 遥测（token 未捕获
+  // 或 stub turn），语义推断无法基于结构证据，必须报告证据不足而不是猜测。
+  const llmTurns = detail.spans.filter((span) => span.type === 'llm_turn');
+  const hasObservedEvidence = llmTurns.some(
+    (turn) =>
+      turn.metadata?.tokenUsageSource !== undefined &&
+      turn.metadata?.tokenUsageSource !== 'not_captured',
+  );
+  if (!hasObservedEvidence && llmTurns.length > 0) {
+    const semantic = evidenceInsufficientSemanticReport();
     recordAudit(detail.id, semantic, options);
     return { ...base, semantic };
   }
@@ -84,13 +100,9 @@ export async function diagnoseDetail(
 export function registerDiagnosisRoutes(
   app: FastifyInstance,
   runtime: DiagnosisRouteRuntime,
-  routeOptions: {
-    semanticDiagnoser?: SemanticDiagnoser | null;
-    auditStore?: SemanticDiagnosisAuditStore;
-  } = {},
 ): void {
   const { database } = runtime;
-  const auditStore = routeOptions.auditStore ?? createSemanticDiagnosisAuditStore();
+  const auditStore = runtime.auditStore ?? createSemanticDiagnosisAuditStore();
   app.get<{ Params: { id: string }; Querystring: DiagnosisQuery }>(
     '/api/session/:id/diagnosis',
     { schema: { querystring: diagnosisQuerySchema } },
@@ -106,7 +118,7 @@ export function registerDiagnosisRoutes(
 
       return diagnoseDetail(detail, runtime, {
         semanticOptIn: req.query.semantic === 'opt_in',
-        semanticDiagnoser: routeOptions.semanticDiagnoser,
+        semanticDiagnoser: runtime.provider?.diagnoser() ?? null,
         auditStore,
         clock: runtime.clock,
       });
@@ -165,6 +177,25 @@ function notConfiguredSemanticReport(): SemanticDiagnosisReport {
     limitations: [
       'Semantic diagnosis was requested, but no LLM_API_KEY is configured; no Provider call was made.',
       'Deterministic diagnosis remains available without an LLM provider.',
+    ],
+  };
+}
+
+function evidenceInsufficientSemanticReport(): SemanticDiagnosisReport {
+  return {
+    requested: true,
+    consent: 'granted',
+    status: 'insufficient_evidence',
+    provider: null,
+    payload: emptyPayload,
+    audit: {
+      recorded: false,
+      retention: 'process_bounded_content_free',
+      rawContentStored: false,
+    },
+    limitations: [
+      'No LLM turn in this Session has captured token-usage or model telemetry.',
+      'Semantic inference cannot repair missing source evidence; heuristic diagnosis remains available.',
     ],
   };
 }

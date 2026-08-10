@@ -4,7 +4,15 @@ import type { DatabaseConnection } from './database';
 import { createDatabase } from './database';
 import type { ImportSourceDefinition } from './ingestion/import-job-manager';
 import { ImportRuntime } from './ingestion/import-runtime';
+import { createLlmDiagnoser, type SemanticDiagnoser } from './llm-diagnoser';
 import { ModelCatalogService } from './model-catalog/service';
+import {
+  loadProviderConfiguration,
+  providerStatus,
+  saveProviderConfiguration,
+  type ProviderConfiguration,
+  type ProviderStatus,
+} from './provider-config';
 
 export type PricingResolver = (model?: string, at?: number) => Pricing | undefined;
 export type ContextWindowResolver = (model?: string) => number | undefined;
@@ -16,6 +24,11 @@ export interface AppRuntime {
   pricingResolver: PricingResolver;
   contextWindowResolver: ContextWindowResolver;
   imports: ImportRuntime;
+  provider: {
+    status(): ProviderStatus;
+    configure(configuration: ProviderConfiguration): void;
+    diagnoser(): SemanticDiagnoser | null;
+  };
   close: () => Promise<void>;
 }
 
@@ -54,6 +67,14 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     clock,
   });
   modelCatalog.onUpdate = (sessionIds) => imports.updates.publish(sessionIds);
+  let providerConfiguration = loadProviderConfiguration();
+  let providerDiagnoser = providerConfiguration
+    ? createLlmDiagnoser(providerConfiguration.apiKey, {
+        baseUrl: providerConfiguration.baseUrl,
+        model: providerConfiguration.model,
+        provider: providerConfiguration.provider,
+      })
+    : null;
   let isClosed = false;
 
   return {
@@ -63,6 +84,19 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     pricingResolver,
     contextWindowResolver,
     imports,
+    provider: {
+      status: () => providerStatus(providerConfiguration),
+      configure: (configuration) => {
+        saveProviderConfiguration(configuration);
+        providerConfiguration = configuration;
+        providerDiagnoser = createLlmDiagnoser(configuration.apiKey, {
+          baseUrl: configuration.baseUrl,
+          model: configuration.model,
+          provider: configuration.provider,
+        });
+      },
+      diagnoser: () => providerDiagnoser,
+    },
     close: async () => {
       if (isClosed) return;
       isClosed = true;

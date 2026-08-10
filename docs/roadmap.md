@@ -6,40 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T138 server-only semantic Provider configuration and safe LLM analysis
-
-- status: planned
-- purpose: make optional semantic/whole-analysis capabilities honestly
-  configurable and safely unavailable when no Provider is configured.
-- scope:
-  1. define a server-only local secret-storage contract for Provider keys;
-     never persist plaintext keys in browser state, localStorage, trace.db,
-     logs, exports, or source files;
-  2. add a non-secret configuration/status API and local UI that exposes
-     Provider, endpoint host/locality disclosure, model, configuration source,
-     test status, and restart/reload requirements without revealing the key;
-  3. require an explicit Provider and endpoint choice rather than silently
-     falling back to a remote default; retain request-scoped consent and the
-     bounded/redacted payload contract;
-  4. make current and future LLM-assisted analysis entry points show
-     `not_configured`, `configured`, `consent_required`, `running`, `completed`,
-     or `failed` before any payload is sent;
-  5. suppress semantic conclusions when the structural evidence required for
-     the claim is not captured, and report evidence insufficiency instead.
-- dependencies: T134 for coverage states; the secret-storage mechanism needs
-  an explicit local-operation decision before implementation.
-- risks and assumptions: LLM inference cannot repair missing telemetry or prove
-  causality. No Provider call may occur merely because a key is present.
-- acceptance: an unconfigured user receives a clear local setup path before
-  clicking Run; no secret reaches the browser or repository; every Provider
-  call remains explicitly consented, bounded, redacted, and auditable without
-  raw payload retention.
-- verification plan: configuration route/unit tests, secret non-disclosure
-  checks, consent/payload tests, local UI states, and a no-key/no-network smoke
-  test.
-- documentation plan: update README, ARCHITECTURE, `docs/diagnosis.md`,
-  `docs/profile-model.md`, and the Task archive.
-
 ### T139 cross-filtered Project and Agent discovery facets
 
 - status: planned
@@ -98,6 +64,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T138](roadmap-archive/2026-q3.md#t138) | server-only semantic Provider configuration and safe LLM analysis | completed |
 | [T137](roadmap-archive/2026-q3.md#t137) | previewed historical cost recalculation and dependent-data refresh | completed |
 | [T136](roadmap-archive/2026-q3.md#t136) | evidence-safe pricing status and time-effective schedules | completed |
 | [T135](roadmap-archive/2026-q3.md#t135) | model observation, identity review, and billing eligibility | completed |

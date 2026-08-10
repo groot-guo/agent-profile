@@ -757,18 +757,27 @@ call is made.
 
 `GET /api/session/:id/diagnosis?semantic=opt_in` invokes the configured
 Anthropic-native or OpenAI-compatible provider when the Session has captured
-thinking or tool-call evidence. The request payload is bounded to one Session
-title, at most five thinking excerpts (500 characters each), and at most twenty
-tool calls (200-character tool names/inputs), then passes through the shared
-common-secret redaction utility before construction of the Provider body. The
-response exposes only semantic status, Provider name, payload counts, redaction
-count, and limitations; it does not return the payload. `LLM_BASE_URL` may target
-a local or external compatible endpoint; without an override it is the external
-DeepSeek default, and the application does not determine endpoint locality.
-Each explicit request records a bounded process-local audit entry containing only
-Session ID, timestamps, status, Provider, and payload counts. Raw source content
-and Provider response content are not stored. Redaction is not a guarantee
-against every secret, so sensitive workspaces still need an approved endpoint.
+thinking or tool-call evidence. The Provider is configured server-only through
+`GET /api/provider/status` (non-secret status) and
+`PUT /api/provider/configuration`; the API key is stored in a `0600`
+`provider.json` file in the application data directory and never reaches
+browser state, localStorage, SQLite, logs, exports, or source files. The status
+API discloses provider, model, endpoint host, loopback/external locality,
+configuration source, test status, and restart requirements without revealing
+the key; environment variables remain a legacy fallback when no file exists.
+The request payload is bounded to one Session title, at most five thinking
+excerpts (500 characters each), and at most twenty tool calls
+(200-character tool names/inputs), then passes through the shared common-secret
+redaction utility before construction of the Provider body. The response
+exposes only semantic status, Provider name, payload counts, redaction count,
+and limitations; it does not return the payload. Each explicit request records
+a bounded process-local audit entry containing only Session ID, timestamps,
+status, Provider, and payload counts. Raw source content and Provider response
+content are not stored. Redaction is not a guarantee against every secret, so
+sensitive workspaces still need an approved endpoint. When no LLM turn in the
+Session has captured token/model telemetry (`tokenUsageSource=not_captured` or
+stub turns), semantic conclusions are suppressed and the diagnosis reports
+`insufficient_evidence` (T138) instead of calling the Provider.
 
 ### Session evidence report contract
 

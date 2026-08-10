@@ -67,6 +67,12 @@ before they can contribute pricing or context configuration, and synthetic
 placeholders are never billable. Statistics retain raw-label inspectability,
 and no automatic name-similarity alias may turn one label into another.
 
+Optional LLM-assisted analysis is server-only configured (T138): the Provider
+key lives in a `0600` application-data file, the status API exposes only
+non-secret fields, and every semantic entry point reports explicit availability
+states. Semantic conclusions are suppressed when the structural evidence
+required for the claim is not captured.
+
 - Higher/lower token, cost, duration, cache, tool-error, or Sidechain values are
   observations, not a quality ranking.
 - Process efficiency and diagnosis are hypotheses about execution behavior.

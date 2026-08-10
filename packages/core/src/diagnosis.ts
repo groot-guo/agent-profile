@@ -32,7 +32,12 @@ export interface DiagnosisFinding {
   spanIds: string[]; // 关联 span，前端可跳转定位
 }
 
-export type SemanticDiagnosisStatus = 'not_requested' | 'not_configured' | 'completed' | 'failed';
+export type SemanticDiagnosisStatus =
+  | 'not_requested'
+  | 'not_configured'
+  | 'insufficient_evidence'
+  | 'completed'
+  | 'failed';
 
 export interface SemanticDiagnosisReport {
   requested: boolean;

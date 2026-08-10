@@ -374,20 +374,28 @@ source database's aggregate cost is not treated as portable billing evidence.
 | `NEXT_PUBLIC_API` | Optional Web API override; packaged and default Web requests use same-origin `/api` |
 | `AUTO_SCAN_DIR` | Unset: scan default Claude Code and Codex directories. Empty: disable transcript auto-scan. A path: scan that one transcript directory. |
 | `TRACE_DB_PATH` | Override the Server/CLI SQLite path when no CLI path option is supplied |
-| `LLM_API_KEY` | Enables optional semantic diagnosis; no key is required for deterministic analysis |
-| `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Optional semantic-diagnosis provider settings |
+| `LLM_API_KEY` | Legacy fallback: enables optional semantic diagnosis when no server-side provider file exists; no key is required for deterministic analysis |
+| `LLM_PROVIDER`, `LLM_MODEL`, `LLM_BASE_URL` | Legacy fallback provider settings; the server-only configuration file takes precedence |
 
 Semantic diagnosis uses configured-provider processing only after an explicit
-request-scoped `semantic=opt_in` diagnosis request. The provider may be local or
-external through `LLM_BASE_URL`; Agent Profile does not determine or verify that
-endpoint's locality. Without an override, the endpoint is the external DeepSeek-
-compatible default. The Web disclosure explains that only bounded, common-secret-
+request-scoped `semantic=opt_in` diagnosis request. The Provider is configured
+server-side through `GET /api/provider/status` (non-secret status) and
+`PUT /api/provider/configuration` (provider, base URL, model, and API key);
+the key is stored in a server-only `provider.json` file (`0600`) and never
+reaches browser state, localStorage, logs, exports, or source files. The status
+API discloses the endpoint host and whether it is loopback or external, the
+provider, model, configuration source, and test/restart requirements without
+revealing the key. The endpoint may be local or external; Agent Profile does not
+independently verify endpoint locality beyond the loopback/external disclosure.
+The Web disclosure explains that only bounded, common-secret-
 redacted Session title, thinking, and tool-input excerpts are sent; the response
 reports the provider, payload counts, redaction count, and failure status without
 returning payload content. A bounded process-local audit keeps Session ID,
 timestamps, status, and payload counts only; raw source or provider response
 content is not stored. Leave the key unset, or do not opt in, for deterministic
-local diagnosis only.
+local diagnosis only. When no LLM turn in the Session has captured token/model
+telemetry, semantic conclusions are suppressed and the diagnosis reports
+`insufficient_evidence` instead of guessing.
 
 Model, context, and diagnosis configuration has separate scopes:
 

@@ -255,7 +255,12 @@ export interface CliDiagnosisReport {
     semantic: {
       requested: boolean;
       consent: 'not_granted' | 'granted';
-      status: 'not_requested' | 'not_configured' | 'completed' | 'failed';
+      status:
+        | 'not_requested'
+        | 'not_configured'
+        | 'insufficient_evidence'
+        | 'completed'
+        | 'failed';
       provider: 'anthropic' | 'openai' | null;
       audit: {
         recorded: boolean;
