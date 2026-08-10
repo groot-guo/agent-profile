@@ -325,7 +325,7 @@ export function discoverSessionPage(
             })
           : null,
     },
-    facets: loadDiscoveryFacets(database),
+    facets: loadDiscoveryFacets(database, normalized),
     sessions,
     selectedSession: normalized.selectedId
       ? loadSelectedDiscoverySession(
@@ -373,17 +373,20 @@ function normalizeWebOptions(
   };
 }
 
-function webFilters(options: NormalizedWebDiscoveryOptions): {
+function webFilters(
+  options: NormalizedWebDiscoveryOptions,
+  exclude: 'agent' | 'project' | 'none' = 'none',
+): {
   clause: string;
   parameters: Array<number | string>;
 } {
   const clauses = [primarySessionPredicate('s')];
   const parameters: Array<number | string> = [];
-  if (options.agent) {
+  if (options.agent && exclude !== 'agent') {
     clauses.push('s.agent = ?');
     parameters.push(options.agent);
   }
-  if (options.project) {
+  if (options.project && exclude !== 'project') {
     clauses.push(`${PROJECT_EXPRESSION} = ?`);
     parameters.push(options.project);
   }
@@ -405,26 +408,35 @@ function webFilters(options: NormalizedWebDiscoveryOptions): {
   return { clause: clauses.join('\nAND '), parameters };
 }
 
-function loadDiscoveryFacets(database: DatabaseConnection): SessionDiscoveryPage['facets'] {
+function loadDiscoveryFacets(
+  database: DatabaseConnection,
+  options: NormalizedWebDiscoveryOptions,
+): SessionDiscoveryPage['facets'] {
+  const agentFilters = webFilters(options, 'agent');
   const agents = database
     .prepare(
-      `SELECT s.agent, COUNT(*) AS count
+      `${ANOMALY_CTE}
+       SELECT s.agent, COUNT(*) AS count
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}
+       LEFT JOIN anomaly_sessions ON anomaly_sessions.id = s.id
+       WHERE ${agentFilters.clause}
        GROUP BY s.agent
        ORDER BY count DESC, s.agent ASC`,
     )
-    .all() as SessionDiscoveryPage['facets']['agents'];
+    .all(...agentFilters.parameters) as SessionDiscoveryPage['facets']['agents'];
+  const projectFilters = webFilters(options, 'project');
   const projects = database
     .prepare(
-      `SELECT ${PROJECT_EXPRESSION} AS project, COUNT(*) AS count,
+      `${ANOMALY_CTE}
+       SELECT ${PROJECT_EXPRESSION} AS project, COUNT(*) AS count,
         MAX(s.start_time) AS lastUsedAt
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}
+       LEFT JOIN anomaly_sessions ON anomaly_sessions.id = s.id
+       WHERE ${projectFilters.clause}
        GROUP BY ${PROJECT_EXPRESSION}
        ORDER BY project ASC`,
     )
-    .all() as SessionDiscoveryPage['facets']['projects'];
+    .all(...projectFilters.parameters) as SessionDiscoveryPage['facets']['projects'];
   return { agents, projects };
 }
 

@@ -117,14 +117,10 @@ describe('session discovery service', () => {
       sessions: [{ id: 'alpha-high' }, { id: 'alpha-tie-b' }],
       selectedSession: { id: 'beta-unpriced', project: '/workspace/beta' },
       facets: {
-        agents: [
-          { agent: 'claude-code', count: 3 },
-          { agent: 'codex', count: 1 },
-        ],
-        projects: [
-          { project: '/workspace/alpha', count: 3, lastUsedAt: 4_000 },
-          { project: '/workspace/beta', count: 1, lastUsedAt: 5_000 },
-        ],
+        // Facet 计数反映真实交集：agents 排除 Agent 维度但保留 project/query，
+        // projects 排除 Project 维度但保留 agent/query。
+        agents: [{ agent: 'claude-code', count: 3 }],
+        projects: [{ project: '/workspace/alpha', count: 3, lastUsedAt: 4_000 }],
       },
     });
     expect(firstPage.page.nextCursor).toEqual(expect.any(String));
@@ -274,6 +270,71 @@ describe('session discovery service', () => {
         observedAt: now,
       },
     });
+  });
+
+  it('computes facet counts as the real intersection of the other filters', () => {
+    insertDiscoverySession(database, {
+      id: 'codex-alpha',
+      agent: 'codex',
+      project: '/workspace/alpha',
+      startTime: 1_000,
+      totalCost: 1,
+    });
+    insertDiscoverySession(database, {
+      id: 'codex-beta',
+      agent: 'codex',
+      project: '/workspace/beta',
+      startTime: 2_000,
+      totalCost: 1,
+    });
+    insertDiscoverySession(database, {
+      id: 'claude-alpha',
+      agent: 'claude-code',
+      project: '/workspace/alpha',
+      startTime: 3_000,
+      totalCost: 1,
+    });
+
+    // 选 Agent=codex 时，Project facet 排除 Agent 维度、保留其他筛选：
+    // 显示两个项目（各 1 个 codex session）。
+    const codexOnly = discoverSessionPage(database, { agent: 'codex' });
+    expect(codexOnly.facets.projects).toEqual([
+      { project: '/workspace/alpha', count: 1, lastUsedAt: 1_000 },
+      { project: '/workspace/beta', count: 1, lastUsedAt: 2_000 },
+    ]);
+    // agents facet 同样排除 Agent 维度：显示所有 agent 在其余筛选下的计数。
+    expect(codexOnly.facets.agents).toEqual(
+      expect.arrayContaining([
+        { agent: 'codex', count: 2 },
+        { agent: 'claude-code', count: 1 },
+      ]),
+    );
+
+    // 选 Project=/workspace/alpha 时，Agent facet 排除 Project 维度：
+    // 两个 agent 各 1 个（都在 alpha 项目）。
+    const alphaOnly = discoverSessionPage(database, { project: '/workspace/alpha' });
+    expect(alphaOnly.facets.agents).toEqual(
+      expect.arrayContaining([
+        { agent: 'codex', count: 1 },
+        { agent: 'claude-code', count: 1 },
+      ]),
+    );
+    // projects facet 排除 Project 维度：显示所有项目在其余筛选下的计数。
+    expect(alphaOnly.facets.projects).toEqual([
+      { project: '/workspace/alpha', count: 2, lastUsedAt: 3_000 },
+      { project: '/workspace/beta', count: 1, lastUsedAt: 2_000 },
+    ]);
+
+    // 同时选 Agent=codex + Project=alpha 时，两个 facet 都收敛到同一交集。
+    const intersection = discoverSessionPage(database, {
+      agent: 'codex',
+      project: '/workspace/alpha',
+    });
+    expect(intersection.facets.agents).toContainEqual({ agent: 'codex', count: 1 });
+    expect(intersection.facets.projects).toEqual([
+      { project: '/workspace/alpha', count: 1, lastUsedAt: 1_000 },
+      { project: '/workspace/beta', count: 1, lastUsedAt: 2_000 },
+    ]);
   });
 });
 

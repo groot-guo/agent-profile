@@ -6,33 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T139 cross-filtered Project and Agent discovery facets
-
-- status: planned
-- purpose: make Project and Agent/IDE filters communicate their real
-  intersection instead of showing global counts that imply the wrong scope.
-- scope:
-  1. calculate Agent facets with all active filters except the Agent dimension,
-     and Project facets with all active filters except the Project dimension;
-  2. retain time, text, quick-view, source-availability, and primary-Session
-     predicates in both facet calculations;
-  3. align list, selected Session, URL state, count labels, empty states, and
-     facet controls with the same query contract;
-  4. keep filters bounded and indexed, with no client-side full-history
-     reconstruction.
-- dependencies: none; sequence after T134/T140 only if the same Web surfaces
-  would otherwise conflict.
-- risks and assumptions: a facet count is a scope statement, not a global
-  popularity measure. A selected dimension must not hide a zero-result state.
-- acceptance: choosing `agent-profile` and Codex shows the actual intersection
-  everywhere; switching either filter updates the other facet's counts and
-  available choices deterministically.
-- verification plan: discovery-service query tests, Web navigation tests, API
-  contract assertions, desktop/narrow-width manual checks, and scale query-plan
-  validation.
-- documentation plan: update ARCHITECTURE, relevant README/UI guidance, and
-  the Task archive.
-
 ### T140 evidence-safe Session detail absence states
 
 - status: planned
@@ -64,6 +37,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T139](roadmap-archive/2026-q3.md#t139) | cross-filtered Project and Agent discovery facets | completed |
 | [T138](roadmap-archive/2026-q3.md#t138) | server-only semantic Provider configuration and safe LLM analysis | completed |
 | [T137](roadmap-archive/2026-q3.md#t137) | previewed historical cost recalculation and dependent-data refresh | completed |
 | [T136](roadmap-archive/2026-q3.md#t136) | evidence-safe pricing status and time-effective schedules | completed |

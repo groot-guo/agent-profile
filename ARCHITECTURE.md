@@ -351,6 +351,12 @@ cursor bound to the normalized query. The default page is 120 rows and the
 maximum is 200. These filters and the selected Session use bounded URL
 parameters; opening a Session pushes one history entry and browser back restores
 the filters and saved list scroll.
+Agent and Project facets (T139) are intersection counts, not global popularity:
+the Agent facet is computed with every active filter except the Agent dimension,
+and the Project facet with every active filter except the Project dimension,
+so picking `agent-profile` and Codex shows the actual intersection everywhere.
+Both facets keep time, text, quick-view, source-availability, and primary-Session
+predicates; a selected dimension never hides a zero-result state.
 One shared Core classifier supplies the project key used by both Web navigation
 and Server statistics. A non-empty captured `cwd` is authoritative; the
 constrained Claude `~/.claude/projects/<encoded>/` layout remains an explicit
