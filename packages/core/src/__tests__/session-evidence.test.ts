@@ -156,7 +156,67 @@ describe('session evidence report', () => {
     expect(report.scope.events).toBe(0);
     expect(report.coverage.toolInputs.status).toBe('not_applicable');
     expect(report.coverage.modelIdentity.status).toBe('not_applicable');
+    expect(report.coverage.tokenUsage.status).toBe('not_applicable');
     expect(report.coverage.content.status).toBe('not_applicable');
+  });
+
+  it('distinguishes captured, fallback, and missing token usage on events', () => {
+    const report = buildSessionEvidenceReport(session(), [
+      makeSpan({
+        id: 'turn-captured',
+        type: 'llm_turn',
+        name: 'model',
+        startTime: 100,
+        model: 'fixture-model',
+        metadata: { tokenUsageSource: 'token_count', tokenUsageClassified: true },
+      }),
+      makeSpan({
+        id: 'turn-fallback',
+        type: 'llm_turn',
+        name: 'model',
+        startTime: 200,
+        model: 'fixture-model',
+        metadata: { tokenUsageSource: 'total_tokens_fallback', tokenUsageClassified: false },
+      }),
+      makeSpan({
+        id: 'turn-stub',
+        type: 'llm_turn',
+        name: 'model',
+        startTime: 300,
+        model: 'fixture-model',
+        metadata: {
+          tokenUsageSource: 'not_captured',
+          tokenUsageClassified: false,
+          stubTurn: true,
+        },
+      }),
+      makeSpan({ id: 'tool', type: 'tool_call', name: 'Read', startTime: 400 }),
+    ]);
+
+    expect(report.events[0].coverage.tokenUsage).toEqual({
+      status: 'captured',
+      source: 'token_count',
+      classified: true,
+      stubTurn: false,
+    });
+    expect(report.events[1].coverage.tokenUsage).toEqual({
+      status: 'captured',
+      source: 'total_tokens_fallback',
+      classified: false,
+      stubTurn: false,
+    });
+    expect(report.events[2].coverage.tokenUsage).toEqual({
+      status: 'not_captured',
+      source: 'not_captured',
+      classified: false,
+      stubTurn: true,
+    });
+    expect(report.events[3].coverage.tokenUsage.status).toBe('not_applicable');
+    expect(report.coverage.tokenUsage).toMatchObject({
+      observed: 2,
+      total: 3,
+      status: 'partial',
+    });
   });
 });
 

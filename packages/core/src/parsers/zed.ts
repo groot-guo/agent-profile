@@ -148,7 +148,13 @@ export async function parseZedThread(input: ZedThreadInput): Promise<ParsedSessi
           inputTokens: usage?.input_tokens,
           outputTokens: usage?.output_tokens,
           model,
-          metadata: usage ? { tokenUsageSource: 'request_token_usage' } : undefined,
+          metadata: usage
+            ? { tokenUsageSource: 'request_token_usage', tokenUsageClassified: true }
+            : {
+                tokenUsageSource: 'not_captured',
+                tokenUsageClassified: false,
+                stubTurn: false,
+              },
         }),
       );
       messageCount++;
@@ -167,6 +173,11 @@ export async function parseZedThread(input: ZedThreadInput): Promise<ParsedSessi
           name: model || 'zed',
           startTime,
           model,
+          metadata: {
+            tokenUsageSource: 'not_captured',
+            tokenUsageClassified: false,
+            stubTurn: true,
+          },
         }),
       );
       messageCount++;

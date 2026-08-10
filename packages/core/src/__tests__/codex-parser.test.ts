@@ -56,8 +56,11 @@ describe('parseCodexTranscript', () => {
       cacheReadTokens: 40,
       outputTokens: 25,
       model: 'gpt-5.6-sol',
+      metadata: {
+        tokenUsageSource: 'token_count',
+        tokenUsageClassified: true,
+      },
     });
-    expect(parsed?.spans[0].metadata).toBeUndefined();
   });
 
   it('keeps a child rollout distinct and marks every span as Sidechain', () => {
@@ -75,6 +78,51 @@ describe('parseCodexTranscript', () => {
     expect(parsed?.spans).toHaveLength(1);
     expect(parsed?.spans.every((span) => span.sessionId === 'thread-child')).toBe(true);
     expect(parsed?.spans.every((span) => span.isSidechain)).toBe(true);
+  });
+
+  it('retains an isolated turn_context as a stub turn with no token telemetry', () => {
+    const entries = rollout({ id: 'stub-thread', session_id: 'stub-thread' });
+    // 移除 token_count 后，该 turn 只剩 turn_context（source evidence：回合已
+    // 开始但没有任何遥测被捕获）。
+    entries.splice(2, 1);
+
+    const parsed = parseCodexTranscript(entries, { filePath: '/codex/stub.jsonl' });
+
+    expect(parsed?.spans).toHaveLength(1);
+    expect(parsed?.spans[0]).toMatchObject({
+      type: 'llm_turn',
+      model: 'gpt-5.6-sol',
+      inputTokens: 0,
+      metadata: {
+        tokenUsageSource: 'not_captured',
+        tokenUsageClassified: false,
+        stubTurn: true,
+      },
+    });
+  });
+
+  it('marks a turn with an unclassified token_count as fallback coverage', () => {
+    const parsed = parseCodexTranscript(
+      rollout(
+        { id: 'unclassified-thread', session_id: 'unclassified-thread' },
+        {
+          input_tokens: 0,
+          cached_input_tokens: 0,
+          output_tokens: 0,
+          reasoning_output_tokens: 0,
+          total_tokens: 4_096,
+        },
+      ),
+      { filePath: '/codex/unclassified.jsonl' },
+    );
+
+    expect(parsed?.spans[0]).toMatchObject({
+      inputTokens: 4_096,
+      metadata: {
+        tokenUsageSource: 'total_tokens_fallback',
+        tokenUsageClassified: false,
+      },
+    });
   });
 
   it('falls back to session_id for legacy rollouts without id', () => {

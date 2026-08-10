@@ -6,10 +6,197 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
+### T135 model observation, identity review, and billing eligibility
+
+- status: planned
+- purpose: separate raw source model labels from verified billable identities
+  so the Model Catalog does not present opaque, provider-only, runtime, or
+  synthetic labels as ordinary configurable models.
+- scope:
+  1. introduce a source-preserving model-observation/review contract with raw
+     label, source kind/field, observed Span and Session coverage, token
+     coverage, identity classification, review provenance, and billing
+     eligibility;
+  2. classify `<synthetic>` as a non-billable synthetic placeholder,
+     `big-pickle` as a provider-managed route pending tariff evidence, and
+     `astron-code-latest` as an opaque rolling source label pending explicit
+     verification; retain all raw values and evidence;
+  3. reuse and extend the existing statistics identity rules in the Model
+     Catalog rather than letting the settings page enumerate unqualified raw
+     labels as price-edit candidates;
+  4. prevent provider-only fallbacks from being represented as concrete model
+     identities and prohibit automatic name-similarity aliases.
+- dependencies: T134 for reliable source-field and coverage evidence.
+- risks and assumptions: a canonical display identity, a pricing alias, a
+  context-window equivalence, and a billing identity are separate claims. A
+  rolling `*-latest` label cannot receive a timeless underlying-model alias.
+- acceptance: the catalog visibly separates billable, review-required, and
+  excluded source labels; only explicit, auditable evidence can enable pricing
+  or context configuration; statistics retain raw-label inspectability.
+- verification plan: core identity tests, Server inventory/API tests, migration
+  tests for legacy labels, and focused Web tests for the three catalog groups.
+- documentation plan: update ARCHITECTURE, `docs/stats.md`,
+  `docs/profile-model.md`, and the Task archive.
+
+### T136 evidence-safe pricing status and time-effective schedules
+
+- status: planned
+- purpose: ensure cost is only represented as known when source token coverage
+  and a verified provider/route/model price schedule both apply at the Span
+  time.
+- scope:
+  1. distinguish known cost, unknown pricing, unverified provider route,
+     token usage not captured, unsupported scheme, and excluded synthetic data
+     in persisted and API-visible cost status;
+  2. preserve the four-token-class formula and CNY-only contract while making
+     price applicability provider/route-aware where the source can establish
+     it;
+  3. require explicit, time-effective and source-referenced schedules for
+     rolling or gateway labels; do not map `astron-code-latest` or
+     `big-pickle` to an assumed underlying model;
+  4. retire the active zero-price `<synthetic>` seed safely, with an additive
+     migration/backfill that never treats missing data as free usage;
+  5. expose known subtotal, unknown/excluded coverage, pricing model, effective
+     time, calculation time, and calculator version without presenting a
+     partial subtotal as a trusted total.
+- dependencies: T134 and T135.
+- risks and assumptions: a price of zero is valid only with an explicit,
+  time-bounded provider tariff; subscription fees and unknown routing must not
+  be invented from token records.
+- acceptance: unknown or incomplete evidence cannot render as `¥0`, a zero
+  cost, or a complete comparison input; all four token classes remain separate;
+  historical pricing provenance remains inspectable.
+- verification plan: core pricing matrix tests, Server lookup/migration tests,
+  regression tests for synthetic/opaque/provider-route labels, and API
+  assertions for partial-cost presentation.
+- documentation plan: update ARCHITECTURE, `docs/stats.md`,
+  `docs/diagnosis.md`, README configuration guidance, and the Task archive.
+
+### T137 previewed historical cost recalculation and dependent-data refresh
+
+- status: planned
+- purpose: make approved price changes propagate safely from matching LLM Spans
+  to Session, Project, Profile, and comparison reads without stale Web state or
+  accidental broad recalculation.
+- scope:
+  1. keep Preview read-only and bind Execute to the reviewed pricing revision,
+     precise billing identity, and optional time range;
+  2. transactionally update matching Span cost provenance and recompute every
+     affected Session from all of its LLM turns, preserving unknown/excluded
+     coverage;
+  3. record a bounded recalculation audit with before/after coverage and
+     affected scope, without storing source content;
+  4. publish an application data-version/session-update signal after execution
+     so open discovery, statistics, Profile, and detail surfaces refetch;
+  5. make full-dataset recalculation a separately confirmed action rather than
+     an implicit side effect of saving a price revision.
+- dependencies: T136.
+- risks and assumptions: recalculation never changes tokens, context evidence,
+  source model strings, or Session relationships. Scoped runs must not reset
+  unrelated Sessions, and a failed run must leave all aggregates unchanged.
+- acceptance: Preview and Execute report the same deterministic scope; visible
+  aggregates refresh after a successful run; a Session with mixed known and
+  unknown turns retains both its known subtotal and incomplete-coverage status.
+- verification plan: Server transaction/rollback tests, mixed-model Session
+  tests, update-event tests, focused Web refresh tests, and a scale regression
+  check for bounded result payloads.
+- documentation plan: update ARCHITECTURE, `docs/performance.md`,
+  `docs/stats.md`, and the Task archive.
+
+### T138 server-only semantic Provider configuration and safe LLM analysis
+
+- status: planned
+- purpose: make optional semantic/whole-analysis capabilities honestly
+  configurable and safely unavailable when no Provider is configured.
+- scope:
+  1. define a server-only local secret-storage contract for Provider keys;
+     never persist plaintext keys in browser state, localStorage, trace.db,
+     logs, exports, or source files;
+  2. add a non-secret configuration/status API and local UI that exposes
+     Provider, endpoint host/locality disclosure, model, configuration source,
+     test status, and restart/reload requirements without revealing the key;
+  3. require an explicit Provider and endpoint choice rather than silently
+     falling back to a remote default; retain request-scoped consent and the
+     bounded/redacted payload contract;
+  4. make current and future LLM-assisted analysis entry points show
+     `not_configured`, `configured`, `consent_required`, `running`, `completed`,
+     or `failed` before any payload is sent;
+  5. suppress semantic conclusions when the structural evidence required for
+     the claim is not captured, and report evidence insufficiency instead.
+- dependencies: T134 for coverage states; the secret-storage mechanism needs
+  an explicit local-operation decision before implementation.
+- risks and assumptions: LLM inference cannot repair missing telemetry or prove
+  causality. No Provider call may occur merely because a key is present.
+- acceptance: an unconfigured user receives a clear local setup path before
+  clicking Run; no secret reaches the browser or repository; every Provider
+  call remains explicitly consented, bounded, redacted, and auditable without
+  raw payload retention.
+- verification plan: configuration route/unit tests, secret non-disclosure
+  checks, consent/payload tests, local UI states, and a no-key/no-network smoke
+  test.
+- documentation plan: update README, ARCHITECTURE, `docs/diagnosis.md`,
+  `docs/profile-model.md`, and the Task archive.
+
+### T139 cross-filtered Project and Agent discovery facets
+
+- status: planned
+- purpose: make Project and Agent/IDE filters communicate their real
+  intersection instead of showing global counts that imply the wrong scope.
+- scope:
+  1. calculate Agent facets with all active filters except the Agent dimension,
+     and Project facets with all active filters except the Project dimension;
+  2. retain time, text, quick-view, source-availability, and primary-Session
+     predicates in both facet calculations;
+  3. align list, selected Session, URL state, count labels, empty states, and
+     facet controls with the same query contract;
+  4. keep filters bounded and indexed, with no client-side full-history
+     reconstruction.
+- dependencies: none; sequence after T134/T140 only if the same Web surfaces
+  would otherwise conflict.
+- risks and assumptions: a facet count is a scope statement, not a global
+  popularity measure. A selected dimension must not hide a zero-result state.
+- acceptance: choosing `agent-profile` and Codex shows the actual intersection
+  everywhere; switching either filter updates the other facet's counts and
+  available choices deterministically.
+- verification plan: discovery-service query tests, Web navigation tests, API
+  contract assertions, desktop/narrow-width manual checks, and scale query-plan
+  validation.
+- documentation plan: update ARCHITECTURE, relevant README/UI guidance, and
+  the Task archive.
+
+### T140 evidence-safe Session detail absence states
+
+- status: planned
+- purpose: replace misleading zero metrics and generic empty panels with clear,
+  source-faithful availability states in Session detail.
+- scope:
+  1. distinguish no LLM turn, token usage not captured, model not captured,
+     context-window specification unavailable, source parser truncation, and
+     child Session parent availability;
+  2. render unavailable values as unavailable, omit non-comparable efficiency
+     or cost conclusions, and retain a bounded link to the relevant evidence or
+     parent Session when source data supports it;
+  3. prevent a parent/child relationship from being presented as merged context
+     or aggregate cost;
+  4. align overview, context, cost, diagnostics, export, and evidence panels
+     on the same coverage reason.
+- dependencies: T134; cost-specific states depend on T136.
+- risks and assumptions: source evidence must remain content-free by default;
+  an empty chart is not proof of zero usage, no cost, or a completed Session.
+- acceptance: the reported `019fd61d` case is explainable from its stored
+  source evidence; users can distinguish unavailable telemetry from a genuine
+  zero; no panel contradicts another panel's coverage state.
+- verification plan: focused detail/coverage tests, source-relationship tests,
+  exported-report assertions, and desktop/narrow-width visual checks.
+- documentation plan: update ARCHITECTURE, `docs/diagnosis.md`,
+  `docs/profile-model.md`, and the Task archive.
+
 ## Terminal Task Index
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T134](roadmap-archive/2026-q3.md#t134) | source telemetry coverage and Session-relationship integrity | completed |
+| [T133](roadmap-archive/2026-q3.md#t133) | evidence-safe remediation task decomposition | completed |
 | [T119](roadmap-archive/2026-q3.md#t119) | multi-Agent Task graph and non-double-counted attribution | completed |
 | [T121](roadmap-archive/2026-q3.md#t121) | large-history Task workflow and detail virtualization | completed |
 | [T131](roadmap-archive/2026-q3.md#t131) | domain cohesion and responsibility convergence | completed |
@@ -120,6 +307,32 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T71](roadmap-archive/2026-q3.md#t71) | model-context and analysis configuration audit | completed |
 
 ## Execution Order
+
+### Current planned sequence
+
+The evidence-correctness programme remains local-first and CNY-only. It does
+not revive T120's cancelled multi-currency/remote-governance scope, infer model
+identities, or create a new top-level service.
+
+1. **P0 — establish source truth:** T134 establishes telemetry and relationship
+   coverage. T135 then separates raw observations from reviewed billing
+   eligibility.
+2. **P0 — repair monetary correctness:** T136 adds explicit cost/token coverage
+   status and time-effective schedules. T137 alone may apply reviewed historical
+   recalculations and publish dependent-data refreshes.
+3. **P0 — make optional LLM analysis operable:** T138 adds server-only Provider
+   configuration and clear availability/consent states; it cannot use an LLM to
+   invent missing source evidence.
+4. **P1 — repair presentation after evidence contracts exist:** T140 makes
+   Session absence states trustworthy. T139 is independent but follows the
+   high-risk data work to avoid overlapping Home/Session UI churn.
+
+No Task may convert `not_captured`, unknown pricing, provider-only, opaque,
+synthetic, or runtime-mode evidence into a numerical zero, a concrete model,
+or a complete comparison result. Raw source evidence remains retained and
+inspectable throughout.
+
+### Completed baseline context
 
 The current system is one local-first modular application in a monorepo. The
 CLI is the unified user entry and process orchestrator; Web, local API, Core,

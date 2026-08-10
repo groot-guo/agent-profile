@@ -181,6 +181,13 @@ export function parseMiMoSession(
         cacheReadTokens,
         outputTokens,
         model: d.modelID,
+        metadata: tokens
+          ? { tokenUsageSource: 'message_usage', tokenUsageClassified: true }
+          : {
+              tokenUsageSource: 'not_captured',
+              tokenUsageClassified: false,
+              stubTurn: false,
+            },
       }),
     );
 

@@ -608,6 +608,19 @@ from available source histories when recovery is necessary.
   `tokenUsageClassified=false`. The input/cache/output split and resulting
   input-priced cost for such a turn are fallback approximations, not
   source-classified usage.
+- Every LLM Span records a source-faithful token-usage origin in Span
+  metadata: `message_usage` (Claude/MiMo per-message usage),
+  `token_count` (Codex classified token-count event), `session_aggregate`
+  (OpenCode session totals), `request_token_usage` (Zed), or
+  `not_captured` when the source did not capture usage. `not_captured` is
+  never rendered or aggregated as a measured zero. A Codex rollout whose
+  turn contains only a `turn_context` with a model identity is retained as a
+  stub LLM Span (`stubTurn=true`, zero tokens, `tokenUsageSource=not_captured`)
+  so the started-but-untracked turn remains explainable instead of vanishing.
+  The evidence report exposes per-event token-usage coverage
+  (`captured`/`not_captured`/`not_applicable`, source, classified flag,
+  stub flag) and a Session-level `tokenUsage` coverage row alongside model
+  identity and content coverage.
 - OpenCode currently exposes token classes only at Session granularity. Its one
   aggregate LLM Span is labelled `tokenUsageSource=session_aggregate`; this
   preserves observed totals without implying per-message token or context

@@ -826,7 +826,58 @@ describe('session ingestion boundary', () => {
     });
     target.close();
   });
+
+  it('stores source-native parent evidence without merging parent tokens into the child', () => {
+    const database = createDatabase(':memory:');
+    const repository = new SessionRepository(database, (model, at) =>
+      lookupPricing(database, model, at),
+    );
+
+    repository.replace(
+      {
+        parsed: createChildParsedSession('child-session', 'child-span', 'parent-session'),
+      },
+      { kind: 'codex', updatedAt: 100, fingerprint: 'child-v1' },
+      1000,
+    );
+
+    const relationship = database
+      .prepare(
+        `SELECT child_session_id as childSessionId,
+          parent_session_id as parentSessionId,
+          source_kind as sourceKind, relation_kind as relationKind
+         FROM session_relationships WHERE child_session_id = ?`,
+      )
+      .get('child-session');
+    expect(relationship).toEqual({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      sourceKind: 'codex',
+      relationKind: 'source_parent',
+    });
+    // 父 Session 不存在时，child 的 token 仍只来自自身 evidence，绝不合并。
+    const childAggregate = database
+      .prepare(
+        `SELECT input_tokens as inputTokens, total_cost as totalCost,
+          cost_unknown_count as costUnknownCount
+         FROM sessions WHERE id = ?`,
+      )
+      .get('child-session');
+    expect(childAggregate).toMatchObject({ inputTokens: 10, totalCost: 0, costUnknownCount: 1 });
+    database.close();
+  });
 });
+
+function createChildParsedSession(
+  sessionId: string,
+  spanId: string,
+  sourceParentSessionId: string,
+): ParsedSession {
+  const parsed = createParsedSession(sessionId, spanId);
+  parsed.meta.agent = 'codex';
+  parsed.meta.sourceParentSessionId = sourceParentSessionId;
+  return parsed;
+}
 
 function createAdapter(fingerprint: string, load: () => { parsed: ParsedSession }): SourceAdapter {
   return {

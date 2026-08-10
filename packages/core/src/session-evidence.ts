@@ -1,4 +1,4 @@
-import type { SessionSummary, Span, SpanType } from './types';
+import type { SessionSummary, Span, SpanType, TokenUsageSource } from './types';
 
 export const SESSION_EVIDENCE_SCHEMA_VERSION = 'session-evidence/v1' as const;
 export const SESSION_EVIDENCE_PAGE_SCHEMA_VERSION = 'session-evidence-page/v1' as const;
@@ -10,6 +10,7 @@ export type EvidenceOutcome = 'observed_error' | 'no_error_observed' | 'not_appl
 export type ParentLinkStatus = 'root' | 'linked' | 'missing_parent';
 export type EvidenceFieldStatus = 'available' | 'not_captured';
 export type CoverageStatus = 'complete' | 'partial' | 'not_captured' | 'not_applicable';
+export type TokenCoverageStatus = 'captured' | 'not_captured' | 'not_applicable';
 
 export interface EvidenceCoverage {
   observed: number;
@@ -38,6 +39,15 @@ export interface SessionEvidenceEvent {
   endTime: number | null;
   durationMs: number | null;
   model: string | null;
+  coverage: {
+    tokenUsage: {
+      status: TokenCoverageStatus;
+      source: TokenUsageSource | 'not_captured' | null;
+      classified: boolean;
+      stubTurn: boolean;
+    };
+    modelCaptured: boolean;
+  };
   metrics: {
     inputTokens: number;
     cacheCreationTokens: number;
@@ -76,6 +86,7 @@ export interface SessionEvidenceReport {
     toolInputs: EvidenceCoverage;
     toolOutputs: EvidenceCoverage;
     modelIdentity: EvidenceCoverage;
+    tokenUsage: EvidenceCoverage;
     content: EvidenceCoverage;
   };
   privacy: {
@@ -191,6 +202,10 @@ export function buildSessionEvidenceReport(
         turnEvents.filter((event) => event.model !== null).length,
         turnEvents.length,
       ),
+      tokenUsage: coverage(
+        turnEvents.filter((event) => event.coverage.tokenUsage.status === 'captured').length,
+        turnEvents.length,
+      ),
       content: coverage(
         contentEvents.filter((event) => event.content.status === 'available').length,
         contentEvents.length,
@@ -221,6 +236,8 @@ function toEvidenceEvent(
   const parentId = span.parentId ?? null;
   const endTime = validEndTime(span) && typeof span.endTime === 'number' ? span.endTime : null;
   const fields = contentFields(span, contentMode);
+  const tokenUsageSource = tokenUsageOrigin(span);
+  const isLlmTurn = span.type === 'llm_turn';
   return {
     sequence,
     id: span.id,
@@ -239,6 +256,26 @@ function toEvidenceEvent(
     endTime,
     durationMs: endTime === null ? null : endTime - span.startTime,
     model: span.model ?? null,
+    coverage: {
+      tokenUsage: {
+        status: !isLlmTurn
+          ? 'not_applicable'
+          : tokenUsageSource === null || tokenUsageSource === 'not_captured'
+            ? 'not_captured'
+            : 'captured',
+        source: tokenUsageSource,
+        classified: isLlmTurn && tokenUsageSource !== null && tokenUsageSource !== 'not_captured'
+          ? tokenUsageSource === 'total_tokens_fallback'
+            ? false
+            : (span.metadata?.tokenUsageClassified as boolean) ?? true
+          : false,
+        stubTurn:
+          isLlmTurn &&
+          (tokenUsageSource === null || tokenUsageSource === 'not_captured') &&
+          span.metadata?.stubTurn === true,
+      },
+      modelCaptured: span.model !== undefined && span.model !== null && span.model.trim() !== '',
+    },
     metrics: {
       inputTokens: span.inputTokens,
       cacheCreationTokens: span.cacheCreationTokens,
@@ -254,6 +291,22 @@ function toEvidenceEvent(
       fields,
     },
   };
+}
+
+function tokenUsageOrigin(span: Span): TokenUsageSource | 'not_captured' | null {
+  if (span.type !== 'llm_turn') return null;
+  const source = span.metadata?.tokenUsageSource;
+  if (source === undefined || source === null) return 'not_captured';
+  if (
+    source === 'message_usage' ||
+    source === 'token_count' ||
+    source === 'total_tokens_fallback' ||
+    source === 'session_aggregate' ||
+    source === 'request_token_usage'
+  ) {
+    return source;
+  }
+  return 'not_captured';
 }
 
 function contentFields(span: Span, mode: EvidenceContentMode): EvidenceContentField[] {

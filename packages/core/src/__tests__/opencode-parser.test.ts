@@ -67,6 +67,7 @@ describe('OpenCode parser', () => {
           model: 'fixture-model',
           metadata: {
             tokenUsageSource: 'session_aggregate',
+            tokenUsageClassified: true,
             sourceOutputTokens: 5,
             sourceReasoningTokens: 3,
             sourceAgent: 'build',

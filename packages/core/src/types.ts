@@ -110,6 +110,38 @@ export interface Span {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Source-faithful token usage origin. Absent means the source did not capture
+ * usage for this Span; the numeric zero on the Span is "not captured", never a
+ * measured zero.
+ */
+export type TokenUsageSource =
+  | 'message_usage'
+  | 'token_count'
+  | 'total_tokens_fallback'
+  | 'session_aggregate'
+  | 'request_token_usage';
+
+export type CostStatus =
+  | 'known'
+  | 'unknown_pricing'
+  | 'unverified_provider_route'
+  | 'token_usage_not_captured'
+  | 'unsupported_scheme'
+  | 'excluded_synthetic'
+  | 'not_applicable';
+
+export interface SpanCoverage {
+  /** How the Span's token numbers were obtained from the source. */
+  tokenUsageSource?: TokenUsageSource;
+  /** True when the source classified tokens into the four supported classes. */
+  tokenUsageClassified?: boolean;
+  /** True when the source provided a model identity on the Span. */
+  modelCaptured?: boolean;
+  /** True when the source record is a stub with no measurable LLM evidence. */
+  stubTurn?: boolean;
+}
+
 // parser 输出（解析后、分析前）
 export interface ParsedMeta {
   name?: string;

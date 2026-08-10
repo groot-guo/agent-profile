@@ -244,6 +244,34 @@ describe('session evidence route', () => {
     expect(response.body).not.toContain('private-marker');
     await app.close();
   });
+
+  it('exposes source-faithful token usage coverage on llm_turn events', async () => {
+    const { app, database } = createApp();
+    insertFixture(database);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/session/session-1/evidence-page?type=llm_turn',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.events[0].coverage).toMatchObject({
+      tokenUsage: {
+        status: 'not_captured',
+        source: 'not_captured',
+        classified: false,
+        stubTurn: false,
+      },
+      modelCaptured: true,
+    });
+    expect(body.coverage.tokenUsage).toMatchObject({
+      observed: 0,
+      total: 1,
+      status: 'not_captured',
+    });
+    await app.close();
+  });
 });
 
 function createApp() {

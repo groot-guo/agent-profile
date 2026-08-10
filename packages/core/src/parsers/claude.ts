@@ -167,6 +167,13 @@ export function parseTranscript(
         model,
         stopReason: e.message.stop_reason ?? null,
         isSidechain: e.isSidechain,
+        metadata: usage
+          ? { tokenUsageSource: 'message_usage', tokenUsageClassified: true }
+          : {
+              tokenUsageSource: 'not_captured',
+              tokenUsageClassified: false,
+              stubTurn: false,
+            },
       }),
     );
 

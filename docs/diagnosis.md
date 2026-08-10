@@ -113,6 +113,16 @@ and reports a target as unavailable when it was rebuilt, is missing, or is
 excluded by an active filter. Findings without Span IDs do not link to inferred
 nearby events. This preserves the content-free default while making the stored
 evidence reference inspectable.
+
+Diagnosis consumes normalized evidence through the source-coverage contract
+introduced by T134: every LLM Span carries a source-faithful
+`tokenUsageSource` origin (`message_usage`, `token_count`,
+`total_tokens_fallback`, `session_aggregate`, `request_token_usage`, or
+`not_captured`), and the evidence report exposes per-turn token-usage
+coverage plus Session-level `tokenUsage` coverage. A turn with
+`tokenUsageSource=not_captured` or `stubTurn=true` has no measured token or
+cost evidence; heuristic findings that depend on token volume must not treat
+that absence as a zero-usage turn.
 Any future change to rules, thresholds, semantic prompts, providers, evidence
 coverage, or displayed confidence must start with a task in `roadmap.md` and
 must update this document after implementation.

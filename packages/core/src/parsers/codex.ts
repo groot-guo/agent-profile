@@ -208,6 +208,7 @@ export function parseCodexTranscript(
   // 因此 user message 也必须算作回合证据；现代 rollout 的上下文快照里
   // 会重复 user message，不能把它误建成额外回合。
   const turns: CodexEntry[][] = [];
+  const isolatedTurnContexts: CodexEntry[] = [];
   let currentTurn: CodexEntry[] = [];
   const hasTurnContent = (turnEntries: CodexEntry[]): boolean =>
     turnEntries.some(
@@ -229,7 +230,17 @@ export function parseCodexTranscript(
     ) {
       // 新的 turn 开始前，保存当前 turn
       // 仅当有实际内容时才保存（排除孤立的 turn_context）
-      if (hasTurnContent(currentTurn)) turns.push(currentTurn);
+      if (hasTurnContent(currentTurn)) {
+        turns.push(currentTurn);
+      } else if (
+        currentTurn.every((entry) => entry.type === 'turn_context') &&
+        currentTurn[0]?.payload?.model
+      ) {
+        // 一个只含 turn_context（带 model）的桶是 source evidence：LLM 回合
+        // 已开始但没有任何 token/内容遥测被捕获。保留为 stub turn，而不是
+        // 假装该回合不存在或用量为零。
+        isolatedTurnContexts.push(currentTurn[0]);
+      }
       currentTurn = [];
     }
     currentTurn.push(e);
@@ -237,10 +248,15 @@ export function parseCodexTranscript(
   // 最后一个 turn
   if (currentTurn.length > 0) {
     if (hasTurnContent(currentTurn)) turns.push(currentTurn);
+    else if (
+      currentTurn.every((entry) => entry.type === 'turn_context') &&
+      currentTurn[0]?.payload?.model
+    ) {
+      isolatedTurnContexts.push(currentTurn[0]);
+    }
   }
 
-  // 5. 每个 turn → spans
-  const spans: Span[] = [];
+  // 5. 计算 session 时间范围
   const tsRows = sorted.filter((e) => e.timestamp);
   const capturedTaskStarts = !hasTurnContexts
     ? sorted
@@ -264,6 +280,32 @@ export function parseCodexTranscript(
     : tsRows.length
       ? toMs(tsRows[tsRows.length - 1].timestamp)
       : undefined;
+
+  const spans: Span[] = [];
+
+  // 6. 把孤立 turn_context 转成 stub llm_turn spans（无 token 遥测）。
+  for (const context of isolatedTurnContexts) {
+    const turnId = (context.payload.turn_id as string) || `turn-stub-${context.timestamp}`;
+    const model = typeof context.payload.model === 'string' ? context.payload.model : undefined;
+    const startTime = context.timestamp ? toMs(context.timestamp) : sessionStart;
+    spans.push(
+      makeSpan({
+        id: turnId,
+        sessionId,
+        type: 'llm_turn',
+        name: model || 'codex',
+        startTime,
+        endTime: startTime,
+        model,
+        isSidechain,
+        metadata: {
+          tokenUsageSource: 'not_captured',
+          tokenUsageClassified: false,
+          stubTurn: true,
+        },
+      }),
+    );
+  }
 
   for (let turnIndex = 0; turnIndex < turns.length; turnIndex++) {
     const turnEntries = turns[turnIndex];
@@ -306,6 +348,7 @@ export function parseCodexTranscript(
       cacheReadTokens = 0,
       outputTokens = 0;
     let tokenUsageFallback = false;
+    let tokenUsageCaptured = false;
     for (let i = turnEntries.length - 1; i >= 0; i--) {
       const e = turnEntries[i];
       if (e.type === 'event_msg' && e.payload && e.payload.type === 'token_count') {
@@ -313,6 +356,7 @@ export function parseCodexTranscript(
           | Record<string, number>
           | undefined;
         if (lastUsage) {
+          tokenUsageCaptured = true;
           inputTokens = lastUsage.input_tokens || 0;
           cacheReadTokens = lastUsage.cached_input_tokens || 0;
           outputTokens = (lastUsage.output_tokens || 0) + (lastUsage.reasoning_output_tokens || 0);
@@ -348,7 +392,13 @@ export function parseCodexTranscript(
         isSidechain,
         metadata: tokenUsageFallback
           ? { tokenUsageSource: 'total_tokens_fallback', tokenUsageClassified: false }
-          : undefined,
+          : tokenUsageCaptured
+            ? { tokenUsageSource: 'token_count', tokenUsageClassified: true }
+            : {
+                tokenUsageSource: 'not_captured',
+                tokenUsageClassified: false,
+                stubTurn: hasTurnContent(turnEntries) === false,
+              },
       }),
     );
 

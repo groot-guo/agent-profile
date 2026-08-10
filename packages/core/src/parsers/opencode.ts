@@ -129,6 +129,7 @@ export function parseOpenCodeSession(
       model,
       metadata: {
         tokenUsageSource: 'session_aggregate',
+        tokenUsageClassified: true,
         sourceOutputTokens: session.tokens_output,
         sourceReasoningTokens: session.tokens_reasoning,
         sourceAgent: session.agent ?? undefined,

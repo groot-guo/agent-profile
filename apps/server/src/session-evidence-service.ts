@@ -13,6 +13,7 @@ import {
   type SessionEvidencePage,
   type SessionSummary,
   type SpanType,
+  type TokenUsageSource,
 } from '@agent-profile/core';
 import type { DatabaseConnection } from './database';
 
@@ -80,6 +81,7 @@ interface EvidenceAggregateRow {
   toolInputsObserved: number;
   toolOutputsObserved: number;
   modelObserved: number;
+  tokenUsageObserved: number;
   contentObserved: number;
 }
 
@@ -112,6 +114,10 @@ interface EvidenceRow {
   outputTruncated: number;
   thinkingTruncated: number;
   textTruncated: number;
+  tokenUsageSource: TokenUsageSource | 'not_captured' | null;
+  tokenUsageClassified: number;
+  stubTurn: number;
+  modelCaptured: number;
   inputContent: unknown;
   outputContent: unknown;
   thinkingContent: unknown;
@@ -260,6 +266,11 @@ function loadAggregates(
         COALESCE(SUM(CASE WHEN s.type = 'tool_call' AND ${jsonAvailable('s.', 'input')} THEN 1 ELSE 0 END), 0) AS toolInputsObserved,
         COALESCE(SUM(CASE WHEN s.type = 'tool_call' AND ${jsonAvailable('s.', 'output')} THEN 1 ELSE 0 END), 0) AS toolOutputsObserved,
         COALESCE(SUM(CASE WHEN s.type = 'llm_turn' AND NULLIF(TRIM(s.model), '') IS NOT NULL THEN 1 ELSE 0 END), 0) AS modelObserved,
+        COALESCE(SUM(CASE WHEN s.type = 'llm_turn' AND (
+          json_valid(s.metadata) AND json_type(s.metadata, '$.tokenUsageSource') IS NOT NULL
+          AND json_type(s.metadata, '$.tokenUsageSource') <> 'null'
+          AND json_extract(s.metadata, '$.tokenUsageSource') <> 'not_captured'
+        ) THEN 1 ELSE 0 END), 0) AS tokenUsageObserved,
         COALESCE(SUM(CASE WHEN s.type <> 'llm_turn' AND ${available} THEN 1 ELSE 0 END), 0) AS contentObserved
        FROM spans s
        WHERE s.session_id = ?`,
@@ -307,6 +318,32 @@ function loadRows(
           s.cost_currency AS costCurrency,
           COALESCE(s.is_error, 0) AS isError,
           COALESCE(s.is_sidechain, 0) AS isSidechain,
+          CASE
+            WHEN s.type <> 'llm_turn' THEN NULL
+            WHEN json_valid(s.metadata) THEN COALESCE(
+              json_extract(s.metadata, '$.tokenUsageSource'),
+              'not_captured'
+            )
+            ELSE 'not_captured'
+          END AS tokenUsageSource,
+          CASE
+            WHEN s.type <> 'llm_turn' THEN 0
+            WHEN json_valid(s.metadata)
+              AND json_type(s.metadata, '$.tokenUsageClassified') IS NOT NULL
+              AND json_type(s.metadata, '$.tokenUsageClassified') <> 'null'
+              THEN CAST(json_extract(s.metadata, '$.tokenUsageClassified') AS INTEGER)
+            ELSE 0
+          END AS tokenUsageClassified,
+          CASE
+            WHEN s.type <> 'llm_turn' THEN 0
+            WHEN json_valid(s.metadata)
+              AND json_type(s.metadata, '$.stubTurn') IS NOT NULL
+              AND json_type(s.metadata, '$.stubTurn') <> 'null'
+              THEN CAST(json_extract(s.metadata, '$.stubTurn') AS INTEGER)
+            ELSE 0
+          END AS stubTurn,
+          CASE WHEN s.type = 'llm_turn' AND NULLIF(TRIM(COALESCE(s.model, '')), '') IS NOT NULL
+            THEN 1 ELSE 0 END AS modelCaptured,
           ${contentColumns(options.content)}
         FROM spans s
         WHERE s.session_id = ?
@@ -408,6 +445,7 @@ function normalizeSpanIds(value: string[] | undefined): string[] {
 function toEvidenceEvent(row: EvidenceRow, content: EvidenceContentMode): SessionEvidenceEvent {
   const endTime = row.endTime !== null && row.endTime >= row.startTime ? row.endTime : null;
   const fields = contentFields(row, content);
+  const isLlmTurn = row.type === 'llm_turn';
   return {
     sequence: row.sequence,
     id: row.id,
@@ -426,6 +464,28 @@ function toEvidenceEvent(row: EvidenceRow, content: EvidenceContentMode): Sessio
     endTime,
     durationMs: endTime === null ? null : endTime - row.startTime,
     model: row.model,
+    coverage: {
+      tokenUsage: {
+        status: !isLlmTurn
+          ? 'not_applicable'
+          : row.tokenUsageSource === null || row.tokenUsageSource === 'not_captured'
+            ? 'not_captured'
+            : 'captured',
+        source: row.tokenUsageSource,
+        classified: isLlmTurn
+          ? row.tokenUsageSource === null || row.tokenUsageSource === 'not_captured'
+            ? false
+            : row.tokenUsageSource === 'total_tokens_fallback'
+              ? false
+              : row.tokenUsageClassified === 1
+          : false,
+        stubTurn:
+          isLlmTurn &&
+          (row.tokenUsageSource === null || row.tokenUsageSource === 'not_captured') &&
+          row.stubTurn === 1,
+      },
+      modelCaptured: row.modelCaptured === 1,
+    },
     metrics: {
       inputTokens: row.inputTokens,
       cacheCreationTokens: row.cacheCreationTokens,
@@ -484,6 +544,7 @@ function aggregateCoverage(row: EvidenceAggregateRow): SessionEvidencePage['cove
     toolInputs: coverage(row.toolInputsObserved, row.toolCalls),
     toolOutputs: coverage(row.toolOutputsObserved, row.toolCalls),
     modelIdentity: coverage(row.modelObserved, row.llmTurns),
+    tokenUsage: coverage(row.tokenUsageObserved, row.llmTurns),
     content: coverage(row.contentObserved, row.totalEvents - row.llmTurns),
   };
 }
