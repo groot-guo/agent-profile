@@ -15,6 +15,8 @@ export interface StatsData {
     avgCacheHitRate: number;
     avgPeakContext: number;
     sessionsWithCostUnknown: number;
+    sessionsWithKnownCost: number;
+    sessionsExcluded: number;
   };
   byAgent: {
     agent: string;

@@ -110,6 +110,8 @@ describe('database migrations', () => {
       { version: 12, name: 'runtime_event_collector' },
       { version: 13, name: 'runtime_hint_policy' },
       { version: 14, name: 'runtime_event_coverage' },
+      { version: 15, name: 'evidence_safe_cost_status' },
+      { version: 16, name: 'retire_synthetic_zero_price_seed' },
     ]);
 
     const legacySession = database
@@ -146,7 +148,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(14);
+    expect(count.count).toBe(16);
     expect(columnsOf(database, 'runtime_hints')).toEqual(
       expect.arrayContaining(['hint_id', 'task_id', 'run_id', 'payload_json', 'evidence_json']),
     );
@@ -215,6 +217,39 @@ describe('database migrations', () => {
       .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?")
       .get('idx_spans_session_time_id') as { sql: string } | undefined;
     expect(index?.sql).toContain('spans(session_id, start_time, id)');
+    database.close();
+  });
+
+  it('retires an existing active synthetic seed on migration and keeps it excluded', () => {
+    const database = createLegacyDatabase();
+    database
+      .prepare(
+        `INSERT INTO pricing (
+          model, input_price, cache_creation_price, cache_read_price, output_price,
+          effective_from
+        ) VALUES ('<synthetic>', 0, 0, 0, 0, 0)`,
+      )
+      .run();
+
+    applyMigrations(database);
+
+    const active = database
+      .prepare(
+        `SELECT status FROM pricing
+         WHERE model = '<synthetic>' AND status = 'active'`,
+      )
+      .get();
+    expect(active).toBeUndefined();
+    const retired = database
+      .prepare(
+        `SELECT status, superseded_at as supersededAt FROM pricing
+         WHERE model = '<synthetic>' AND status = 'superseded'`,
+      )
+      .get() as { status: string; supersededAt: number } | undefined;
+    expect(retired).toMatchObject({ status: 'superseded' });
+    expect(retired?.supersededAt).toEqual(expect.any(Number));
+    // 退休后 lookup 不再返回 free pricing。
+    expect(lookupPricing(database, '<synthetic>', 1000)).toBeUndefined();
     database.close();
   });
 

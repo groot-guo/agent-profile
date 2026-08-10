@@ -98,6 +98,7 @@ export interface Span {
   model?: string;
   cost: number;
   costUnknown: boolean; // 模型无定价
+  costStatus: CostStatus;
   costCurrency?: PricingCurrency;
   pricingEffectiveFrom?: number;
   pricingModel?: string;
@@ -130,6 +131,8 @@ export type CostStatus =
   | 'unsupported_scheme'
   | 'excluded_synthetic'
   | 'not_applicable';
+
+export type SessionCostStatus = 'complete' | 'partial' | 'unknown' | 'excluded' | 'not_captured';
 
 export interface SpanCoverage {
   /** How the Span's token numbers were obtained from the source. */
@@ -178,6 +181,7 @@ export interface SessionSummary {
   outputTokens: number;
   totalCost: number;
   costUnknownCount: number;
+  costStatus: SessionCostStatus;
   costCurrency?: PricingCurrency;
   costCalculatedAt?: number;
   costCalculatorVersion?: string;

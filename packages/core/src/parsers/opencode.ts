@@ -51,6 +51,7 @@ function makeSpan(input: {
     model: input.model,
     cost: 0,
     costUnknown: false,
+    costStatus: 'unknown_pricing',
     isError: input.isError ?? false,
     isSidechain: false,
     metadata: input.metadata,

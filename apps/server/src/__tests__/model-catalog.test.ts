@@ -35,6 +35,47 @@ function insertSessionAndSpan(
 }
 
 describe('ModelCatalogService', () => {
+  it('retires the active synthetic zero-price seed and never treats it as free usage', async () => {
+    const database = createDatabase(':memory:');
+    const runtime = createRuntime({
+      database,
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+      clock: () => 1000,
+    });
+
+    const synthetic = runtime.database
+      .prepare(
+        `SELECT status FROM pricing WHERE model = '<synthetic>'`,
+      )
+      .get();
+    expect(synthetic).toBeUndefined();
+
+    // 合成 spans 即使有 pricing 也永不产生 billable cost。
+    runtime.database
+      .prepare(
+        `INSERT INTO sessions (id, file_path, agent, start_time, imported_at)
+         VALUES ('synthetic-session', 'fixture://synthetic', 'fixture', 1000, 1000)`,
+      )
+      .run();
+    runtime.database
+      .prepare(
+        `INSERT INTO spans (
+          id, session_id, type, name, start_time, model, input_tokens,
+          cache_creation_tokens, cache_read_tokens, output_tokens, cost,
+          cost_unknown, cost_status, metadata
+        ) VALUES ('synthetic-span', 'synthetic-session', 'llm_turn', 'turn', 1000,
+          '<synthetic>', 1000000, 0, 0, 0, 0, 1, 'excluded_synthetic',
+          '{"tokenUsageSource":"token_count"}')`,
+      )
+      .run();
+    const preview = runtime.modelCatalog.previewRecalculation({
+      models: ['<synthetic>'],
+    });
+    expect(preview.after).toMatchObject({ spans: 1, unknown: 1 });
+    await runtime.close();
+  });
+
   it('preserves local applicability rows while seeding bundled defaults', async () => {
     const database = createDatabase(':memory:');
     database

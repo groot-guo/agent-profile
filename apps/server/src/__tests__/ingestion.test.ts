@@ -911,6 +911,7 @@ function createParsedSession(sessionId: string, spanId: string): ParsedSession {
     model: 'fixture-model',
     cost: 0,
     costUnknown: false,
+    costStatus: 'unknown_pricing',
     isError: false,
     isSidechain: false,
   };

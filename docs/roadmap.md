@@ -6,40 +6,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T136 evidence-safe pricing status and time-effective schedules
-
-- status: planned
-- purpose: ensure cost is only represented as known when source token coverage
-  and a verified provider/route/model price schedule both apply at the Span
-  time.
-- scope:
-  1. distinguish known cost, unknown pricing, unverified provider route,
-     token usage not captured, unsupported scheme, and excluded synthetic data
-     in persisted and API-visible cost status;
-  2. preserve the four-token-class formula and CNY-only contract while making
-     price applicability provider/route-aware where the source can establish
-     it;
-  3. require explicit, time-effective and source-referenced schedules for
-     rolling or gateway labels; do not map `astron-code-latest` or
-     `big-pickle` to an assumed underlying model;
-  4. retire the active zero-price `<synthetic>` seed safely, with an additive
-     migration/backfill that never treats missing data as free usage;
-  5. expose known subtotal, unknown/excluded coverage, pricing model, effective
-     time, calculation time, and calculator version without presenting a
-     partial subtotal as a trusted total.
-- dependencies: T134 and T135.
-- risks and assumptions: a price of zero is valid only with an explicit,
-  time-bounded provider tariff; subscription fees and unknown routing must not
-  be invented from token records.
-- acceptance: unknown or incomplete evidence cannot render as `¥0`, a zero
-  cost, or a complete comparison input; all four token classes remain separate;
-  historical pricing provenance remains inspectable.
-- verification plan: core pricing matrix tests, Server lookup/migration tests,
-  regression tests for synthetic/opaque/provider-route labels, and API
-  assertions for partial-cost presentation.
-- documentation plan: update ARCHITECTURE, `docs/stats.md`,
-  `docs/diagnosis.md`, README configuration guidance, and the Task archive.
-
 ### T137 previewed historical cost recalculation and dependent-data refresh
 
 - status: planned
@@ -163,6 +129,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T136](roadmap-archive/2026-q3.md#t136) | evidence-safe pricing status and time-effective schedules | completed |
 | [T135](roadmap-archive/2026-q3.md#t135) | model observation, identity review, and billing eligibility | completed |
 | [T134](roadmap-archive/2026-q3.md#t134) | source telemetry coverage and Session-relationship integrity | completed |
 | [T133](roadmap-archive/2026-q3.md#t133) | evidence-safe remediation task decomposition | completed |

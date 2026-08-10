@@ -6,6 +6,7 @@ import {
   identifyModel,
   calcCost,
   isRuntimeMode,
+  type CostStatus,
   type Pricing,
   type Span,
 } from '@agent-profile/core';
@@ -65,6 +66,7 @@ interface CatalogSpan {
   outputTokens: number;
   cost: number;
   costUnknown: boolean;
+  costStatus: string;
 }
 
 function asContextRecord(row: Record<string, unknown>): ModelContextRecord {
@@ -465,7 +467,7 @@ export class ModelCatalogService {
     this.database.transaction(() => {
       const updateSpan = this.database.prepare(
         `UPDATE spans SET cost = ?, cost_unknown = ?, cost_currency = ?,
-          pricing_effective_from = ?, pricing_model = ?, pricing_revision = ?,
+          cost_status = ?, pricing_effective_from = ?, pricing_model = ?, pricing_revision = ?,
           cost_calculated_at = ?, cost_calculator_version = ?
          WHERE id = ?`,
       );
@@ -476,6 +478,7 @@ export class ModelCatalogService {
           result.cost,
           result.unknown ? 1 : 0,
           COST_CURRENCY,
+          result.status,
           pricing?.effectiveFrom ?? 0,
           pricing?.pricingModel ?? pricing?.model ?? null,
           pricing?.revision ?? null,
@@ -486,7 +489,7 @@ export class ModelCatalogService {
         updatedSpans++;
       }
       const updateSession = this.database.prepare(
-        `UPDATE sessions SET total_cost = ?, cost_unknown_count = ?,
+        `UPDATE sessions SET total_cost = ?, cost_unknown_count = ?, cost_status = ?,
           cost_currency = ?,
           cost_calculated_at = ?, cost_calculator_version = ? WHERE id = ?`,
       );
@@ -494,7 +497,7 @@ export class ModelCatalogService {
         this.database
           .prepare(
             `UPDATE sessions SET total_cost = 0, cost_unknown_count = 0,
-              cost_currency = ?,
+              cost_status = 'not_captured', cost_currency = ?,
               cost_calculated_at = ?, cost_calculator_version = ?
              WHERE id IS NOT NULL`,
           )
@@ -504,16 +507,29 @@ export class ModelCatalogService {
         const totals = this.database
           .prepare(
             `SELECT COALESCE(SUM(cost), 0) as totalCost,
-              COALESCE(SUM(cost_unknown), 0) as unknownCount
+              COALESCE(SUM(cost_unknown), 0) as unknownCount,
+              COALESCE(SUM(CASE WHEN cost_status = 'known' THEN 1 ELSE 0 END), 0) as knownCount,
+              COALESCE(SUM(CASE WHEN cost_status = 'excluded_synthetic' THEN 1 ELSE 0 END), 0) as excludedCount,
+              COUNT(*) as totalCount
              FROM spans WHERE session_id = ? AND type = 'llm_turn'`,
           )
           .get(sessionId) as {
           totalCost: number;
           unknownCount: number;
+          knownCount: number;
+          excludedCount: number;
+          totalCount: number;
         };
+        const sessionCostStatus = deriveSessionCostStatus(
+          totals.totalCount,
+          totals.knownCount,
+          totals.unknownCount,
+          totals.excludedCount,
+        );
         updateSession.run(
           totals.totalCost,
           totals.unknownCount,
+          sessionCostStatus,
           COST_CURRENCY,
           executedAt,
           COST_CALCULATOR_VERSION,
@@ -636,6 +652,7 @@ export class ModelCatalogService {
       model: span.model,
       cost: span.cost,
       costUnknown: span.costUnknown,
+      costStatus: span.costStatus as CostStatus,
       isError: false,
       isSidechain: false,
     };
@@ -704,7 +721,7 @@ export class ModelCatalogService {
         `SELECT id, session_id as sessionId, model, start_time as startTime,
           input_tokens as inputTokens, cache_creation_tokens as cacheCreationTokens,
           cache_read_tokens as cacheReadTokens, output_tokens as outputTokens,
-          cost, cost_unknown as costUnknown
+          cost, cost_unknown as costUnknown, cost_status as costStatus
          FROM spans WHERE ${conditions.join(' AND ')}
          ORDER BY start_time, id`,
       )
@@ -729,4 +746,17 @@ export class ModelCatalogService {
     };
   }
 
+}
+
+function deriveSessionCostStatus(
+  totalCount: number,
+  knownCount: number,
+  unknownCount: number,
+  excludedCount: number,
+): string {
+  if (totalCount === 0) return 'not_captured';
+  if (excludedCount === totalCount) return 'excluded';
+  if (unknownCount === 0) return 'complete';
+  if (knownCount === 0) return 'unknown';
+  return 'partial';
 }

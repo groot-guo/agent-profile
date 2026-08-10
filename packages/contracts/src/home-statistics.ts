@@ -19,13 +19,15 @@ export interface HomeStatisticsResponse {
   overview: {
     totalSessions: number;
     totalTokens: number;
-    totalCost: number;
-    totalInputTokens: number;
-    totalOutputTokens: number;
-    avgCacheHitRate: number;
-    avgPeakContext: number;
-    sessionsWithCostUnknown: number;
-  };
+  totalCost: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  avgCacheHitRate: number;
+  avgPeakContext: number;
+  sessionsWithCostUnknown: number;
+  sessionsWithKnownCost: number;
+  sessionsExcluded: number;
+};
   recentTools: Array<{ name: string; count: number; errors: number }>;
   topByCost: HomeSessionHighlight[];
   topByTokens: HomeSessionHighlight[];

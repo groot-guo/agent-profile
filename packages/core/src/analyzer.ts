@@ -9,6 +9,7 @@ import type {
   ParsedSession,
   PerformanceMetrics,
   Pricing,
+  SessionCostStatus,
   SessionSummary,
   Span,
   ThinkingActionRatio,
@@ -35,6 +36,10 @@ export function analyzeSession(
   let outputTokens = 0;
   let totalCost = 0;
   let costUnknownCount = 0;
+  let costStatus: SessionCostStatus = 'not_captured';
+  let llmTurnsWithStatus = 0;
+  let knownTurns = 0;
+  let excludedTurns = 0;
   let peakContext = 0;
   let sumContext = 0;
   let llmTurnCount = 0;
@@ -44,9 +49,10 @@ export function analyzeSession(
       span.contextTokens =
         (span.inputTokens || 0) + (span.cacheCreationTokens || 0) + (span.cacheReadTokens || 0);
       const pricing = pricingLookup(span.model, span.startTime);
-      const { cost, unknown } = calcCost(span, pricing);
+      const { cost, unknown, status } = calcCost(span, pricing);
       span.cost = cost;
       span.costUnknown = unknown;
+      span.costStatus = status;
       span.costCurrency = COST_CURRENCY;
       span.pricingEffectiveFrom = pricing?.effectiveFrom ?? 0;
       span.pricingModel = pricing?.pricingModel ?? pricing?.model;
@@ -54,6 +60,9 @@ export function analyzeSession(
       span.costCalculatedAt = calculatedAt;
       span.costCalculatorVersion = COST_CALCULATOR_VERSION;
       if (unknown) costUnknownCount++;
+      llmTurnsWithStatus++;
+      if (status === 'known') knownTurns++;
+      if (status === 'excluded_synthetic') excludedTurns++;
       inputTokens += span.inputTokens || 0;
       cacheCreationTokens += span.cacheCreationTokens || 0;
       cacheReadTokens += span.cacheReadTokens || 0;
@@ -64,7 +73,20 @@ export function analyzeSession(
       llmTurnCount++;
     } else {
       span.contextTokens = 0;
+      span.costStatus = 'not_applicable';
     }
+  }
+
+  if (excludedTurns === llmTurnsWithStatus && excludedTurns > 0) {
+    costStatus = 'excluded';
+  } else if (llmTurnsWithStatus === 0) {
+    costStatus = 'not_captured';
+  } else if (knownTurns === 0) {
+    costStatus = costUnknownCount === llmTurnsWithStatus ? 'unknown' : 'partial';
+  } else if (knownTurns === llmTurnsWithStatus) {
+    costStatus = 'complete';
+  } else {
+    costStatus = 'partial';
   }
 
   const totalInput = inputTokens + cacheCreationTokens + cacheReadTokens;
@@ -86,6 +108,7 @@ export function analyzeSession(
     outputTokens,
     totalCost,
     costUnknownCount,
+    costStatus,
     costCurrency: COST_CURRENCY,
     costCalculatedAt: calculatedAt,
     costCalculatorVersion: COST_CALCULATOR_VERSION,

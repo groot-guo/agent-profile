@@ -41,8 +41,7 @@ export function seedPricingDefaults(database: DatabaseConnection): void {
     ('mimo-v2.5-pro-ultraspeed', 3, 3, 0.025, 6, 'bundled', 'https://platform.xiaomimimo.com/#/docs', 'flat_four_token_classes', 'active', 1, 0, 0),
     ('kimi-k3', 2, 2, 0.05, 8, 'bundled', 'https://platform.moonshot.cn/docs/intro', 'flat_four_token_classes', 'active', 1, 0, 0),
     ('kimi-k2', 2, 2, 0.05, 8, 'bundled', 'https://platform.moonshot.cn/docs/intro', 'flat_four_token_classes', 'active', 1, 0, 0),
-    ('openai', 5, 5, 0.25, 15, 'bundled', 'https://platform.openai.com/docs/models', 'flat_four_token_classes', 'active', 1, 0, 0),
-    ('<synthetic>', 0, 0, 0, 0, 'bundled', 'internal:synthetic-fixture', 'flat_four_token_classes', 'active', 1, 0, 0)
+    ('openai', 5, 5, 0.25, 15, 'bundled', 'https://platform.openai.com/docs/models', 'flat_four_token_classes', 'active', 1, 0, 0)
   `);
   database
     .prepare(

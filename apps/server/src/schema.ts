@@ -418,6 +418,27 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 15,
+    name: 'evidence_safe_cost_status',
+    up(database) {
+      addColumn(database, 'spans', 'cost_status', "TEXT NOT NULL DEFAULT 'unknown_pricing'");
+      addColumn(database, 'sessions', 'cost_status', "TEXT NOT NULL DEFAULT 'unknown'");
+    },
+  },
+  {
+    version: 16,
+    name: 'retire_synthetic_zero_price_seed',
+    up(database) {
+      // 退休 active 的合成占位零价 seed：synthetic 数据永不视为免费账单。
+      database
+        .prepare(
+          `UPDATE pricing SET status = 'superseded', superseded_at = COALESCE(superseded_at, created_at)
+           WHERE model = '<synthetic>' AND status = 'active'`,
+        )
+        .run();
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -445,6 +466,7 @@ function createBaseSchema(database: DatabaseConnection): void {
       output_tokens           INTEGER DEFAULT 0,
       total_cost              REAL DEFAULT 0,
       cost_unknown_count      INTEGER DEFAULT 0,
+      cost_status             TEXT NOT NULL DEFAULT 'unknown',
       cost_currency           TEXT NOT NULL DEFAULT 'CNY',
       cost_calculated_at      INTEGER,
       cost_calculator_version TEXT NOT NULL DEFAULT 'legacy',
@@ -474,6 +496,7 @@ function createBaseSchema(database: DatabaseConnection): void {
       model                   TEXT,
       cost                    REAL DEFAULT 0,
       cost_unknown            INTEGER DEFAULT 0,
+      cost_status             TEXT NOT NULL DEFAULT 'unknown_pricing',
       cost_currency           TEXT NOT NULL DEFAULT 'CNY',
       pricing_effective_from  INTEGER,
       pricing_model           TEXT,

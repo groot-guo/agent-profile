@@ -30,6 +30,15 @@ them with calculator `v1`. The versioned Model Catalog API additionally supports
 a read-only scoped preview followed by a fixed-revision transactional execute.
 Unsupported pricing schemes remain unknown in both operations.
 
+Cost status is evidence-safe (T136): every LLM Span carries a `costStatus`
+(`known`, `unknown_pricing`, `unverified_provider_route`,
+`token_usage_not_captured`, `unsupported_scheme`, `excluded_synthetic`, or
+`not_applicable`) and Sessions derive `complete` / `partial` / `unknown` /
+`excluded` / `not_captured`. Stats surfaces show known, unknown, and excluded
+Session counts separately; a partial or unknown subtotal is never presented as
+a trusted total. Synthetic placeholder labels are excluded from billing
+entirely and never render as `¥0`.
+
 ## Grouped statistics
 
 Model groups use a presentation-only identity contract. Explicit case and

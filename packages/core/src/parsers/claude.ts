@@ -83,6 +83,7 @@ function makeSpan(p: MakeSpanInput): Span {
     model: p.model,
     cost: 0, // 由 analyzer 填
     costUnknown: false,
+    costStatus: 'unknown_pricing',
     stopReason: p.stopReason,
     isError: !!p.isError,
     isSidechain: !!p.isSidechain,

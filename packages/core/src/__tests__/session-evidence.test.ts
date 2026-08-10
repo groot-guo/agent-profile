@@ -249,6 +249,7 @@ function makeSpan(
     outputBytes: 0,
     cost: 0,
     costUnknown: false,
+    costStatus: 'unknown_pricing',
     isError: false,
     isSidechain: false,
     ...rest,

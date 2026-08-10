@@ -110,6 +110,7 @@ function span(overrides: Partial<Span> & Pick<Span, 'id' | 'type' | 'name' | 'st
     outputBytes: 0,
     cost: 0,
     costUnknown: false,
+    costStatus: 'unknown_pricing',
     isError: false,
     isSidechain: false,
     ...overrides,

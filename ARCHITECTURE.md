@@ -631,6 +631,20 @@ from available source histories when recovery is necessary.
   `costCalculatedAt`, and `costCalculatorVersion` expose the selected schedule
   and calculation provenance. Unknown or unsupported pricing is surfaced as
   unknown rather than silently estimated as a known bill.
+- Cost is represented as known only when span-time token coverage and a
+  verified schedule both apply (T136). Every LLM Span persists a `costStatus`
+  with distinct states: `known`, `unknown_pricing` (no active schedule),
+  `unverified_provider_route` (review-required labels such as `big-pickle`
+  without an audited tariff), `token_usage_not_captured` (source captured no
+  usage; never a measured zero), `unsupported_scheme`, `excluded_synthetic`
+  (synthetic placeholders are never free), and `not_applicable` for non-LLM
+  Spans. Session aggregates derive `complete` / `partial` / `unknown` /
+  `excluded` / `not_captured` from their LLM turns. The active zero-price
+  `<synthetic>` bundled seed is retired by migration 16; configuration import
+  never treats missing data as free usage.
+- The four token classes remain separate in every calculation and response;
+  a partial subtotal is always accompanied by its incomplete-coverage status
+  and is never presented as a trusted total.
 - Statistics may derive a presentation-only canonical model group for explicit
   aliases while retaining raw source labels. Captured Codex model IDs
   `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna` are concrete identities;

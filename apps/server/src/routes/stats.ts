@@ -289,7 +289,11 @@ export function buildHomeStatistics(database: DatabaseConnection): HomeStatistic
         CAST(ROUND(COALESCE(AVG(COALESCE(s.peak_context_tokens, 0)), 0)) AS INTEGER)
           AS avgPeakContext,
         COALESCE(SUM(CASE WHEN s.cost_unknown_count > 0 THEN 1 ELSE 0 END), 0)
-          AS sessionsWithCostUnknown
+          AS sessionsWithCostUnknown,
+        COALESCE(SUM(CASE WHEN s.cost_status = 'complete' THEN 1 ELSE 0 END), 0)
+          AS sessionsWithKnownCost,
+        COALESCE(SUM(CASE WHEN s.cost_status = 'excluded' THEN 1 ELSE 0 END), 0)
+          AS sessionsExcluded
        FROM sessions s
        WHERE ${primarySessionPredicate('s')}`,
     )
@@ -368,6 +372,7 @@ export function buildStatsReport(database: DatabaseConnection): StatsReport {
   if (overview.totalSessions === 0) {
     return {
       overview,
+      // overview already includes sessionsWithKnownCost and sessionsExcluded
       byAgent: [],
       byProject: [],
       byModel: [],
@@ -417,7 +422,11 @@ function loadStatsOverview(database: DatabaseConnection): StatsOverview {
         CAST(ROUND(COALESCE(AVG(COALESCE(s.peak_context_tokens, 0)), 0)) AS INTEGER)
           AS avgPeakContext,
         COALESCE(SUM(CASE WHEN COALESCE(s.cost_unknown_count, 0) > 0 THEN 1 ELSE 0 END), 0)
-          AS sessionsWithCostUnknown
+          AS sessionsWithCostUnknown,
+        COALESCE(SUM(CASE WHEN s.cost_status = 'complete' THEN 1 ELSE 0 END), 0)
+          AS sessionsWithKnownCost,
+        COALESCE(SUM(CASE WHEN s.cost_status = 'excluded' THEN 1 ELSE 0 END), 0)
+          AS sessionsExcluded
        FROM sessions s
        WHERE ${primarySessionPredicate('s')}`,
     )

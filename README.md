@@ -405,6 +405,13 @@ Model, context, and diagnosis configuration has separate scopes:
   scoped preview/execute recalculation. Preview does not mutate data; execute
   requires the preview's pricing revision and records its result transactionally.
   Unsupported pricing schemes remain unknown.
+  Every LLM Span carries an evidence-safe `costStatus`: `known`,
+  `unknown_pricing`, `unverified_provider_route`, `token_usage_not_captured`,
+  `unsupported_scheme`, `excluded_synthetic`, or `not_applicable`. Only
+  `known` is a trusted bill; everything else must never render as `¥0`, a zero
+  cost, or a complete comparison input. Synthetic placeholder labels are
+  excluded from billing entirely, and the settings/stats surfaces show known,
+  unknown, and excluded Session counts separately.
 - `/settings/models` is the local Web workspace over that public contract. It
   prioritizes observed unpriced/unsupported identities, edits four-token prices
   and exact context limits with provenance, keeps history non-destructive, and

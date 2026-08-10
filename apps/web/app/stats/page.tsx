@@ -90,8 +90,8 @@ export default function StatsPage() {
         <StatCard
           value={`¥${overview.totalCost.toFixed(2)}`}
           label="总成本"
-          warn={overview.sessionsWithCostUnknown > 0}
-          tip="按模型定价表计算;未定价模型不计入"
+          warn={overview.sessionsWithCostUnknown > 0 || overview.sessionsExcluded > 0}
+          tip="仅统计已定价且 token 已捕获的会话;未知/排除数据不计入且不视为免费"
         />
         <StatCard
           value={`${(overview.avgCacheHitRate * 100).toFixed(1)}%`}
@@ -114,7 +114,18 @@ export default function StatsPage() {
           value={`${overview.sessionsWithCostUnknown}`}
           label="未定价会话"
           warn={overview.sessionsWithCostUnknown > 0}
-          tip="包含未知模型的会话,成本无法计算"
+          tip="token 已捕获但模型定价缺失、或供应商路由待核验的会话"
+        />
+        <StatCard
+          value={`${overview.sessionsWithKnownCost}`}
+          label="已定价会话"
+          tip="四类 token 均已定价且成本可信的会话"
+        />
+        <StatCard
+          value={`${overview.sessionsExcluded}`}
+          label="排除会话"
+          warn={overview.sessionsExcluded > 0}
+          tip="合成占位等永不视为免费账单的会话"
         />
       </div>
 

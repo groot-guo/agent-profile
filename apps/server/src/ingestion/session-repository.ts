@@ -26,6 +26,7 @@ interface StoredSessionAggregate {
   outputTokens: number;
   totalCost: number;
   costUnknownCount: number;
+  costStatus: string;
   costCurrency: string | null;
   costCalculatedAt: number | null;
   costCalculatorVersion: string | null;
@@ -71,6 +72,7 @@ export class SessionRepository {
         cache_creation_tokens as cacheCreationTokens,
         cache_read_tokens as cacheReadTokens, output_tokens as outputTokens,
         total_cost as totalCost, cost_unknown_count as costUnknownCount,
+        cost_status as costStatus,
         cost_currency as costCurrency, cost_calculated_at as costCalculatedAt,
         cost_calculator_version as costCalculatorVersion,
         peak_context_tokens as peakContextTokens, avg_context_tokens as avgContextTokens,
@@ -89,7 +91,7 @@ export class SessionRepository {
         source_kind, source_updated_at, source_fingerprint, start_time, end_time,
         cwd, project_key, git_branch, claude_version, input_tokens, cache_creation_tokens,
         cache_read_tokens, output_tokens, total_cost, cost_unknown_count,
-        cost_currency, cost_calculated_at, cost_calculator_version,
+        cost_status, cost_currency, cost_calculated_at, cost_calculator_version,
         peak_context_tokens, avg_context_tokens, cache_hit_rate, message_count,
         imported_at
       ) VALUES (
@@ -97,7 +99,7 @@ export class SessionRepository {
         @sourceKind, @sourceUpdatedAt, @sourceFingerprint, @startTime, @endTime,
         @cwd, @projectKey, @gitBranch, @claudeVersion, @inputTokens, @cacheCreationTokens,
         @cacheReadTokens, @outputTokens, @totalCost, @costUnknownCount,
-        @costCurrency, @costCalculatedAt, @costCalculatorVersion,
+        @costStatus, @costCurrency, @costCalculatedAt, @costCalculatorVersion,
         @peakContextTokens, @avgContextTokens, @cacheHitRate, @messageCount,
         @importedAt
       )
@@ -123,6 +125,7 @@ export class SessionRepository {
         output_tokens = excluded.output_tokens,
         total_cost = excluded.total_cost,
         cost_unknown_count = excluded.cost_unknown_count,
+        cost_status = excluded.cost_status,
         cost_currency = excluded.cost_currency,
         cost_calculated_at = excluded.cost_calculated_at,
         cost_calculator_version = excluded.cost_calculator_version,
@@ -147,14 +150,14 @@ export class SessionRepository {
         id, session_id, parent_id, type, name, start_time, end_time,
         input_tokens, cache_creation_tokens, cache_read_tokens, output_tokens,
         context_tokens, output_bytes, model, cost, cost_unknown, cost_currency,
-        pricing_effective_from, pricing_model, pricing_revision,
+        cost_status, pricing_effective_from, pricing_model, pricing_revision,
         cost_calculated_at, cost_calculator_version,
         stop_reason, is_error, is_sidechain, metadata
       ) VALUES (
         @id, @sessionId, @parentId, @type, @name, @startTime, @endTime,
         @inputTokens, @cacheCreationTokens, @cacheReadTokens, @outputTokens,
         @contextTokens, @outputBytes, @model, @cost, @costUnknown, @costCurrency,
-        @pricingEffectiveFrom, @pricingModel, @pricingRevision,
+        @costStatus, @pricingEffectiveFrom, @pricingModel, @pricingRevision,
         @costCalculatedAt, @costCalculatorVersion,
         @stopReason, @isError, @isSidechain, @metadata
       )
@@ -172,7 +175,8 @@ export class SessionRepository {
         cache_creation_tokens = @cacheCreationTokens,
         cache_read_tokens = @cacheReadTokens, output_tokens = @outputTokens,
         total_cost = @totalCost, cost_unknown_count = @costUnknownCount,
-        cost_currency = @costCurrency, cost_calculated_at = @costCalculatedAt,
+        cost_status = @costStatus, cost_currency = @costCurrency,
+        cost_calculated_at = @costCalculatedAt,
         cost_calculator_version = @costCalculatorVersion,
         peak_context_tokens = @peakContextTokens,
         avg_context_tokens = @avgContextTokens, cache_hit_rate = @cacheHitRate,
@@ -217,6 +221,7 @@ export class SessionRepository {
           outputTokens: summary.outputTokens,
           totalCost: summary.totalCost,
           costUnknownCount: summary.costUnknownCount,
+          costStatus: summary.costStatus,
           costCurrency: summary.costCurrency,
           costCalculatedAt: summary.costCalculatedAt,
           costCalculatorVersion: summary.costCalculatorVersion,
@@ -284,6 +289,7 @@ export class SessionRepository {
           outputTokens,
           totalCost: existing.totalCost + summary.totalCost,
           costUnknownCount: existing.costUnknownCount + summary.costUnknownCount,
+          costStatus: deriveAppendedCostStatus(existing.costStatus, summary.costStatus),
           costCurrency: summary.costCurrency ?? existing.costCurrency,
           costCalculatedAt: summary.costCalculatedAt ?? existing.costCalculatedAt,
           costCalculatorVersion: summary.costCalculatorVersion ?? existing.costCalculatorVersion,
@@ -422,6 +428,16 @@ function normalizedSourceParentSessionId(
   return parentId && parentId !== sessionId ? parentId : undefined;
 }
 
+function deriveAppendedCostStatus(
+  existing: string,
+  appended: SessionSummary['costStatus'],
+): string {
+  if (existing === 'complete' && appended === 'complete') return 'complete';
+  if (existing === 'excluded' && appended === 'excluded') return 'excluded';
+  if (existing === 'not_captured' && appended === 'not_captured') return 'not_captured';
+  return 'partial';
+}
+
 function toSpanRow(span: Span) {
   return {
     id: span.id,
@@ -440,6 +456,7 @@ function toSpanRow(span: Span) {
     model: span.model ?? null,
     cost: span.cost,
     costUnknown: span.costUnknown ? 1 : 0,
+    costStatus: span.costStatus,
     costCurrency: span.costCurrency,
     pricingEffectiveFrom: span.pricingEffectiveFrom ?? null,
     pricingModel: span.pricingModel ?? null,
