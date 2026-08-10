@@ -56,28 +56,13 @@ describe('Model Catalog routes', () => {
     expect(inventory.json().models).not.toContainEqual(
       expect.objectContaining({ model: 'codex-auto-review' }),
     );
-    // 三类来源标签仍可在 inventory 中检视，但带审查/排除标记。
-    expect(inventory.json().models).toContainEqual(
-      expect.objectContaining({
-        model: '<synthetic>',
-        identityKind: 'synthetic',
-        billingEligibility: 'excluded',
-      }),
-    );
-    expect(inventory.json().models).toContainEqual(
-      expect.objectContaining({
-        model: 'astron-code-latest',
-        identityKind: 'opaque',
-        billingEligibility: 'review_required',
-      }),
-    );
-    expect(inventory.json().models).toContainEqual(
-      expect.objectContaining({
-        model: 'big-pickle',
-        identityKind: 'review_required',
-        billingEligibility: 'review_required',
-      }),
-    );
+    // 排除标签（合成占位、滚动标签、供应商托管路由）不再出现在 inventory，
+    // 但 raw label 仍保留在 span 证据中。
+    for (const excluded of ['<synthetic>', 'astron-code-latest', 'big-pickle']) {
+      expect(inventory.json().models).not.toContainEqual(
+        expect.objectContaining({ model: excluded }),
+      );
+    }
     expect(inventory.json().models).toContainEqual(
       expect.objectContaining({
         model: 'route-model',

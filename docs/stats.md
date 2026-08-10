@@ -64,12 +64,14 @@ label into a billing-eligibility group that is visible in the settings page:
 
 - `billable` — explicit concrete model identities that the catalog can
   configure;
-- `review_required` — opaque rolling labels (`astron-code-latest`), managed
-  provider routes (`big-pickle`), and unverified custom labels that need
-  explicit audited evidence before pricing or context configuration;
-- `excluded` — synthetic placeholders (`<synthetic>`) and runtime modes
-  (`codex-auto-review`) that are never billable and stay out of price-edit
-  candidates.
+- `review_required` — unverified custom labels that need explicit audited
+  evidence before pricing or context configuration;
+- `excluded` — synthetic placeholders (`<synthetic>`), runtime modes
+  (`codex-auto-review`), provider-only values (`openai`, `litellm`), opaque
+  rolling labels (`astron-code-latest`), and unverified provider-managed
+  routes (`big-pickle`) that are never billable, stay out of price-edit
+  candidates, and are hidden from the Model Catalog inventory and model
+  statistics while their raw Span labels remain retained.
 
 Raw labels remain inspectable in statistics and the catalog list; only an
 explicit audited pricing alias or manual configuration can move a

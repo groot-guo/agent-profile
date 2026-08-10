@@ -268,8 +268,7 @@ function groupCatalogModels(
     excluded: [],
   };
   for (const item of models) groups[catalogIdentityGroup(item)].push(item);
-  return (['billable', 'review', 'excluded'] as const).map((group) => [
-    group,
-    groups[group],
-  ]);
+  return (['billable', 'review', 'excluded'] as const)
+    .filter((group) => groups[group].length > 0)
+    .map((group) => [group, groups[group]]);
 }

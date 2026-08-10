@@ -108,10 +108,10 @@ describe('Model Catalog workspace view model', () => {
       catalogIdentityGroup(
         inventory('astron-code-latest', {
           identityKind: 'opaque',
-          billingEligibility: 'review_required',
+          billingEligibility: 'excluded',
         }),
       ),
-    ).toBe('review');
+    ).toBe('excluded');
     expect(
       catalogIdentityGroup(
         inventory('<synthetic>', {

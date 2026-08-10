@@ -37,18 +37,18 @@ describe('identifyModel', () => {
     expect(identifyModel()).toMatchObject({ key: 'unknown', kind: 'unknown' });
   });
 
-  it('separates synthetic, opaque, and provider-managed review labels', () => {
+  it('separates synthetic, opaque, and provider-managed labels as excluded from catalog/statistics', () => {
     expect(identifyModel('<synthetic>')).toMatchObject({
       kind: 'synthetic',
       billingEligibility: 'excluded',
     });
     expect(identifyModel('astron-code-latest')).toMatchObject({
       kind: 'opaque',
-      billingEligibility: 'review_required',
+      billingEligibility: 'excluded',
     });
     expect(identifyModel('big-pickle')).toMatchObject({
       kind: 'review_required',
-      billingEligibility: 'review_required',
+      billingEligibility: 'excluded',
     });
     expect(identifyModel('gpt-5.6-sol')).toMatchObject({
       kind: 'model',

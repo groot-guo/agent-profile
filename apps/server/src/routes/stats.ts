@@ -3,7 +3,11 @@ import {
   type HomeSessionHighlight,
   type HomeStatisticsResponse,
 } from '@agent-profile/contracts';
-import { classifySessionProject, identifyModel, type ModelIdentityKind } from '@agent-profile/core';
+import {
+  classifySessionProject,
+  identifyModel,
+  type ModelIdentityKind,
+} from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
@@ -147,7 +151,16 @@ export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
   >();
   for (const row of modelRows) {
     const identity = identifyModel(row.model);
-    if (identity.kind === 'runtime_mode') continue;
+    // Stats 保留 provider-only 和未知标签的可检视性，但排除运行时模式、
+    // 合成占位、滚动标签和供应商托管路由标签。
+    if (
+      identity.kind === 'runtime_mode' ||
+      identity.kind === 'synthetic' ||
+      identity.kind === 'opaque' ||
+      identity.kind === 'review_required'
+    ) {
+      continue;
+    }
     const existing = modelMap.get(identity.key);
     if (existing) {
       existing.count += row.count;

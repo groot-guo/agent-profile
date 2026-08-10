@@ -4,6 +4,7 @@ import {
   COST_CURRENCY,
   COST_UNIT,
   identifyModel,
+  isExcludedModel,
   calcCost,
   isRuntimeMode,
   type CostStatus,
@@ -377,7 +378,7 @@ export class ModelCatalogService {
       latestObservedAt: number;
     }>;
     return rows
-      .filter((row) => !isRuntimeMode(row.model))
+      .filter((row) => !isExcludedModel(row.model))
       .map((row) => {
         const pricing = this.applicablePricingRecord(row.model, at);
         const pricingAlias = this.listAliases(row.model)[0] ?? null;

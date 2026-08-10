@@ -669,14 +669,16 @@ from available source histories when recovery is necessary.
   rewrites stored evidence or changes raw-model pricing lookup.
 - The Model Catalog inventory classifies observed raw labels by billing
   eligibility (T135): `billable` for concrete model identities,
-  `review_required` for opaque rolling labels (`astron-code-latest`),
-  provider-managed routes (`big-pickle`), and unverified custom labels, and
-  `excluded` for synthetic placeholders (`<synthetic>`) and runtime modes.
-  Pricing and context configuration is rejected for excluded and
-  review-required labels unless an explicit audited pricing alias points at a
-  configurable model; automatic name-similarity aliases are prohibited.
-  Configuration import skips excluded labels instead of failing on legacy
-  synthetic rows.
+  `review_required` for unverified custom labels, and `excluded` for
+  synthetic placeholders (`<synthetic>`), runtime modes (`codex-auto-review`),
+  provider-only values (`openai`, `litellm`), opaque rolling labels
+  (`astron-code-latest`), and unverified provider-managed routes
+  (`big-pickle`). Excluded labels are hidden from the Model Catalog inventory
+  and model statistics while their raw Span labels remain retained;
+  pricing and context configuration is rejected for them unless an explicit
+  audited pricing alias points at a configurable model. Automatic
+  name-similarity aliases are prohibited. Configuration import skips excluded
+  labels instead of failing on legacy synthetic rows.
 - Cost attribution distributes an LLM turn's cost across tool categories used
   by that turn and shows tool-free turns separately. It is an analytical
   allocation, not a provider invoice.

@@ -65,6 +65,16 @@ export function isRuntimeMode(raw?: string | null): boolean {
   return RUNTIME_MODES.has(raw?.trim().toLowerCase() ?? '');
 }
 
+/**
+ * True when an observed raw label must be excluded from model statistics and
+ * Model Catalog inventory (runtime modes, synthetic placeholders, opaque
+ * rolling labels, and unverified provider-managed routes). Exclusion is a
+ * presentation decision; the raw Span label is never deleted.
+ */
+export function isExcludedModel(raw?: string | null): boolean {
+  return identifyModel(raw).billingEligibility === 'excluded';
+}
+
 // This is presentation/aggregation identity only. Pricing must use the raw
 // source model because an alias alone cannot establish an applicable price.
 export function identifyModel(raw?: string | null): ModelIdentity {
@@ -100,7 +110,7 @@ export function identifyModel(raw?: string | null): ModelIdentity {
       key: `opaque:${normalized}`,
       label: `${value}（滚动标签，待核验）`,
       kind: 'opaque',
-      billingEligibility: 'review_required',
+      billingEligibility: 'excluded',
     };
   }
   if (REVIEW_REQUIRED_LABELS.has(normalized)) {
@@ -108,7 +118,7 @@ export function identifyModel(raw?: string | null): ModelIdentity {
       key: `review:${normalized}`,
       label: `${value}（供应商托管路由，待核验）`,
       kind: 'review_required',
-      billingEligibility: 'review_required',
+      billingEligibility: 'excluded',
     };
   }
   const canonical = ALIASES.get(normalized);
