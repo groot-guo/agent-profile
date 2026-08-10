@@ -6,10 +6,33 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
+### T142 — Codex Session-scoped Span ownership and evidence status repair
+
+- status: planned
+- **Purpose/outcome:** Prevent parent-context passthrough IDs from allowing
+  child rollouts to overwrite parent Spans, and expose accurate cross-Session
+  parent/reference and block-level absence semantics.
+- **Scope:** Codex parser/normalization, Session repository and additive
+  migrations, `packages/core/src/session-evidence.ts`, Server evidence DTOs,
+  Session-detail Web rendering, and focused tests/docs.
+- **Dependencies/assumptions/risks:** Preserve existing data and annotations;
+  use additive migration/backfill behavior; do not fabricate parent links,
+  model/cost/output values, or source completeness.
+- **Acceptance criteria:** Re-importing parent and child Codex Sessions is
+  deterministic and Session-scoped; evidence distinguishes linked,
+  cross-Session, source-user, corrupted-ownership, and not-captured states;
+  answer/thinking blocks no longer render inherited LLM fields as zero or
+  missing.
+- **Verification:** Focused parser/repository/migration/evidence/Web tests;
+  `pnpm check:roadmap`; package checks; `codex review --uncommitted`.
+- **Documentation:** Update `ARCHITECTURE.md`, `docs/multi-agent.md`, and
+  terminal evidence under `docs/roadmap-archive/`.
+
 ## Terminal Task Index
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T141](roadmap-archive/2026-q3.md#t141) | Codex metadata and agent-lineage evidence repair | completed |
 | [T140](roadmap-archive/2026-q3.md#t140) | evidence-safe Session detail absence states | completed |
 | [T139](roadmap-archive/2026-q3.md#t139) | cross-filtered Project and Agent discovery facets | completed |
 | [T138](roadmap-archive/2026-q3.md#t138) | server-only semantic Provider configuration and safe LLM analysis | completed |

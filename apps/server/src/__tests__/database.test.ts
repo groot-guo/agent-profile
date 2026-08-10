@@ -112,6 +112,7 @@ describe('database migrations', () => {
       { version: 14, name: 'runtime_event_coverage' },
       { version: 15, name: 'evidence_safe_cost_status' },
       { version: 16, name: 'retire_synthetic_zero_price_seed' },
+      { version: 17, name: 'source_native_relationship_evidence' },
     ]);
 
     const legacySession = database
@@ -148,7 +149,17 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(16);
+    expect(count.count).toBe(17);
+    expect(columnsOf(database, 'session_relationships')).toEqual(
+      expect.arrayContaining([
+        'call_started_at',
+        'callback_at',
+        'callback_status',
+        'agent_nickname',
+        'agent_role',
+        'agent_path',
+      ]),
+    );
     expect(columnsOf(database, 'runtime_hints')).toEqual(
       expect.arrayContaining(['hint_id', 'task_id', 'run_id', 'payload_json', 'evidence_json']),
     );

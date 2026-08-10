@@ -80,6 +80,151 @@ describe('parseCodexTranscript', () => {
     expect(parsed?.spans.every((span) => span.isSidechain)).toBe(true);
   });
 
+  it('uses the exact state-record title instead of agent reasoning text', () => {
+    const entries = rollout({ id: 'titled-thread', session_id: 'titled-thread' });
+    entries.splice(2, 0, {
+      timestamp: '2026-07-26T08:00:01.500Z',
+      type: 'event_msg',
+      payload: { type: 'agent_reasoning', text: '**This must not become the Session title**' },
+    });
+
+    const parsed = parseCodexTranscript(entries, {
+      filePath: '/codex/titled-thread.jsonl',
+      sourceTitle: '修复 Codex 会话关系',
+    });
+
+    expect(parsed?.meta.name).toBe('修复 Codex 会话关系');
+  });
+
+  it('keeps a missing source title absent instead of deriving one from reasoning', () => {
+    const entries = rollout({ id: 'untitled-thread', session_id: 'untitled-thread' });
+    entries.splice(2, 0, {
+      timestamp: '2026-07-26T08:00:01.500Z',
+      type: 'event_msg',
+      payload: { type: 'agent_reasoning', text: '**Do not derive a title**' },
+    });
+
+    const parsed = parseCodexTranscript(entries, {
+      filePath: '/codex/untitled-thread.jsonl',
+    });
+
+    expect(parsed?.meta.name).toBeUndefined();
+  });
+
+  it('captures named child-agent call and final callback evidence without retaining callback text', () => {
+    const entries = rollout({ id: 'parent-thread', session_id: 'parent-thread' });
+    entries.push(
+      {
+        timestamp: '2026-07-26T08:00:03.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'sub_agent_activity',
+          kind: 'started',
+          event_id: 'call-1',
+          occurred_at_ms: 1_785_024_003_000,
+          agent_thread_id: 'child-thread',
+          agent_path: '/root/lineage_audit',
+        },
+      },
+      {
+        timestamp: '2026-07-26T08:00:05.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'agent_message',
+          author: '/root/lineage_audit',
+          recipient: '/root',
+          content: [{ type: 'input_text', text: 'Message Type: FINAL_ANSWER\nDone.' }],
+        },
+      },
+    );
+
+    const parsed = parseCodexTranscript(entries, {
+      filePath: '/codex/parent-thread.jsonl',
+      sourceChildMetadata: {
+        'child-thread': {
+          agentNickname: 'Lin',
+          agentRole: 'audit',
+          agentPath: '/root/lineage_audit',
+        },
+      },
+    });
+
+    expect(parsed?.meta.sourceChildLineage).toEqual([
+      {
+        childSessionId: 'child-thread',
+        agentNickname: 'Lin',
+        agentRole: 'audit',
+        agentPath: '/root/lineage_audit',
+        callStartedAt: 1_785_024_003_000,
+        callbackAt: Date.parse('2026-07-26T08:00:05.000Z'),
+        callbackStatus: 'final_answer',
+      },
+    ]);
+  });
+
+  it('recognizes Codex callback content represented as strings', () => {
+    const entries = rollout({ id: 'string-callback-parent', session_id: 'string-callback-parent' });
+    entries.push(
+      {
+        timestamp: '2026-07-26T08:00:03.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'sub_agent_activity',
+          kind: 'started',
+          agent_thread_id: 'string-callback-child',
+          agent_path: '/root/string_callback',
+        },
+      },
+      {
+        timestamp: '2026-07-26T08:00:05.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'agent_message',
+          author: '/root/string_callback',
+          content: ['Message Type: FINAL_ANSWER', 'Done.'],
+        },
+      },
+    );
+
+    const parsed = parseCodexTranscript(entries, {
+      filePath: '/codex/string-callback-parent.jsonl',
+    });
+
+    expect(parsed?.meta.sourceChildLineage?.[0]).toMatchObject({
+      childSessionId: 'string-callback-child',
+      callbackStatus: 'final_answer',
+      callbackAt: Date.parse('2026-07-26T08:00:05.000Z'),
+    });
+  });
+
+  it('retains an interacted activity as observed callback evidence', () => {
+    const entries = rollout({ id: 'interacted-parent', session_id: 'interacted-parent' });
+    entries.push({
+      timestamp: '2026-07-26T08:00:03.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'sub_agent_activity',
+        kind: 'interacted',
+        occurred_at_ms: 1_785_024_003_000,
+        agent_thread_id: 'interacted-child',
+        agent_path: '/root/interacted',
+      },
+    });
+
+    const parsed = parseCodexTranscript(entries, {
+      filePath: '/codex/interacted-parent.jsonl',
+      sourceChildMetadata: {
+        'interacted-child': { agentPath: '/root/interacted' },
+      },
+    });
+
+    expect(parsed?.meta.sourceChildLineage?.[0]).toMatchObject({
+      childSessionId: 'interacted-child',
+      callbackAt: 1_785_024_003_000,
+      callbackStatus: 'observed',
+    });
+  });
+
   it('retains an isolated turn_context as a stub turn with no token telemetry', () => {
     const entries = rollout({ id: 'stub-thread', session_id: 'stub-thread' });
     // 移除 token_count 后，该 turn 只剩 turn_context（source evidence：回合已

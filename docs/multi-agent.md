@@ -42,10 +42,18 @@ was not used.
   `session_id` retained only as a legacy fallback;
 - child rollouts keep their distinct thread IDs instead of replacing the
   parent Session, and their generated Spans are marked as sidechain evidence;
-- T87 persists a source-native child-to-parent relationship only when the Codex
-  rollout captures `session_meta.parent_thread_id`. The parent Session may be
-  unavailable or absent locally, so detail must distinguish linked,
-  parent-unavailable, and not-captured states;
+- the importer reads the rollout and the read-only Codex
+  `~/.codex/state_*.sqlite` database. It uses the exact state-record title when
+  available, and keeps a missing title absent rather than deriving one from
+  reasoning text;
+- source-native child-to-parent evidence can come from
+  `session_meta.parent_thread_id`, `sub_agent_activity`, and
+  `thread_spawn_edges`. The relationship stores only deterministic child agent
+  nickname/role/path plus captured call start, callback time, and callback
+  status (`observed` or `final_answer`). Missing fields remain missing, and
+  import order does not discard metadata already supplied by the other side;
+- the parent Session may be unavailable or absent locally, so detail must
+  distinguish linked, parent-unavailable, and not-captured states;
 - titles, `cwd`, source paths, timestamps, models, and other sources' event-level
   parent IDs must not be used to infer a persisted Session relationship;
 - primary Session lists, statistics, project cohorts, Agent Process Profiles,

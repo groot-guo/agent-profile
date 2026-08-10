@@ -11,9 +11,10 @@ import {
   parseTranscript,
   parseTranscriptText,
 } from '@agent-profile/core';
+import { type CodexStateMetadataIndex, loadCodexStateMetadataIndex } from './codex-state-metadata';
 import type { SourceAdapter, SourceItem, SourceRevision } from './types';
 
-const CODEX_PARSER_REVISION = 'codex-v4';
+const CODEX_PARSER_REVISION = 'codex-v5';
 const MAX_CHECKPOINTS = 128;
 
 interface TranscriptCheckpoint {
@@ -40,20 +41,27 @@ export class TranscriptSourceAdapter implements SourceAdapter {
     private readonly directory: string,
     private readonly agentOverride?: string,
     private readonly selectedFiles?: string[],
+    private readonly options: { codexStateDatabasePath?: string } = {},
   ) {}
 
   async discover(): Promise<SourceItem[]> {
     const files = this.selectedFiles ?? (await findTranscriptFiles(this.directory));
+    const agents = files.map((file) => this.agentOverride || detectAgent(file));
+    const codexStateMetadata =
+      agents.includes('codex') || this.options.codexStateDatabasePath !== undefined
+        ? loadCodexStateMetadataIndex(this.options.codexStateDatabasePath)
+        : undefined;
     const items: SourceItem[] = [];
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       let stat: ReturnType<typeof statSync>;
       try {
         stat = statSync(file);
       } catch {
         continue;
       }
-      const agent = this.agentOverride || detectAgent(file);
-      const revision = buildRevision(agent, stat.mtimeMs, stat.size);
+      const agent = agents[index];
+      const metadata = agent === 'codex' ? codexStateMetadata?.metadataFor(file) : undefined;
+      const revision = buildRevision(agent, stat.mtimeMs, stat.size, metadata?.fingerprint);
       const checkpoint = checkpoints.get(file);
 
       items.push({
@@ -63,9 +71,24 @@ export class TranscriptSourceAdapter implements SourceAdapter {
         load: async () => {
           const raw = await readFile(file);
           const currentStat = await statAsync(file);
-          const currentRevision = buildRevision(agent, currentStat.mtimeMs, currentStat.size);
+          const currentMetadata =
+            agent === 'codex' ? codexStateMetadata?.metadataFor(file) : undefined;
+          const currentRevision = buildRevision(
+            agent,
+            currentStat.mtimeMs,
+            currentStat.size,
+            currentMetadata?.fingerprint,
+          );
           const fullLoad = async () =>
-            parseFull(raw, file, agent, currentStat.mtimeMs, currentStat.size, currentRevision);
+            parseFull(
+              raw,
+              file,
+              agent,
+              currentStat.mtimeMs,
+              currentStat.size,
+              currentRevision,
+              codexStateMetadata,
+            );
 
           const append = tryAppend(
             raw,
@@ -74,6 +97,7 @@ export class TranscriptSourceAdapter implements SourceAdapter {
             currentStat.mtimeMs,
             currentRevision,
             checkpoint,
+            codexStateMetadata,
           );
           if (append) {
             return {
@@ -89,14 +113,20 @@ export class TranscriptSourceAdapter implements SourceAdapter {
   }
 }
 
-function buildRevision(agent: string, updatedAt: number, size: number): SourceRevision {
+function buildRevision(
+  agent: string,
+  updatedAt: number,
+  size: number,
+  metadataFingerprint?: string,
+): SourceRevision {
   return {
     kind: agent,
     updatedAt,
     fingerprint:
       agent === 'codex'
-        ? `file:${CODEX_PARSER_REVISION}:${updatedAt}:${size}`
+        ? `file:${CODEX_PARSER_REVISION}:${updatedAt}:${size}:${metadataFingerprint ?? 'none'}`
         : `file:${updatedAt}:${size}`,
+    metadataFingerprint: agent === 'codex' ? metadataFingerprint : undefined,
   };
 }
 
@@ -107,6 +137,7 @@ async function parseFull(
   mtime: number,
   size: number,
   revision: SourceRevision,
+  codexStateMetadata?: CodexStateMetadataIndex,
 ) {
   const parsedText = parseTranscriptText(raw.toString('utf8'));
   const entries = parsedText.entries;
@@ -120,7 +151,7 @@ async function parseFull(
       };
     }
   }
-  const parsed = parseEntries(entries, file, agent);
+  const parsed = parseEntries(entries, file, agent, undefined, codexStateMetadata);
   if (!parsed) return null;
   rememberCheckpoint(file, raw, entries, parsed, revision);
   return {
@@ -136,8 +167,15 @@ function tryAppend(
   mtime: number,
   revision: SourceRevision,
   checkpoint: TranscriptCheckpoint | undefined,
+  codexStateMetadata?: CodexStateMetadataIndex,
 ) {
   if (!checkpoint || checkpoint.agent !== agent || raw.length <= checkpoint.size) return null;
+  if (
+    agent === 'codex' &&
+    checkpoint.revision.metadataFingerprint !== revision.metadataFingerprint
+  ) {
+    return null;
+  }
   if (!checkpoint.endsWithNewline) return null;
   if (digest(raw.subarray(0, checkpoint.size)) !== checkpoint.prefixDigest) return null;
 
@@ -161,7 +199,7 @@ function tryAppend(
   if (agent !== 'codex' && suffix.some(hasToolResult)) return null;
   if (agent === 'codex' && !isIndependentCodexTurn(suffix as unknown as CodexEntry[])) return null;
 
-  const parsed = parseEntries(suffix, file, agent, checkpoint);
+  const parsed = parseEntries(suffix, file, agent, checkpoint, codexStateMetadata);
   if (!parsed) return null;
   const closeAt = firstTimestamp(suffix);
   if (closeAt === undefined) return null;
@@ -186,14 +224,22 @@ function parseEntries(
   file: string,
   agent: string,
   checkpoint?: TranscriptCheckpoint,
+  codexStateMetadata?: CodexStateMetadataIndex,
 ): ParsedSession | null {
   if (agent === 'codex') {
+    const sessionId = checkpoint?.sessionId ?? codexSessionId(entries as unknown as CodexEntry[]);
+    const metadata = codexStateMetadata?.metadataFor(file, sessionId);
     return parseCodexTranscript(entries as unknown as CodexEntry[], {
       filePath: file,
-      sessionId: checkpoint?.sessionId,
+      sessionId,
       cwd: checkpoint?.cwd,
       claudeVersion: checkpoint?.claudeVersion,
-      sourceParentSessionId: checkpoint?.sourceParentSessionId,
+      sourceParentSessionId: checkpoint?.sourceParentSessionId ?? metadata?.sourceParentSessionId,
+      sourceTitle: metadata?.title,
+      sourceAgentNickname: metadata?.agentNickname,
+      sourceAgentRole: metadata?.agentRole,
+      sourceAgentPath: metadata?.agentPath,
+      sourceChildMetadata: metadata?.sourceChildMetadata,
     });
   }
   return parseTranscript(entries, {
@@ -201,6 +247,16 @@ function parseEntries(
     agent,
     sessionId: checkpoint?.sessionId,
   });
+}
+
+function codexSessionId(entries: CodexEntry[]): string | undefined {
+  const meta = entries.find((entry) => entry.type === 'session_meta')?.payload as
+    | Record<string, unknown>
+    | undefined;
+  return (
+    (typeof meta?.id === 'string' ? meta.id : undefined) ??
+    (typeof meta?.session_id === 'string' ? meta.session_id : undefined)
+  );
 }
 
 function isIndependentCodexTurn(entries: CodexEntry[]): boolean {

@@ -1,4 +1,10 @@
-import type { ParsedSession, Span, SpanType } from '../types';
+import type {
+  ParsedSession,
+  SourceCallbackStatus,
+  SourceChildLineage,
+  Span,
+  SpanType,
+} from '../types';
 
 export interface CodexEntry {
   timestamp: string;
@@ -60,6 +66,17 @@ function toCapturedMs(value: unknown): number | undefined {
   return value >= 1_000_000_000_000 ? value : value * 1_000;
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function capturedEntryTime(entry: CodexEntry): number | undefined {
+  const payloadTime = toCapturedMs(entry.payload.occurred_at_ms);
+  if (payloadTime !== undefined) return payloadTime;
+  const timestamp = Date.parse(entry.timestamp);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
 function messageText(entry: CodexEntry): string {
   if (entry.type !== 'response_item' || entry.payload?.type !== 'message') return '';
   if (!Array.isArray(entry.payload.content)) return '';
@@ -87,6 +104,128 @@ function isEmbeddedToolTranscript(text: string): boolean {
   return (
     trimmed.startsWith('[external_agent_tool_call:') ||
     trimmed.startsWith('[external_agent_tool_result]')
+  );
+}
+
+function callbackStatus(payload: Record<string, unknown>): SourceCallbackStatus {
+  if (payload.phase === 'final_answer') return 'final_answer';
+  const text = [
+    typeof payload.message === 'string' ? payload.message : undefined,
+    ...(Array.isArray(payload.content)
+      ? payload.content.map((item) => {
+          if (typeof item === 'string') return item;
+          if (
+            typeof item === 'object' &&
+            item !== null &&
+            typeof (item as { text?: unknown }).text === 'string'
+          ) {
+            return (item as { text: string }).text;
+          }
+          return undefined;
+        })
+      : []),
+  ]
+    .filter((value): value is string => value !== undefined)
+    .join('\n');
+  return /(?:^|\n)Message Type:\s*FINAL_ANSWER\b/.test(text) ? 'final_answer' : 'observed';
+}
+
+function sourceChildLineage(
+  entries: CodexEntry[],
+  sourceChildMetadata: Record<string, CodexAgentMetadata> | undefined,
+): SourceChildLineage[] {
+  const lineageByChildId = new Map<string, SourceChildLineage>();
+  const childIdsByAgentPath = new Map<string, Set<string>>();
+  const registerPath = (childSessionId: string, agentPath: string | undefined): void => {
+    if (!agentPath) return;
+    const childIds = childIdsByAgentPath.get(agentPath) ?? new Set<string>();
+    childIds.add(childSessionId);
+    childIdsByAgentPath.set(agentPath, childIds);
+  };
+
+  for (const [childSessionId, metadata] of Object.entries(sourceChildMetadata ?? {})) {
+    const agentPath = nonEmptyString(metadata.agentPath);
+    lineageByChildId.set(childSessionId, {
+      childSessionId,
+      agentNickname: nonEmptyString(metadata.agentNickname),
+      agentRole: nonEmptyString(metadata.agentRole),
+      agentPath,
+    });
+    registerPath(childSessionId, agentPath);
+  }
+
+  for (const entry of entries) {
+    const payload = entry.payload;
+    const isSubAgentActivity = entry.type === 'event_msg' && payload.type === 'sub_agent_activity';
+    if (!isSubAgentActivity || (payload.kind !== 'started' && payload.kind !== 'interacted')) {
+      continue;
+    }
+    const childSessionId = nonEmptyString(payload.agent_thread_id);
+    if (!childSessionId) continue;
+    const metadata = sourceChildMetadata?.[childSessionId];
+    const existing = lineageByChildId.get(childSessionId);
+    const agentPath = nonEmptyString(metadata?.agentPath) ?? nonEmptyString(payload.agent_path);
+    const capturedAt = capturedEntryTime(entry);
+    lineageByChildId.set(childSessionId, {
+      childSessionId,
+      agentNickname: nonEmptyString(metadata?.agentNickname) ?? existing?.agentNickname,
+      agentRole: nonEmptyString(metadata?.agentRole) ?? existing?.agentRole,
+      agentPath,
+      callStartedAt:
+        payload.kind === 'started'
+          ? (capturedAt ?? existing?.callStartedAt)
+          : existing?.callStartedAt,
+      callbackAt:
+        payload.kind === 'interacted' && capturedAt !== undefined
+          ? Math.max(existing?.callbackAt ?? capturedAt, capturedAt)
+          : existing?.callbackAt,
+      callbackStatus:
+        payload.kind === 'interacted' || existing?.callbackStatus === 'final_answer'
+          ? existing?.callbackStatus === 'final_answer'
+            ? 'final_answer'
+            : 'observed'
+          : existing?.callbackStatus,
+    });
+    registerPath(childSessionId, agentPath);
+  }
+
+  for (const entry of entries) {
+    const payload = entry.payload;
+    const isAgentMessage =
+      (entry.type === 'response_item' || entry.type === 'event_msg') &&
+      payload.type === 'agent_message';
+    if (!isAgentMessage) continue;
+    const directChildId =
+      nonEmptyString(payload.agent_thread_id) ?? nonEmptyString(payload.child_thread_id);
+    const authorPath = nonEmptyString(payload.author) ?? nonEmptyString(payload.agent_path);
+    const childIds = directChildId
+      ? lineageByChildId.has(directChildId)
+        ? [directChildId]
+        : []
+      : authorPath
+        ? [...(childIdsByAgentPath.get(authorPath) ?? [])]
+        : [];
+    if (childIds.length !== 1) continue;
+    const childSessionId = childIds[0];
+    const existing = lineageByChildId.get(childSessionId);
+    if (!existing) continue;
+    const observedAt = capturedEntryTime(entry);
+    const observedStatus = callbackStatus(payload);
+    lineageByChildId.set(childSessionId, {
+      ...existing,
+      callbackAt:
+        observedAt === undefined
+          ? existing.callbackAt
+          : Math.max(existing.callbackAt ?? observedAt, observedAt),
+      callbackStatus:
+        observedStatus === 'final_answer' || existing.callbackStatus === 'final_answer'
+          ? 'final_answer'
+          : 'observed',
+    });
+  }
+
+  return [...lineageByChildId.values()].sort((a, b) =>
+    a.childSessionId.localeCompare(b.childSessionId),
   );
 }
 
@@ -138,6 +277,17 @@ export interface CodexParseOptions {
   cwd?: string;
   claudeVersion?: string;
   sourceParentSessionId?: string;
+  sourceTitle?: string;
+  sourceAgentNickname?: string;
+  sourceAgentRole?: string;
+  sourceAgentPath?: string;
+  sourceChildMetadata?: Record<string, CodexAgentMetadata>;
+}
+
+export interface CodexAgentMetadata {
+  agentNickname?: string;
+  agentRole?: string;
+  agentPath?: string;
 }
 
 // 解析 Codex rollout JSONL → ParsedSession
@@ -181,18 +331,10 @@ export function parseCodexTranscript(
       : opts.sourceParentSessionId;
   const isSidechain = sourceParentSessionId !== undefined;
 
-  // 2. 收集 reasoning 文本构建 session name
-  const allReasoningTexts: string[] = [];
-  for (const e of sorted) {
-    if (e.type === 'event_msg' && e.payload && e.payload.type === 'agent_reasoning') {
-      const t = e.payload.text as string;
-      if (t) allReasoningTexts.push(t);
-    }
-  }
-  const name =
-    allReasoningTexts.length > 0
-      ? allReasoningTexts[0].replace(/^\*\*/, '').replace(/\*\*$/, '').slice(0, 80)
-      : undefined;
+  // Codex rollout does not carry a trustworthy thread title. Only the state
+  // database title is accepted; reasoning is process evidence, not identity.
+  const name = nonEmptyString(opts.sourceTitle);
+  const childLineage = sourceChildLineage(sorted, opts.sourceChildMetadata);
 
   // 3. 构建 call_id → tool_call_output 映射
   const toolOutputs = new Map<string, { entry: CodexEntry; output: unknown; isError: boolean }>();
@@ -346,16 +488,17 @@ export function parseCodexTranscript(
       .filter((entry) => entry.type === 'response_item' && entry.payload?.type === 'message')
       .map(
         (entry) =>
-          (entry.payload as Record<string, unknown>)
-            ?.internal_chat_message_metadata_passthrough as
+          (entry.payload as Record<string, unknown>)?.internal_chat_message_metadata_passthrough as
             | { turn_id?: unknown }
             | undefined,
       )
-      .find((meta) => typeof meta?.turn_id === 'string' && meta.turn_id.trim())
-      ?.turn_id as string | undefined;
+      .find((meta) => typeof meta?.turn_id === 'string' && meta.turn_id.trim())?.turn_id as
+      | string
+      | undefined;
     const turnId =
       (turnContext?.payload.turn_id as string) ||
-      (passthroughTurnId?.trim() || undefined) ||
+      passthroughTurnId?.trim() ||
+      undefined ||
       (taskStarted?.payload.turn_id as string) ||
       `turn-${turnIndex + 1}-${turnStart}`;
 
@@ -537,6 +680,10 @@ export function parseCodexTranscript(
       gitBranch: undefined,
       claudeVersion,
       sourceParentSessionId,
+      sourceAgentNickname: nonEmptyString(opts.sourceAgentNickname),
+      sourceAgentRole: nonEmptyString(opts.sourceAgentRole),
+      sourceAgentPath: nonEmptyString(opts.sourceAgentPath),
+      sourceChildLineage: childLineage.length > 0 ? childLineage : undefined,
       messageCount: turns.length,
       agent: 'codex',
     },

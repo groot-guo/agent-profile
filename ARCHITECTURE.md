@@ -462,7 +462,7 @@ improve throughput.
 | Agent | Local source | Import model |
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
-| Codex | dated rollout JSONL | parser-contract revision plus file mtime/size fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), captured `session_meta.cwd` project evidence when present, per-turn `turn_context.payload.model`, response items, events, and call IDs |
+| Codex | dated rollout JSONL plus the read-only `~/.codex/state_*.sqlite` metadata database | parser-contract revision plus file mtime/size and matched state-record fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), exact state-record title/agent identity, captured `session_meta.cwd` project evidence when present, per-turn `turn_context.payload.model`, response items, events, and call IDs |
 | Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `mimo-v2` parser-contract revision plus `time_updated`, message/part counts, and a hashed `external_import` metadata fingerprint; exact `cc` imports whose absolute `source_path` is below `~/.claude/projects` are excluded before message/part loading, while native and ambiguous rows remain source-visible |
 | OpenCode | `opencode.db` SQLite database | parser-contract version plus `time_updated` and message/part counts; changed Session rows and their message/part evidence are loaded lazily from a read-only connection |
@@ -514,17 +514,22 @@ discovery, dashboard/statistics aggregates, project cohorts, Agent Process
 Profiles, and per-source stored-Session counts—exclude a Codex record only when
 it has no main-chain Span. This keeps one top-level Session count per visible
 Codex Task without deleting child evidence or inferring relationships from
-titles, paths, models, or timing. T87 persists only Codex's captured
-`parent_thread_id` as an atomic source-native child-to-parent link. The Session
-detail surface labels whether that parent is imported, unavailable, or not
-captured; it does not infer links for other sources. Combined resource
-attribution remains future work, so primary aggregates still omit resource
-usage stored only in a child rollout.
+titles, paths, models, or timing. The importer combines the rollout's
+`parent_thread_id`/`sub_agent_activity` evidence with the read-only Codex state
+database's exact thread and `thread_spawn_edges` records. It persists the
+child's nickname, role, path, call start, callback time, and callback status
+(`observed` or `final_answer`) only when those fields are source-captured.
+State metadata can repair a relationship when either rollout is imported first,
+but it cannot invent call or callback times. The Session detail surface labels
+whether the counterpart is imported, unavailable, or not captured and shows
+only determined relationship fields. Combined resource attribution remains
+future work, so primary aggregates still omit resource usage stored only in a
+child rollout.
 
 Each modern Codex LLM turn takes its model from that turn's captured
 `turn_context.payload.model`. `session_meta.model_provider` is provider evidence,
 not a concrete model, and is never promoted into `Span.model`. Advancing the
-Codex parser revision to `codex-v4` makes an ordinary sync atomically replace
+Codex parser revision to `codex-v5` makes an ordinary sync atomically replace
 stale provider-labelled rows once; no generated-data reset is required.
 Migrated Codex rollouts without `turn_context` (including review-mode records)
 name process turns in `task_started` while messages carry their real LLM turn in
@@ -547,8 +552,10 @@ captured" relationship.
   evidence, token/context/cost fields, selected pricing model/revision, timing,
   parent/sidechain links, tool input/output metadata, and truncation-safe content.
 - `session_relationships` — source-native child-to-parent Session IDs, source
-  kind, and update time. It deliberately permits an unavailable parent ID so
-  imported child evidence is not discarded.
+  kind, import update time, optional child agent identity, and optional
+  source-captured call/callback evidence. It deliberately permits an
+  unavailable parent ID so imported child evidence is not discarded; import
+  order does not erase metadata contributed by the other side.
 - `pricing` — current per-model CNY schedules for the four token classes, with
   effective time, scheme, status, revision, and source provenance. Startup
   seeding preserves an existing epoch-zero applicability row; any bundled

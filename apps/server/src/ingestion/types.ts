@@ -4,6 +4,7 @@ export interface SourceRevision {
   kind: string;
   updatedAt: number;
   fingerprint: string;
+  metadataFingerprint?: string;
 }
 
 export interface LoadedSourceSession {

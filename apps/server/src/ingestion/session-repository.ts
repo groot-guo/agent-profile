@@ -3,6 +3,7 @@ import {
   classifySessionProject,
   type Pricing,
   type SessionSummary,
+  type SourceChildLineage,
   type Span,
 } from '@agent-profile/core';
 import type { DatabaseConnection } from '../database';
@@ -44,7 +45,7 @@ export class SessionRepository {
   private readonly upsertSessionStatement;
   private readonly deleteSpansStatement;
   private readonly deleteChildRelationshipsStatement;
-  private readonly insertSourceParentRelationshipStatement;
+  private readonly upsertSourceRelationshipStatement;
   private readonly deleteSessionStatement;
   private readonly insertSpanStatement;
   private readonly updateSpanEndStatement;
@@ -139,10 +140,59 @@ export class SessionRepository {
     this.deleteChildRelationshipsStatement = database.prepare(
       'DELETE FROM session_relationships WHERE child_session_id = ?',
     );
-    this.insertSourceParentRelationshipStatement = database.prepare(`
+    this.upsertSourceRelationshipStatement = database.prepare(`
       INSERT INTO session_relationships (
-        child_session_id, parent_session_id, source_kind, relation_kind, updated_at
-      ) VALUES (?, ?, ?, 'source_parent', ?)
+        child_session_id, parent_session_id, source_kind, relation_kind,
+        call_started_at, callback_at, callback_status,
+        agent_nickname, agent_role, agent_path, updated_at
+      ) VALUES (
+        @childSessionId, @parentSessionId, @sourceKind, 'source_parent',
+        @callStartedAt, @callbackAt, @callbackStatus,
+        @agentNickname, @agentRole, @agentPath, @updatedAt
+      )
+      ON CONFLICT(child_session_id) DO UPDATE SET
+        parent_session_id = excluded.parent_session_id,
+        source_kind = excluded.source_kind,
+        relation_kind = excluded.relation_kind,
+        call_started_at = CASE
+          WHEN session_relationships.parent_session_id <> excluded.parent_session_id
+            OR session_relationships.source_kind <> excluded.source_kind
+            THEN excluded.call_started_at
+          ELSE COALESCE(excluded.call_started_at, session_relationships.call_started_at)
+        END,
+        callback_at = CASE
+          WHEN session_relationships.parent_session_id <> excluded.parent_session_id
+            OR session_relationships.source_kind <> excluded.source_kind
+            THEN excluded.callback_at
+          ELSE COALESCE(excluded.callback_at, session_relationships.callback_at)
+        END,
+        callback_status = CASE
+          WHEN session_relationships.parent_session_id <> excluded.parent_session_id
+            OR session_relationships.source_kind <> excluded.source_kind
+            THEN excluded.callback_status
+          WHEN excluded.callback_status = 'final_answer'
+            THEN 'final_answer'
+          ELSE COALESCE(excluded.callback_status, session_relationships.callback_status)
+        END,
+        agent_nickname = CASE
+          WHEN session_relationships.parent_session_id <> excluded.parent_session_id
+            OR session_relationships.source_kind <> excluded.source_kind
+            THEN excluded.agent_nickname
+          ELSE COALESCE(excluded.agent_nickname, session_relationships.agent_nickname)
+        END,
+        agent_role = CASE
+          WHEN session_relationships.parent_session_id <> excluded.parent_session_id
+            OR session_relationships.source_kind <> excluded.source_kind
+            THEN excluded.agent_role
+          ELSE COALESCE(excluded.agent_role, session_relationships.agent_role)
+        END,
+        agent_path = CASE
+          WHEN session_relationships.parent_session_id <> excluded.parent_session_id
+            OR session_relationships.source_kind <> excluded.source_kind
+            THEN excluded.agent_path
+          ELSE COALESCE(excluded.agent_path, session_relationships.agent_path)
+        END,
+        updated_at = excluded.updated_at
     `);
     this.deleteSessionStatement = database.prepare('DELETE FROM sessions WHERE id = ?');
     this.insertSpanStatement = database.prepare(`
@@ -196,6 +246,10 @@ export class SessionRepository {
         spans: Span[],
         revision: SourceRevision,
         sourceParentSessionId: string | undefined,
+        sourceChildLineage: SourceChildLineage[],
+        sourceAgentNickname: string | undefined,
+        sourceAgentRole: string | undefined,
+        sourceAgentPath: string | undefined,
         importedAt: number,
       ) => {
         this.upsertSessionStatement.run({
@@ -232,17 +286,38 @@ export class SessionRepository {
           importedAt: summary.importedAt,
         });
         this.deleteSpansStatement.run(summary.id);
-        this.deleteChildRelationshipsStatement.run(summary.id);
         for (const span of spans) {
           this.insertSpanStatement.run(toSpanRow(span));
         }
         if (sourceParentSessionId) {
-          this.insertSourceParentRelationshipStatement.run(
-            summary.id,
-            sourceParentSessionId,
-            revision.kind,
-            importedAt,
-          );
+          this.upsertSourceRelationshipStatement.run({
+            childSessionId: summary.id,
+            parentSessionId: sourceParentSessionId,
+            sourceKind: revision.kind,
+            callStartedAt: null,
+            callbackAt: null,
+            callbackStatus: null,
+            agentNickname: sourceAgentNickname ?? null,
+            agentRole: sourceAgentRole ?? null,
+            agentPath: sourceAgentPath ?? null,
+            updatedAt: importedAt,
+          });
+        }
+        for (const child of sourceChildLineage) {
+          const childSessionId = normalizedSourceParentSessionId(child.childSessionId, summary.id);
+          if (!childSessionId) continue;
+          this.upsertSourceRelationshipStatement.run({
+            childSessionId,
+            parentSessionId: summary.id,
+            sourceKind: revision.kind,
+            callStartedAt: child.callStartedAt ?? null,
+            callbackAt: child.callbackAt ?? null,
+            callbackStatus: child.callbackStatus ?? null,
+            agentNickname: child.agentNickname ?? null,
+            agentRole: child.agentRole ?? null,
+            agentPath: child.agentPath ?? null,
+            updatedAt: importedAt,
+          });
         }
       },
     );
@@ -254,6 +329,11 @@ export class SessionRepository {
         closeSpanIds: string[],
         closeAt: number,
         revision: SourceRevision,
+        sourceParentSessionId: string | undefined,
+        sourceAgentNickname: string | undefined,
+        sourceAgentRole: string | undefined,
+        sourceAgentPath: string | undefined,
+        sourceChildLineage: SourceChildLineage[],
         importedAt: number,
       ) => {
         for (const span of spans) this.insertSpanStatement.run(toSpanRow(span));
@@ -300,6 +380,36 @@ export class SessionRepository {
           importedAt,
         });
         this.refreshAverageContextStatement.run(existing.id, existing.id);
+        if (sourceParentSessionId) {
+          this.upsertSourceRelationshipStatement.run({
+            childSessionId: existing.id,
+            parentSessionId: sourceParentSessionId,
+            sourceKind: revision.kind,
+            callStartedAt: null,
+            callbackAt: null,
+            callbackStatus: null,
+            agentNickname: sourceAgentNickname ?? null,
+            agentRole: sourceAgentRole ?? null,
+            agentPath: sourceAgentPath ?? null,
+            updatedAt: importedAt,
+          });
+        }
+        for (const child of sourceChildLineage) {
+          const childSessionId = normalizedSourceParentSessionId(child.childSessionId, existing.id);
+          if (!childSessionId) continue;
+          this.upsertSourceRelationshipStatement.run({
+            childSessionId,
+            parentSessionId: existing.id,
+            sourceKind: revision.kind,
+            callStartedAt: child.callStartedAt ?? null,
+            callbackAt: child.callbackAt ?? null,
+            callbackStatus: child.callbackStatus ?? null,
+            agentNickname: child.agentNickname ?? null,
+            agentRole: child.agentRole ?? null,
+            agentPath: child.agentPath ?? null,
+            updatedAt: importedAt,
+          });
+        }
       },
     );
     this.removeTransaction = database.transaction((sessionId: string) => {
@@ -365,6 +475,10 @@ export class SessionRepository {
       spans,
       revision,
       normalizedSourceParentSessionId(loaded.parsed.meta.sourceParentSessionId, summary.id),
+      loaded.parsed.meta.sourceChildLineage ?? [],
+      loaded.parsed.meta.sourceAgentNickname,
+      loaded.parsed.meta.sourceAgentRole,
+      loaded.parsed.meta.sourceAgentPath,
       importedAt,
     );
   }
@@ -396,6 +510,11 @@ export class SessionRepository {
       append.closeSpanIds,
       append.closeAt,
       revision,
+      normalizedSourceParentSessionId(loaded.parsed.meta.sourceParentSessionId, existing.id),
+      loaded.parsed.meta.sourceAgentNickname,
+      loaded.parsed.meta.sourceAgentRole,
+      loaded.parsed.meta.sourceAgentPath,
+      loaded.parsed.meta.sourceChildLineage ?? [],
       importedAt,
     );
     return true;

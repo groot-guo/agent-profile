@@ -68,17 +68,39 @@ describe('bounded session analysis route', () => {
     database
       .prepare(
         `INSERT INTO session_relationships (
-          child_session_id, parent_session_id, source_kind, relation_kind, updated_at
-        ) VALUES (?, ?, 'codex', 'source_parent', ?)`,
+          child_session_id, parent_session_id, source_kind, relation_kind,
+          call_started_at, callback_at, callback_status,
+          agent_nickname, agent_role, agent_path, updated_at
+        ) VALUES (?, ?, 'codex', 'source_parent', ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run('codex-child', 'codex-parent', 1);
+      .run(
+        'codex-child',
+        'codex-parent',
+        2,
+        3,
+        'final_answer',
+        'Audit',
+        'review',
+        '/root/audit',
+        1,
+      );
 
     const linked = await app.inject({
       method: 'GET',
       url: '/api/session/codex-child/analysis-summary',
     });
     expect(linked.json().relationships).toEqual({
-      parent: { id: 'codex-parent', availability: 'available', sourceKind: 'codex' },
+      parent: {
+        id: 'codex-parent',
+        availability: 'available',
+        sourceKind: 'codex',
+        callStartedAt: 2,
+        callbackAt: 3,
+        callbackStatus: 'final_answer',
+        agentNickname: 'Audit',
+        agentRole: 'review',
+        agentPath: '/root/audit',
+      },
       children: [],
       coverage: { status: 'linked', supportedSources: ['codex'] },
     });
@@ -91,7 +113,17 @@ describe('bounded session analysis route', () => {
       url: '/api/session/codex-child/analysis-summary',
     });
     expect(unavailable.json().relationships).toEqual({
-      parent: { id: 'codex-parent-missing', availability: 'unavailable', sourceKind: 'codex' },
+      parent: {
+        id: 'codex-parent-missing',
+        availability: 'unavailable',
+        sourceKind: 'codex',
+        callStartedAt: 2,
+        callbackAt: 3,
+        callbackStatus: 'final_answer',
+        agentNickname: 'Audit',
+        agentRole: 'review',
+        agentPath: '/root/audit',
+      },
       children: [],
       coverage: { status: 'parent_unavailable', supportedSources: ['codex'] },
     });

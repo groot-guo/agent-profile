@@ -134,6 +134,18 @@ export type CostStatus =
 
 export type SessionCostStatus = 'complete' | 'partial' | 'unknown' | 'excluded' | 'not_captured';
 
+export type SourceCallbackStatus = 'observed' | 'final_answer';
+
+export interface SourceChildLineage {
+  childSessionId: string;
+  agentNickname?: string;
+  agentRole?: string;
+  agentPath?: string;
+  callStartedAt?: number;
+  callbackAt?: number;
+  callbackStatus?: SourceCallbackStatus;
+}
+
 export interface SpanCoverage {
   /** How the Span's token numbers were obtained from the source. */
   tokenUsageSource?: TokenUsageSource;
@@ -155,6 +167,10 @@ export interface ParsedMeta {
   gitBranch?: string;
   claudeVersion?: string;
   sourceParentSessionId?: string;
+  sourceAgentNickname?: string;
+  sourceAgentRole?: string;
+  sourceAgentPath?: string;
+  sourceChildLineage?: SourceChildLineage[];
   messageCount: number;
   agent: string;
 }

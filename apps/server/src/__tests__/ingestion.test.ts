@@ -602,7 +602,7 @@ describe('session ingestion boundary', () => {
 
     const adapter = new TranscriptSourceAdapter(directory, 'codex');
     const [item] = await adapter.discover();
-    expect(item.revision.fingerprint).toMatch(/^file:codex-v4:/);
+    expect(item.revision.fingerprint).toMatch(/^file:codex-v5:/);
     expect(await importFromSource(adapter, repository)).toMatchObject({
       imported: 0,
       updated: 0,
@@ -674,6 +674,115 @@ describe('session ingestion boundary', () => {
     target.close();
   });
 
+  it('imports Codex state titles and source-native child lineage into stored relationships', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-profile-codex-state-import-'));
+    tempDirectories.push(directory);
+    const transcriptPath = join(directory, 'parent.jsonl');
+    const entries = createModernCodexTranscript()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    entries.push(
+      {
+        timestamp: '2026-07-28T12:00:03.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'sub_agent_activity',
+          kind: 'started',
+          occurred_at_ms: 1_785_024_003_000,
+          agent_thread_id: 'child-codex-session',
+          agent_path: '/root/audit',
+        },
+      },
+      {
+        timestamp: '2026-07-28T12:00:05.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'agent_message',
+          author: '/root/audit',
+          content: [{ type: 'input_text', text: 'Message Type: FINAL_ANSWER\nDone' }],
+        },
+      },
+    );
+    writeFileSync(transcriptPath, entries.map((entry) => JSON.stringify(entry)).join('\n'));
+
+    const statePath = join(directory, 'state.sqlite');
+    const state = new Database(statePath);
+    state.exec(`
+      CREATE TABLE threads (
+        id TEXT PRIMARY KEY,
+        rollout_path TEXT NOT NULL,
+        title TEXT,
+        agent_nickname TEXT,
+        agent_role TEXT,
+        agent_path TEXT
+      );
+      CREATE TABLE thread_spawn_edges (
+        parent_thread_id TEXT NOT NULL,
+        child_thread_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL
+      );
+    `);
+    state
+      .prepare(
+        `INSERT INTO threads (
+          id, rollout_path, title, agent_nickname, agent_role, agent_path
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run('modern-codex-session', transcriptPath, 'State DB 标题', 'Root', 'primary', '/root');
+    state
+      .prepare(
+        `INSERT INTO threads (
+          id, rollout_path, title, agent_nickname, agent_role, agent_path
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'child-codex-session',
+        join(directory, 'child.jsonl'),
+        '子 agent',
+        'Audit',
+        'review',
+        '/root/audit',
+      );
+    state
+      .prepare(
+        `INSERT INTO thread_spawn_edges (parent_thread_id, child_thread_id, status)
+         VALUES (?, ?, ?)`,
+      )
+      .run('modern-codex-session', 'child-codex-session', 'completed');
+    state.close();
+
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const adapter = new TranscriptSourceAdapter(directory, 'codex', undefined, {
+      codexStateDatabasePath: statePath,
+    });
+    expect(await importFromSource(adapter, repository)).toMatchObject({ imported: 1, failed: 0 });
+    expect(
+      target.prepare('SELECT name FROM sessions WHERE id = ?').get('modern-codex-session'),
+    ).toEqual({ name: 'State DB 标题' });
+    expect(
+      target
+        .prepare(
+          `SELECT parent_session_id as parentSessionId, call_started_at as callStartedAt,
+             callback_at as callbackAt, callback_status as callbackStatus,
+             agent_nickname as agentNickname, agent_role as agentRole, agent_path as agentPath
+           FROM session_relationships WHERE child_session_id = ?`,
+        )
+        .get('child-codex-session'),
+    ).toEqual({
+      parentSessionId: 'modern-codex-session',
+      callStartedAt: 1_785_024_003_000,
+      callbackAt: Date.parse('2026-07-28T12:00:05.000Z'),
+      callbackStatus: 'final_answer',
+      agentNickname: 'Audit',
+      agentRole: 'review',
+      agentPath: '/root/audit',
+    });
+    target.close();
+  });
+
   it('atomically replaces a source-native child relationship without touching annotations', () => {
     const target = createDatabase(':memory:');
     const repository = new SessionRepository(target, (model, at) =>
@@ -706,6 +815,87 @@ describe('session ingestion boundary', () => {
     repository.resetGeneratedData();
     expect(target.prepare('SELECT COUNT(*) as count FROM session_relationships').get()).toEqual({
       count: 0,
+    });
+    target.close();
+  });
+
+  it('preserves parent-provided call and callback evidence across reverse import order', () => {
+    const target = createDatabase(':memory:');
+    const repository = new SessionRepository(target, (model, at) =>
+      lookupPricing(target, model, at),
+    );
+    const child = createParsedSession('lineage-child', 'lineage-child-span');
+    child.meta.agent = 'codex';
+    child.meta.sourceParentSessionId = 'lineage-parent';
+    child.meta.sourceAgentNickname = 'Audit';
+    child.meta.sourceAgentRole = 'review';
+    child.meta.sourceAgentPath = '/root/audit';
+
+    repository.replace(
+      { parsed: child },
+      { kind: 'codex', updatedAt: 1, fingerprint: 'lineage:child' },
+      100,
+    );
+
+    const parent = createParsedSession('lineage-parent', 'lineage-parent-span');
+    parent.meta.agent = 'codex';
+    parent.meta.sourceChildLineage = [
+      {
+        childSessionId: 'lineage-child',
+        agentNickname: 'Audit',
+        agentRole: 'review',
+        agentPath: '/root/audit',
+        callStartedAt: 200,
+        callbackAt: 300,
+        callbackStatus: 'final_answer',
+      },
+    ];
+    repository.replace(
+      { parsed: parent },
+      { kind: 'codex', updatedAt: 2, fingerprint: 'lineage:parent' },
+      400,
+    );
+
+    expect(
+      target
+        .prepare(
+          `SELECT parent_session_id as parentSessionId, call_started_at as callStartedAt,
+             callback_at as callbackAt, callback_status as callbackStatus,
+             agent_nickname as agentNickname, agent_role as agentRole, agent_path as agentPath
+           FROM session_relationships WHERE child_session_id = ?`,
+        )
+        .get('lineage-child'),
+    ).toEqual({
+      parentSessionId: 'lineage-parent',
+      callStartedAt: 200,
+      callbackAt: 300,
+      callbackStatus: 'final_answer',
+      agentNickname: 'Audit',
+      agentRole: 'review',
+      agentPath: '/root/audit',
+    });
+
+    child.meta.sourceAgentNickname = undefined;
+    child.meta.sourceAgentRole = undefined;
+    child.meta.sourceAgentPath = undefined;
+    repository.replace(
+      { parsed: child },
+      { kind: 'codex', updatedAt: 3, fingerprint: 'lineage:child-reimport' },
+      500,
+    );
+    expect(
+      target
+        .prepare(
+          `SELECT call_started_at as callStartedAt, callback_at as callbackAt,
+             callback_status as callbackStatus, agent_nickname as agentNickname
+           FROM session_relationships WHERE child_session_id = ?`,
+        )
+        .get('lineage-child'),
+    ).toEqual({
+      callStartedAt: 200,
+      callbackAt: 300,
+      callbackStatus: 'final_answer',
+      agentNickname: 'Audit',
     });
     target.close();
   });

@@ -51,7 +51,7 @@ export {
 } from './outcome-evidence';
 export type { ParseOptions } from './parsers/claude';
 export { parseTranscript } from './parsers/claude';
-export type { CodexEntry, CodexParseOptions } from './parsers/codex';
+export type { CodexAgentMetadata, CodexEntry, CodexParseOptions } from './parsers/codex';
 export { nonActionableCodexExternalHistoryId, parseCodexTranscript } from './parsers/codex';
 export type { MiMoMessage, MiMoPart, MiMoSessionMeta } from './parsers/mimo';
 export { parseMiMoSession } from './parsers/mimo';

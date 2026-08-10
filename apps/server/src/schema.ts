@@ -439,6 +439,23 @@ const MIGRATIONS: Migration[] = [
         .run();
     },
   },
+  {
+    version: 17,
+    name: 'source_native_relationship_evidence',
+    up(database) {
+      addColumn(database, 'session_relationships', 'call_started_at', 'INTEGER');
+      addColumn(database, 'session_relationships', 'callback_at', 'INTEGER');
+      addColumn(
+        database,
+        'session_relationships',
+        'callback_status',
+        "TEXT CHECK (callback_status IS NULL OR callback_status IN ('observed', 'final_answer'))",
+      );
+      addColumn(database, 'session_relationships', 'agent_nickname', 'TEXT');
+      addColumn(database, 'session_relationships', 'agent_role', 'TEXT');
+      addColumn(database, 'session_relationships', 'agent_path', 'TEXT');
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -520,6 +537,12 @@ function createBaseSchema(database: DatabaseConnection): void {
       parent_session_id TEXT NOT NULL,
       source_kind       TEXT NOT NULL,
       relation_kind     TEXT NOT NULL CHECK (relation_kind = 'source_parent'),
+      call_started_at   INTEGER,
+      callback_at       INTEGER,
+      callback_status   TEXT CHECK (callback_status IS NULL OR callback_status IN ('observed', 'final_answer')),
+      agent_nickname    TEXT,
+      agent_role        TEXT,
+      agent_path        TEXT,
       updated_at        INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_session_relationships_parent
