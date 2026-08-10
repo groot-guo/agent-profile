@@ -73,6 +73,11 @@ non-secret fields, and every semantic entry point reports explicit availability
 states. Semantic conclusions are suppressed when the structural evidence
 required for the claim is not captured.
 
+Session-detail presentation (T140) never renders missing telemetry as a
+measured zero: unavailable context/cache/cost is labeled unavailable or
+excluded, and partial cost is a labeled known subtotal. An empty chart is not
+proof of zero usage, no cost, or a completed Session.
+
 - Higher/lower token, cost, duration, cache, tool-error, or Sidechain values are
   observations, not a quality ranking.
 - Process efficiency and diagnosis are hypotheses about execution behavior.

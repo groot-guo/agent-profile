@@ -36,6 +36,7 @@ import { ContextChart } from './context-chart';
 import { DiagnosisList, SemanticDiagnosisDisclosure } from './diagnosis-panels';
 import { parseEvidenceSpanIds } from './evidence-data';
 import { EvidencePanel } from './evidence-panel';
+import { cacheAbsenceLabel, contextAbsenceLabel, costAbsenceDisplay } from './session-absence';
 import {
   type SessionAnalysis,
   SidechainSummary,
@@ -324,6 +325,12 @@ export default function SessionPage() {
   if (!data || !spanSummary) return null;
 
   const dur = data.endTime ? data.endTime - data.startTime : 0;
+  const llmTurnCount = spanSummary.llmTurns;
+  const totalInputTokens =
+    data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens;
+  const contextAbsence = contextAbsenceLabel(data, llmTurnCount);
+  const cacheAbsence = cacheAbsenceLabel(data, totalInputTokens);
+  const costAbsence = costAbsenceDisplay(data);
   const mainTools = toolWindow.events;
   const toolBars = spanSummary.toolNames.map(({ name, count }) => [name, count] as const);
   const maxToolCount = toolBars[0]?.[1] || 1;
@@ -452,19 +459,21 @@ export default function SessionPage() {
         />
         <StatCard
           label="峰值上下文"
-          value={fmtTokens(data.peakContextTokens)}
-          tip="会话中上下文窗口的最大占用"
+          value={contextAbsence.value}
+          warn={contextAbsence.unavailable}
+          tip={contextAbsence.tip}
         />
         <StatCard
           label="Cache 命中"
-          value={`${(data.cacheHitRate * 100).toFixed(1)}%`}
-          tip="cache_read ÷ (input + cache_creation + cache_read)"
+          value={cacheAbsence.value}
+          warn={cacheAbsence.unavailable}
+          tip={cacheAbsence.tip}
         />
         <StatCard
           label="成本"
-          value={data.costUnknownCount > 0 ? '未定价' : `¥${data.totalCost.toFixed(4)}`}
-          warn={data.costUnknownCount > 0}
-          tip={data.costUnknownCount > 0 ? '包含未知模型,成本无法计算' : '按模型定价表计算'}
+          value={costAbsence.label}
+          warn={costAbsence.warn}
+          tip={costAbsence.tip}
           tipAlign="end"
         />
         {score && (

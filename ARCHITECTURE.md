@@ -411,6 +411,14 @@ scoring still evaluates every comparable Session, but it loads and releases one
 Session's Spans at a time instead of retaining the complete project cohort in a
 single map. Related Git lookup uses asynchronous `git log`, so it no longer blocks
 the Node event loop.
+Session-detail absence states (T140) are evidence-safe: a Session with no
+observable LLM turn renders context and cache metrics as unavailable, a
+`not_captured` cost status renders as unavailable instead of `¥0`, an
+`excluded` status is labeled as excluded, and `partial` cost is shown as a
+known subtotal with an incomplete-coverage warning. Cost, context, diagnostics,
+export, and evidence panels agree on the same stored coverage reason; a
+parent/child relationship is never presented as merged context or aggregate
+cost.
 
 The evidence view uses `session-evidence-page/v1`, a query-bound `(start_time,
 id)` keyset cursor with a default of 80 and maximum of 200 events. Filtering and

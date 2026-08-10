@@ -85,7 +85,9 @@ export function SidechainSummary({
             <span className="tnum">{summary.turns}</span> 轮推理 ·{' '}
             <span className="tnum">{summary.tools}</span> 次工具调用 ·{' '}
             <span className="tnum">{fmtTokens(summary.tokens)}</span> token · 成本{' '}
-            {summary.costUnknownCount > 0 ? (
+            {summary.turns > 0 && summary.tokens === 0 && summary.cost === 0 ? (
+              '不可用'
+            ) : summary.costUnknownCount > 0 ? (
               '部分未定价'
             ) : (
               <span className="tnum">¥{summary.cost.toFixed(4)}</span>

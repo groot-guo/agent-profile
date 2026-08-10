@@ -134,6 +134,12 @@ remain a legacy fallback. Every LLM-assisted entry point reports
 `not_configured`, `insufficient_evidence`, `completed`, or `failed` before any
 payload is sent, and semantic conclusions are suppressed when the structural
 token/model telemetry required for the claim is not captured.
+
+Session-detail presentation (T140) follows the same evidence boundary: cost,
+context, and cache panels render `not_captured` as unavailable rather than
+`¥0` or a zero percent, and a partial known subtotal is labeled partial.
+Diagnosis findings that depend on missing token volume are not presented as
+proof of zero usage.
 Any future change to rules, thresholds, semantic prompts, providers, evidence
 coverage, or displayed confidence must start with a task in `roadmap.md` and
 must update this document after implementation.

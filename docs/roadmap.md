@@ -6,37 +6,11 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T140 evidence-safe Session detail absence states
-
-- status: planned
-- purpose: replace misleading zero metrics and generic empty panels with clear,
-  source-faithful availability states in Session detail.
-- scope:
-  1. distinguish no LLM turn, token usage not captured, model not captured,
-     context-window specification unavailable, source parser truncation, and
-     child Session parent availability;
-  2. render unavailable values as unavailable, omit non-comparable efficiency
-     or cost conclusions, and retain a bounded link to the relevant evidence or
-     parent Session when source data supports it;
-  3. prevent a parent/child relationship from being presented as merged context
-     or aggregate cost;
-  4. align overview, context, cost, diagnostics, export, and evidence panels
-     on the same coverage reason.
-- dependencies: T134; cost-specific states depend on T136.
-- risks and assumptions: source evidence must remain content-free by default;
-  an empty chart is not proof of zero usage, no cost, or a completed Session.
-- acceptance: the reported `019fd61d` case is explainable from its stored
-  source evidence; users can distinguish unavailable telemetry from a genuine
-  zero; no panel contradicts another panel's coverage state.
-- verification plan: focused detail/coverage tests, source-relationship tests,
-  exported-report assertions, and desktop/narrow-width visual checks.
-- documentation plan: update ARCHITECTURE, `docs/diagnosis.md`,
-  `docs/profile-model.md`, and the Task archive.
-
 ## Terminal Task Index
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T140](roadmap-archive/2026-q3.md#t140) | evidence-safe Session detail absence states | completed |
 | [T139](roadmap-archive/2026-q3.md#t139) | cross-filtered Project and Agent discovery facets | completed |
 | [T138](roadmap-archive/2026-q3.md#t138) | server-only semantic Provider configuration and safe LLM analysis | completed |
 | [T137](roadmap-archive/2026-q3.md#t137) | previewed historical cost recalculation and dependent-data refresh | completed |
