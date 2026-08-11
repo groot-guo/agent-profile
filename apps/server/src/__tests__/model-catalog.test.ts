@@ -344,6 +344,50 @@ describe('ModelCatalogService', () => {
     await runtime.close();
   });
 
+  it('reports durable pending price synchronization until a matching-model execution succeeds', async () => {
+    const runtime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+      clock: () => 3_000,
+    });
+    insertSessionAndSpan(runtime.database, {
+      sessionId: 'pending-price-session',
+      spanId: 'pending-price-span',
+      model: 'pending-price-model',
+      startTime: 100,
+      unknown: true,
+    });
+    runtime.modelCatalog.upsertPricing({
+      model: 'pending-price-model',
+      inputPrice: 2,
+      cacheCreationPrice: 3,
+      cacheReadPrice: 4,
+      outputPrice: 5,
+      effectiveFrom: 0,
+    });
+
+    expect(runtime.modelCatalog.listModels()).toContainEqual(
+      expect.objectContaining({
+        model: 'pending-price-model',
+        historicalCostSyncPending: true,
+      }),
+    );
+
+    const preview = runtime.modelCatalog.previewRecalculation({
+      models: ['pending-price-model'],
+    });
+    runtime.modelCatalog.executeRecalculation(preview.scope, preview.pricingRevision);
+
+    expect(runtime.modelCatalog.listModels()).toContainEqual(
+      expect.objectContaining({
+        model: 'pending-price-model',
+        historicalCostSyncPending: false,
+      }),
+    );
+    await runtime.close();
+  });
+
   it('publishes a session-update signal after successful recalculation execution', async () => {
     const runtime = createRuntime({
       database: createDatabase(':memory:'),
@@ -375,6 +419,95 @@ describe('ModelCatalogService', () => {
     expect(after.version).toBeGreaterThan(before.version);
     expect(after.sessionIds).toContain('refresh-session');
     expect(after.reset).toBe(false);
+    await runtime.close();
+  });
+
+  it('publishes one constant-size reset when context configuration changes', async () => {
+    const runtime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+      clock: () => 3500,
+    });
+    insertSessionAndSpan(runtime.database, {
+      sessionId: 'context-refresh-session',
+      spanId: 'context-refresh-span',
+      model: 'context-refresh-model',
+      startTime: 1000,
+    });
+    const storedSession = runtime.database
+      .prepare(
+        `SELECT peak_context_tokens as peakContextTokens,
+          avg_context_tokens as avgContextTokens, total_cost as totalCost
+         FROM sessions WHERE id = 'context-refresh-session'`,
+      )
+      .get();
+    const storedSpan = runtime.database
+      .prepare(
+        `SELECT context_tokens as contextTokens, cost, cost_unknown as costUnknown
+         FROM spans WHERE id = 'context-refresh-span'`,
+      )
+      .get();
+    const before = await runtime.imports.updates.waitFor(0, 0);
+
+    runtime.modelCatalog.upsertContext({
+      model: 'context-refresh-model',
+      contextWindow: 131_072,
+    });
+
+    const afterSave = await runtime.imports.updates.waitFor(before.version, 0);
+    expect(afterSave).toMatchObject({
+      version: before.version + 1,
+      reset: true,
+      sessionIds: [],
+    });
+    expect(runtime.contextWindowResolver('context-refresh-model')).toBe(131_072);
+    expect(
+      runtime.database
+        .prepare(
+          `SELECT peak_context_tokens as peakContextTokens,
+            avg_context_tokens as avgContextTokens, total_cost as totalCost
+           FROM sessions WHERE id = 'context-refresh-session'`,
+        )
+        .get(),
+    ).toEqual(storedSession);
+    expect(
+      runtime.database
+        .prepare(
+          `SELECT context_tokens as contextTokens, cost, cost_unknown as costUnknown
+           FROM spans WHERE id = 'context-refresh-span'`,
+        )
+        .get(),
+    ).toEqual(storedSpan);
+
+    runtime.modelCatalog.importConfiguration({
+      schemaVersion: 'model-catalog/v1',
+      pricing: [],
+      modelContext: [
+        {
+          model: 'context-import-a',
+          contextWindow: 65_536,
+          sourceKind: 'imported',
+          revision: 1,
+          userOverride: false,
+        },
+        {
+          model: 'context-import-b',
+          contextWindow: 131_072,
+          sourceKind: 'imported',
+          revision: 1,
+          userOverride: false,
+        },
+      ],
+      pricingAliases: [],
+    });
+
+    const afterImport = await runtime.imports.updates.waitFor(afterSave.version, 0);
+    expect(afterImport).toMatchObject({
+      version: afterSave.version + 1,
+      reset: true,
+      sessionIds: [],
+    });
     await runtime.close();
   });
 

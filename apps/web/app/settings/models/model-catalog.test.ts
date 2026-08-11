@@ -26,6 +26,7 @@ function inventory(
     context: null,
     pricingKnown: false,
     contextKnown: false,
+    historicalCostSyncPending: false,
     ...overrides,
   };
 }

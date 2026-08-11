@@ -63,6 +63,7 @@ export interface ModelCatalogInventoryItem {
   context: ModelCatalogContextRecord | null;
   pricingKnown: boolean;
   contextKnown: boolean;
+  historicalCostSyncPending: boolean;
 }
 
 export interface ModelCatalogRecalculationScope {

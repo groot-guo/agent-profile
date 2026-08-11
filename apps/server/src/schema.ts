@@ -500,6 +500,16 @@ const MIGRATIONS: Migration[] = [
       addColumn(database, 'sessions', 'is_review_initiator', 'INTEGER NOT NULL DEFAULT 0');
     },
   },
+  {
+    version: 20,
+    name: 'model_catalog_price_sync_lookup',
+    up(database) {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_spans_model_type_price_sync
+          ON spans(model, type, pricing_model, pricing_effective_from, pricing_revision);
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {

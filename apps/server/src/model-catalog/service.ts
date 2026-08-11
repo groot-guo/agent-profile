@@ -96,10 +96,14 @@ export class ModelCatalogService {
     private readonly clock: () => number,
   ) {
     this.onUpdate = undefined;
+    this.onContextUpdate = undefined;
   }
 
   /** Optional hook invoked after a successful recalculation execution. */
   onUpdate?: (sessionIds: string[]) => void;
+
+  /** Optional hook invoked after a successful model-context mutation. */
+  onContextUpdate?: () => void;
 
   seedDefaults(): void {
     seedPricingDefaults(this.database);
@@ -299,6 +303,12 @@ export class ModelCatalogService {
   }
 
   upsertContext(input: ContextInput, sourceKind: CatalogSourceKind = 'manual'): ModelContextRecord {
+    const context = this.storeContext(input, sourceKind);
+    this.onContextUpdate?.();
+    return context;
+  }
+
+  private storeContext(input: ContextInput, sourceKind: CatalogSourceKind): ModelContextRecord {
     this.assertConfigurableModel(input.model);
     const previous = this.database
       .prepare('SELECT COALESCE(revision, 0) as revision FROM model_context WHERE model = ?')
@@ -395,6 +405,11 @@ export class ModelCatalogService {
             pricing.status === 'active' &&
             pricing.pricingScheme === 'flat_four_token_classes',
           contextKnown: context !== null,
+          historicalCostSyncPending:
+            pricing !== null &&
+            pricing.status === 'active' &&
+            pricing.pricingScheme === 'flat_four_token_classes' &&
+            this.hasPendingHistoricalCostSync(row.model, pricing),
         };
       });
   }
@@ -617,7 +632,7 @@ export class ModelCatalogService {
         pricingCount++;
       }
       for (const row of filteredContext) {
-        this.upsertContext(
+        this.storeContext(
           {
             model: row.model,
             contextWindow: row.contextWindow,
@@ -632,6 +647,7 @@ export class ModelCatalogService {
         this.upsertAlias(row, 'imported');
       }
     })();
+    if (contextCount > 0) this.onContextUpdate?.();
     return { pricing: pricingCount, modelContext: contextCount };
   }
 
@@ -703,6 +719,23 @@ export class ModelCatalogService {
         )
         .get(model) as PricingRecord | undefined) ?? null
     );
+  }
+
+  private hasPendingHistoricalCostSync(model: string, pricing: PricingRecord): boolean {
+    const row = this.database
+      .prepare(
+        `SELECT EXISTS(
+          SELECT 1 FROM spans
+          WHERE type = 'llm_turn' AND model = ?
+            AND (
+              pricing_model IS NOT ?
+              OR pricing_effective_from IS NOT ?
+              OR pricing_revision IS NOT ?
+            )
+        ) as pending`,
+      )
+      .get(model, pricing.model, pricing.effectiveFrom, pricing.revision) as { pending: number };
+    return row.pending === 1;
   }
 
   private selectSpans(scope: RecalculationScope): CatalogSpan[] {

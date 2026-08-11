@@ -67,6 +67,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     clock,
   });
   modelCatalog.onUpdate = (sessionIds) => imports.updates.publish(sessionIds);
+  modelCatalog.onContextUpdate = () => imports.updates.publish([], true);
   let providerConfiguration = loadProviderConfiguration();
   let providerDiagnoser = providerConfiguration
     ? createLlmDiagnoser(providerConfiguration.apiKey, {

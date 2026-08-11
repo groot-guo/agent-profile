@@ -115,6 +115,7 @@ describe('database migrations', () => {
       { version: 17, name: 'source_native_relationship_evidence' },
       { version: 18, name: 'codex_session_scoped_span_ids' },
       { version: 19, name: 'codex_review_initiator_sessions' },
+      { version: 20, name: 'model_catalog_price_sync_lookup' },
     ]);
 
     const legacySession = database
@@ -151,7 +152,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(19);
+    expect(count.count).toBe(20);
     expect(columnsOf(database, 'sessions')).toContain('is_review_initiator');
     expect(columnsOf(database, 'session_relationships')).toEqual(
       expect.arrayContaining([
@@ -185,10 +186,11 @@ describe('database migrations', () => {
   it('recovers span provenance when an early migration v8 was already recorded', () => {
     const database = createDatabase(':memory:');
     database.exec(`
+      DROP INDEX IF EXISTS idx_spans_model_type_price_sync;
       ALTER TABLE spans DROP COLUMN pricing_model;
       ALTER TABLE spans DROP COLUMN pricing_revision;
     `);
-    database.prepare('DELETE FROM schema_migrations WHERE version = ?').run(9);
+    database.prepare('DELETE FROM schema_migrations WHERE version IN (?, ?)').run(9, 20);
 
     applyMigrations(database);
 
@@ -198,6 +200,9 @@ describe('database migrations', () => {
     expect(database.prepare('SELECT name FROM schema_migrations WHERE version = ?').get(9)).toEqual(
       { name: 'model_catalog_span_provenance_recovery' },
     );
+    expect(
+      database.prepare('SELECT name FROM schema_migrations WHERE version = ?').get(20),
+    ).toEqual({ name: 'model_catalog_price_sync_lookup' });
     database.close();
   });
 
@@ -275,6 +280,19 @@ describe('database migrations', () => {
       .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?")
       .get('idx_spans_session_time_id') as { sql: string } | undefined;
     expect(index?.sql).toContain('spans(session_id, start_time, id)');
+    database.close();
+  });
+
+  it('creates the Model Catalog price-sync lookup index', () => {
+    const database = createLegacyDatabase();
+    applyMigrations(database);
+
+    const index = database
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?")
+      .get('idx_spans_model_type_price_sync') as { sql: string } | undefined;
+    expect(index?.sql).toContain(
+      'spans(model, type, pricing_model, pricing_effective_from, pricing_revision)',
+    );
     database.close();
   });
 

@@ -86,6 +86,14 @@ describe('Model Catalog routes', () => {
     expect(pricing.statusCode).toBe(200);
     expect(pricing.json()).toMatchObject({ model: 'route-model', sourceKind: 'manual' });
 
+    const inventoryAfterPricing = await app.inject({
+      method: 'GET',
+      url: '/api/model-catalog/models',
+    });
+    expect(inventoryAfterPricing.json().models).toContainEqual(
+      expect.objectContaining({ model: 'route-model', historicalCostSyncPending: true }),
+    );
+
     const context = await app.inject({
       method: 'PUT',
       url: '/api/model-catalog/models/route-model/context',
@@ -93,6 +101,22 @@ describe('Model Catalog routes', () => {
     });
     expect(context.statusCode).toBe(200);
     expect(context.json()).toMatchObject({ contextWindow: 32000, userOverride: true });
+
+    const analysis = await app.inject({
+      method: 'GET',
+      url: '/api/session/catalog-session/analysis-summary',
+    });
+    expect(analysis.statusCode).toBe(200);
+    expect(analysis.json().context.points).toContainEqual(
+      expect.objectContaining({ model: 'route-model', contextWindow: 32000 }),
+    );
+
+    const update = await app.inject({
+      method: 'GET',
+      url: '/api/session-updates?after=0&wait=0',
+    });
+    expect(update.statusCode).toBe(200);
+    expect(update.json()).toMatchObject({ reset: true, sessionIds: [] });
 
     const alias = await app.inject({
       method: 'PUT',

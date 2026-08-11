@@ -101,7 +101,7 @@ export function ModelEditor({
       await responseJson(response);
       setPreview(null);
       setResult(null);
-      await onReload('价格 revision 已保存；历史 Span 会按最新价格重算，请先查看下方预览。');
+      await onReload('价格 revision 已保存；历史成本尚未同步，请先预览并确认重算。');
     } catch (error) {
       setPricingError(`保存失败：${String(error)}`);
     } finally {
@@ -169,7 +169,14 @@ export function ModelEditor({
       setResult(executed);
       setPreview(executed);
       setIsConfirmed(false);
-      onFeedback({ kind: 'ok', text: '历史成本重算完成，Session 汇总已同步更新。' });
+      try {
+        await onReload('历史成本重算完成，Session 汇总已同步更新。');
+      } catch (error) {
+        onFeedback({
+          kind: 'err',
+          text: `历史成本重算已完成，但模型状态刷新失败：${String(error)}`,
+        });
+      }
     } catch (error) {
       const message = String(error);
       if (message.includes('pricing_revision_changed')) {
@@ -269,6 +276,20 @@ export function ModelEditor({
             <div className={styles.fieldError} role="alert">
               {pricingError}
             </div>
+          )}
+          {item.historicalCostSyncPending && (
+            <Notice kind="info">
+              当前价格 revision 尚未同步到 {item.model} 的历史成本。{' '}
+              <button
+                className={styles.button}
+                type="button"
+                disabled={isSaving || isPreviewing || isExecuting}
+                onClick={previewRecalculation}
+              >
+                {isPreviewing ? '生成预览中…' : '查看历史同步预览'}
+              </button>{' '}
+              预览为只读，确认后才会更新历史成本。
+            </Notice>
           )}
           <div className={styles.actionRow}>
             <button
