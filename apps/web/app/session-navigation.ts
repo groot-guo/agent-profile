@@ -57,6 +57,14 @@ export const DEFAULT_SESSION_NAVIGATION: SessionNavigationState = {
   selectedId: null,
 };
 
+const MAX_SESSION_DISPLAY_TITLE_LENGTH = 96;
+
+function boundedSessionDisplayTitle(value: string): string {
+  return value.length <= MAX_SESSION_DISPLAY_TITLE_LENGTH
+    ? value
+    : `${value.slice(0, MAX_SESSION_DISPLAY_TITLE_LENGTH - 1)}…`;
+}
+
 export function writeSessionSelectionHistory(history: SessionSelectionHistory, url: string): void {
   const state = { agentProfileSession: true };
   if (isSessionSelectionHistoryState(history.state)) {
@@ -79,7 +87,7 @@ export function sessionDisplayTitle(
     Partial<Pick<SessionSummary, 'name' | 'cwd' | 'filePath'>> & { project?: string },
 ): string {
   const sourceTitle = session.name?.trim();
-  if (sourceTitle) return sourceTitle;
+  if (sourceTitle) return boundedSessionDisplayTitle(sourceTitle);
   const agent = AGENT_LABELS[session.agent] || session.agent || 'Agent';
   const projectKey = sessionProject(session);
   const project = projectLabel(projectKey);

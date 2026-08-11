@@ -80,6 +80,31 @@ describe('parseCodexTranscript', () => {
     expect(parsed?.spans.every((span) => span.isSidechain)).toBe(true);
   });
 
+  it('links a delegation envelope to its explicit source thread', () => {
+    const entries = rollout({ id: 'delegated-child', session_id: 'delegated-child' });
+    entries.splice(1, 0, {
+      timestamp: '2026-07-26T08:00:00.500Z',
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: '<codex_delegation>\n<source_thread_id>delegated-parent</source_thread_id>\n<input>review</input>\n</codex_delegation>',
+          },
+        ],
+      },
+    });
+
+    const parsed = parseCodexTranscript(entries, {
+      filePath: '/codex/rollout-delegated-child.jsonl',
+    });
+
+    expect(parsed?.meta.sourceParentSessionId).toBe('delegated-parent');
+    expect(parsed?.spans.every((span) => span.isSidechain)).toBe(true);
+  });
+
   it('scopes inherited parent-context spans and does not attribute parent usage to a child', () => {
     const entries: CodexEntry[] = [
       {

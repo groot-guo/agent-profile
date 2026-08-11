@@ -109,6 +109,9 @@ describe('flat Session navigation', () => {
     const titled = session('named', '/repo/alpha', 'codex', 100, 0);
     expect(sessionDisplayTitle(titled)).toBe('session named');
 
+    const longTitle = { ...titled, name: 'x'.repeat(120) };
+    expect(sessionDisplayTitle(longTitle)).toBe(`${'x'.repeat(95)}…`);
+
     const untitled = { ...session('opaque-session-id', '/repo/alpha', 'codex', 100, 0), name: '' };
     const title = sessionDisplayTitle(untitled);
     expect(title).toContain('Codex · alpha ·');

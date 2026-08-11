@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe('Codex state metadata', () => {
-  it('matches a rollout path and exposes exact title, agent identity, and child edges', () => {
+  it('prefers local session-index titles and exposes agent identity and child edges', () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-profile-codex-state-'));
     temporaryDirectories.push(directory);
     const databasePath = join(directory, 'state.sqlite');
@@ -44,7 +44,21 @@ describe('Codex state metadata', () => {
       INSERT INTO thread_spawn_edges (parent_thread_id, child_thread_id, status)
         VALUES ('parent', 'child', 'completed');
     `);
+    database
+      .prepare('INSERT INTO threads (id, rollout_path, title) VALUES (?, ?, ?)')
+      .run(
+        'opaque',
+        '/codex/opaque.jsonl',
+        '<codex_delegation><source_thread_id>parent</source_thread_id>',
+      );
     database.close();
+    writeFileSync(
+      join(directory, 'session_index.jsonl'),
+      [
+        JSON.stringify({ id: 'parent', thread_name: '本地父会话' }),
+        JSON.stringify({ id: 'child', thread_name: '本地子会话' }),
+      ].join('\n'),
+    );
 
     const index = loadCodexStateMetadataIndex(databasePath);
     const parent = index.metadataFor('/codex/parent.jsonl');
@@ -52,7 +66,7 @@ describe('Codex state metadata', () => {
 
     expect(parent).toMatchObject({
       threadId: 'parent',
-      title: '真实标题',
+      title: '本地父会话',
       agentNickname: 'Root',
       agentRole: 'primary',
       agentPath: '/root',
@@ -66,8 +80,10 @@ describe('Codex state metadata', () => {
     });
     expect(child).toMatchObject({
       threadId: 'child',
+      title: '本地子会话',
       sourceParentSessionId: 'parent',
     });
+    expect(index.metadataFor('/codex/opaque.jsonl')?.title).toBeUndefined();
     expect(parent?.fingerprint).toMatch(/^[a-f0-9]{16}$/);
   });
 

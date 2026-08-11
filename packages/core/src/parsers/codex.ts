@@ -71,6 +71,32 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+function delegationSourceParentSessionId(
+  entries: CodexEntry[],
+  sessionId: string,
+): string | undefined {
+  for (const entry of entries) {
+    const message =
+      entry.type === 'event_msg' && entry.payload?.type === 'user_message'
+        ? typeof entry.payload.message === 'string'
+          ? entry.payload.message
+          : undefined
+        : entry.type === 'response_item' &&
+            entry.payload?.type === 'message' &&
+            entry.payload.role === 'user'
+          ? messageText(entry)
+          : undefined;
+    const delegationMessage = message?.trimStart();
+    if (!delegationMessage?.startsWith('<codex_delegation')) continue;
+    const match = delegationMessage.match(
+      /<codex_delegation\b[^>]*>[\s\S]{0,4096}?<source_thread_id>\s*([^<\s]{1,200})\s*<\/source_thread_id>/i,
+    );
+    const parentSessionId = match?.[1]?.trim();
+    if (parentSessionId && parentSessionId !== sessionId) return parentSessionId;
+  }
+  return undefined;
+}
+
 function capturedEntryTime(entry: CodexEntry): number | undefined {
   const payloadTime = toCapturedMs(entry.payload.occurred_at_ms);
   if (payloadTime !== undefined) return payloadTime;
@@ -458,7 +484,7 @@ export function parseCodexTranscript(
     meta.parent_thread_id.trim() &&
     meta.parent_thread_id !== sessionId
       ? meta.parent_thread_id
-      : opts.sourceParentSessionId;
+      : (opts.sourceParentSessionId ?? delegationSourceParentSessionId(sorted, sessionId));
   const isSidechain = sourceParentSessionId !== undefined;
   const isReviewInitiator =
     !isSidechain &&

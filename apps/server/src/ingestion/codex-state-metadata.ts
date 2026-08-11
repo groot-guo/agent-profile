@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import type { CodexAgentMetadata } from '@agent-profile/core';
 import Database from 'better-sqlite3';
 
@@ -35,6 +35,9 @@ interface StateEdgeRow {
 const EMPTY_INDEX: CodexStateMetadataIndex = {
   metadataFor: () => undefined,
 };
+
+const MAX_SESSION_INDEX_BYTES = 8 * 1024 * 1024;
+const MAX_TITLE_LENGTH = 160;
 
 export function resolveCodexStateDatabasePath(homeDirectory = homedir()): string | undefined {
   const codexDirectory = resolve(homeDirectory, '.codex');
@@ -76,7 +79,7 @@ export function loadCodexStateMetadataIndex(
   try {
     const threadRows = readThreadRows(database);
     const edgeRows = readEdgeRows(database);
-    return createIndex(threadRows, edgeRows);
+    return createIndex(threadRows, edgeRows, readSessionIndexTitles(databasePath));
   } catch {
     return EMPTY_INDEX;
   } finally {
@@ -113,6 +116,30 @@ function readEdgeRows(database: InstanceType<typeof Database>): StateEdgeRow[] {
     .all() as StateEdgeRow[];
 }
 
+function readSessionIndexTitles(databasePath: string): Map<string, string> {
+  const indexPath = resolve(dirname(databasePath), 'session_index.jsonl');
+  try {
+    if (statSync(indexPath).size > MAX_SESSION_INDEX_BYTES) return new Map();
+    const titles = new Map<string, string>();
+    for (const line of readFileSync(indexPath, 'utf8').split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      let value: unknown;
+      try {
+        value = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (typeof value !== 'object' || value === null) continue;
+      const id = nonEmpty((value as { id?: unknown }).id);
+      const title = boundedTitle((value as { thread_name?: unknown }).thread_name);
+      if (id && title) titles.set(id, title);
+    }
+    return titles;
+  } catch {
+    return new Map();
+  }
+}
+
 function columnsOf(database: InstanceType<typeof Database>, table: string): Set<string> {
   try {
     const rows = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
@@ -125,6 +152,7 @@ function columnsOf(database: InstanceType<typeof Database>, table: string): Set<
 function createIndex(
   threadRows: StateThreadRow[],
   edgeRows: StateEdgeRow[],
+  sessionIndexTitles = new Map<string, string>(),
 ): CodexStateMetadataIndex {
   const threadsById = new Map<string, StateThreadRow>();
   for (const row of [...threadRows].sort((left, right) => left.id.localeCompare(right.id))) {
@@ -161,10 +189,11 @@ function createIndex(
         agentPath: nonEmpty(child?.agentPath),
       };
     }
+    const title = sessionIndexTitles.get(threadId) ?? boundedTitle(row.title);
     const metadata = {
       threadId,
       rolloutPath: nonEmpty(row.rolloutPath),
-      title: nonEmpty(row.title),
+      title,
       agentNickname: nonEmpty(row.agentNickname),
       agentRole: nonEmpty(row.agentRole),
       agentPath: nonEmpty(row.agentPath),
@@ -173,7 +202,7 @@ function createIndex(
       fingerprint: metadataFingerprint({
         threadId,
         rolloutPath: nonEmpty(row.rolloutPath),
-        title: nonEmpty(row.title),
+        title,
         agentNickname: nonEmpty(row.agentNickname),
         agentRole: nonEmpty(row.agentRole),
         agentPath: nonEmpty(row.agentPath),
@@ -203,6 +232,12 @@ function normalizePath(value: string): string {
   return resolve(value.replace(/^~(?=\/|$)/, homedir()));
 }
 
-function nonEmpty(value: string | null | undefined): string | undefined {
+function nonEmpty(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function boundedTitle(value: unknown): string | undefined {
+  const title = nonEmpty(typeof value === 'string' ? value : undefined);
+  if (!title || title.startsWith('<codex_delegation')) return undefined;
+  return title.length <= MAX_TITLE_LENGTH ? title : `${title.slice(0, MAX_TITLE_LENGTH - 1)}…`;
 }

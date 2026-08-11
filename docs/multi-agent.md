@@ -42,12 +42,14 @@ was not used.
   `session_id` retained only as a legacy fallback;
 - child rollouts keep their distinct thread IDs instead of replacing the
   parent Session, and their generated Spans are marked as sidechain evidence;
-- the importer reads the rollout and the read-only Codex
-  `~/.codex/state_*.sqlite` database. It uses the exact state-record title when
-  available, and keeps a missing title absent rather than deriving one from
-  reasoning text;
+- the importer reads the rollout, the read-only Codex `~/.codex/state_*.sqlite`
+  database, and its adjacent `session_index.jsonl`. It prefers the local
+  `thread_name` title, bounds state/index titles, and discards a delegation
+  envelope instead of persisting it as a title or deriving one from reasoning
+  text;
 - source-native child-to-parent evidence can come from
-  `session_meta.parent_thread_id`, `sub_agent_activity`, and
+  `session_meta.parent_thread_id`, an explicit
+  `<codex_delegation><source_thread_id>` marker, `sub_agent_activity`, and
   `thread_spawn_edges`. The relationship stores only deterministic child agent
   nickname/role/path plus captured call start, callback time, and callback
   status (`observed` or `final_answer`). Missing fields remain missing, and
@@ -67,8 +69,8 @@ was not used.
   and labeled as the initiator, but ordinary primary Session discovery,
   statistics, and cohort aggregates exclude it; no title or prompt inference is
   used to classify a normal conversation as review;
-- titles, `cwd`, source paths, timestamps, models, and other sources' event-level
-  parent IDs must not be used to infer a persisted Session relationship;
+- unrelated titles, `cwd`, source paths, timestamps, models, and other sources'
+  event-level IDs must not be used to infer a persisted Session relationship;
 - primary Session lists, statistics, project cohorts, Agent Process Profiles,
   and import-source counts exclude a Codex record when it is marked as a review
   initiator or when every stored Span is sidechain evidence. The retained record
