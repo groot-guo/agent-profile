@@ -10,7 +10,8 @@ import { createRuntime } from '../runtime';
 const tempDirectories: string[] = [];
 
 afterEach(() => {
-  for (const directory of tempDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  for (const directory of tempDirectories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
 });
 
 describe('Provider configuration routes', () => {

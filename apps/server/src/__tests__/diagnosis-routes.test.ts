@@ -106,42 +106,40 @@ describe('diagnosis route semantic consent boundary', () => {
     await app.close();
   });
 
-function createApp() {
-  const database = createDatabase(':memory:');
-  databases.push(database);
-  const auditStore = createSemanticDiagnosisAuditStore();
-  const response: LlmDiagnosisResponse = {
-    findings: [],
-    semantic: {
-      requested: true,
-      consent: 'granted',
-      status: 'completed',
+  function createApp() {
+    const database = createDatabase(':memory:');
+    databases.push(database);
+    const auditStore = createSemanticDiagnosisAuditStore();
+    const response: LlmDiagnosisResponse = {
+      findings: [],
+      semantic: {
+        requested: true,
+        consent: 'granted',
+        status: 'completed',
+        provider: 'openai',
+        payload: {
+          mode: 'bounded_redacted',
+          thinkingItems: 0,
+          toolItems: 0,
+          characters: 0,
+          redactions: 0,
+          rawContentIncluded: false,
+        },
+        audit: {
+          recorded: false,
+          retention: 'process_bounded_content_free',
+          rawContentStored: false,
+        },
+        limitations: ['fixture'],
+      },
+    };
+    const diagnoser: SemanticDiagnoser = {
       provider: 'openai',
-      payload: {
-        mode: 'bounded_redacted',
-        thinkingItems: 0,
-        toolItems: 0,
-        characters: 0,
-        redactions: 0,
-        rawContentIncluded: false,
-      },
-      audit: {
-        recorded: false,
-        retention: 'process_bounded_content_free',
-        rawContentStored: false,
-      },
-      limitations: ['fixture'],
-    },
-  };
-  const diagnoser: SemanticDiagnoser = {
-    provider: 'openai',
-    diagnose: vi.fn(async () => response.findings),
-    diagnoseWithMetadata: vi.fn(async () => response),
-  };
-  const app = Fastify();
-  registerDiagnosisRoutes(
-    app,
-    {
+      diagnose: vi.fn(async () => response.findings),
+      diagnoseWithMetadata: vi.fn(async () => response),
+    };
+    const app = Fastify();
+    registerDiagnosisRoutes(app, {
       database,
       clock: () => 1000,
       pricingResolver: () => undefined,
@@ -162,17 +160,16 @@ function createApp() {
         configure: () => undefined,
         diagnoser: () => diagnoser,
       },
-    },
-  );
-  return { app, database, diagnoser, auditStore };
-}
+    });
+    return { app, database, diagnoser, auditStore };
+  }
 
-function insertSession(database: DatabaseConnection): void {
-  database
-    .prepare(
-      `INSERT INTO sessions (id, file_path, agent, start_time, imported_at)
+  function insertSession(database: DatabaseConnection): void {
+    database
+      .prepare(
+        `INSERT INTO sessions (id, file_path, agent, start_time, imported_at)
        VALUES ('session-1', 'fixture://session-1', 'codex', 100, 200)`,
-    )
-    .run();
-}
+      )
+      .run();
+  }
 });

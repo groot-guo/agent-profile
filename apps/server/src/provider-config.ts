@@ -40,7 +40,10 @@ function isLoopbackHost(hostname: string): boolean {
   );
 }
 
-function endpointHostOf(baseUrl: string): { host: string; locality: ProviderStatus['endpointLocality'] } {
+function endpointHostOf(baseUrl: string): {
+  host: string;
+  locality: ProviderStatus['endpointLocality'];
+} {
   try {
     const parsed = new URL(baseUrl);
     return {
@@ -60,10 +63,9 @@ export function providerConfigFilePath(options: { dataDirectory?: string } = {})
   return join(directory, PROVIDER_FILE_NAME);
 }
 
-export function loadProviderConfiguration(options: {
-  dataDirectory?: string;
-  env?: NodeJS.ProcessEnv;
-} = {}): ProviderConfiguration | null {
+export function loadProviderConfiguration(
+  options: { dataDirectory?: string; env?: NodeJS.ProcessEnv } = {},
+): ProviderConfiguration | null {
   const env = options.env ?? process.env;
   const filePath = providerConfigFilePath(options);
   if (existsSync(filePath)) {
@@ -91,7 +93,8 @@ export function loadProviderConfiguration(options: {
   }
   const envKey = env.LLM_API_KEY?.trim();
   if (envKey) {
-    const provider: SemanticProviderKind = env.LLM_PROVIDER === 'anthropic' ? 'anthropic' : 'openai';
+    const provider: SemanticProviderKind =
+      env.LLM_PROVIDER === 'anthropic' ? 'anthropic' : 'openai';
     return {
       provider,
       baseUrl: (env.LLM_BASE_URL || 'https://api.openai.com/v1').trim(),

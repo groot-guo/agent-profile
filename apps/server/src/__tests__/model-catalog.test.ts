@@ -45,9 +45,7 @@ describe('ModelCatalogService', () => {
     });
 
     const synthetic = runtime.database
-      .prepare(
-        `SELECT status FROM pricing WHERE model = '<synthetic>'`,
-      )
+      .prepare(`SELECT status FROM pricing WHERE model = '<synthetic>'`)
       .get();
     expect(synthetic).toBeUndefined();
 
@@ -406,9 +404,7 @@ describe('ModelCatalogService', () => {
     const preview = runtime.modelCatalog.previewRecalculation({ models: ['gpt-4o'] });
     const before = await runtime.imports.updates.waitFor(0, 0);
     // Preview 是只读的，不得发布任何刷新信号。
-    expect((await runtime.imports.updates.waitFor(before.version, 0)).version).toBe(
-      before.version,
-    );
+    expect((await runtime.imports.updates.waitFor(before.version, 0)).version).toBe(before.version);
     const result = runtime.modelCatalog.executeRecalculation(
       preview.scope,
       preview.pricingRevision,

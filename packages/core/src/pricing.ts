@@ -1,5 +1,5 @@
-import type { CostStatus, Pricing, Span } from './types';
 import { identifyModel } from './model-identity';
+import type { CostStatus, Pricing, Span } from './types';
 
 export const COST_CURRENCY = 'CNY' as const;
 export const COST_UNIT = 'per_million_tokens' as const;

@@ -10,10 +10,10 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { API } from '../../config';
 import { Notice } from '../../ui';
 import {
+  type CatalogIdentityGroup,
   catalogIdentityGroup,
   identityGroupLabel,
   sortCatalogModels,
-  type CatalogIdentityGroup,
 } from './model-catalog';
 import styles from './model-catalog.module.css';
 import { type Feedback, ModelEditor, priorityLabel, responseJson } from './model-editor';

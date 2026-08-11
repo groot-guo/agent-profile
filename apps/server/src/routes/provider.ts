@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import type { AppRuntime } from '../runtime';
 import type { ProviderConfiguration } from '../provider-config';
+import type { AppRuntime } from '../runtime';
 
 interface ProviderBody {
   provider: 'anthropic' | 'openai';
