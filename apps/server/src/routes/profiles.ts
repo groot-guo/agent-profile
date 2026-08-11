@@ -6,9 +6,11 @@ import {
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
+import { projectScopeSql } from '../project-scope';
 import type { AppRuntime } from '../runtime';
 
-type ProfileRuntime = Pick<AppRuntime, 'database' | 'clock'>;
+type ProfileRuntime = Pick<AppRuntime, 'database' | 'clock'> &
+  Partial<Pick<AppRuntime, 'projectRoot'>>;
 
 interface ProfileRow {
   id: string;
@@ -35,9 +37,11 @@ interface ProfileRow {
 
 export function registerProfileRoutes(app: FastifyInstance, runtime: ProfileRuntime): void {
   const { database } = runtime;
-  app.get('/api/profiles/agents', async () => buildProfileReport(database, runtime.clock()));
+  app.get('/api/profiles/agents', async () =>
+    buildProfileReport(database, runtime.clock(), runtime.projectRoot),
+  );
   app.get<{ Params: { agent: string } }>('/api/profiles/agents/:agent', async (request, reply) => {
-    const report = buildProfileReport(database, runtime.clock());
+    const report = buildProfileReport(database, runtime.clock(), runtime.projectRoot);
     const profile = report.profiles.find((candidate) => candidate.agent === request.params.agent);
     if (!profile) {
       return reply.status(404).send({
@@ -52,7 +56,9 @@ export function registerProfileRoutes(app: FastifyInstance, runtime: ProfileRunt
 export function buildProfileReport(
   database: DatabaseConnection,
   generatedAt = Date.now(),
+  projectRoot?: string | null,
 ): AgentProfileReport {
+  const scope = projectScopeSql(projectRoot, 's');
   const rows = database
     .prepare(
       `SELECT
@@ -83,11 +89,11 @@ export function buildProfileReport(
           as sidechainTools
        FROM sessions s
        LEFT JOIN spans p ON p.session_id = s.id
-       WHERE ${primarySessionPredicate('s')}
+       WHERE ${primarySessionPredicate('s')} AND ${scope.clause}
        GROUP BY s.id
        ORDER BY s.start_time DESC`,
     )
-    .all() as ProfileRow[];
+    .all(...scope.parameters) as ProfileRow[];
 
   return buildAgentProfileReport(rows.map(toProfileSample), generatedAt);
 }

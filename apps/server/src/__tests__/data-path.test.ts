@@ -2,7 +2,12 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { defaultApplicationDataDirectory, defaultDatabasePathFor } from '../data-path';
+import {
+  defaultApplicationDataDirectory,
+  defaultDatabasePathFor,
+  projectDatabasePathFor,
+  projectDataDirectoryFor,
+} from '../data-path';
 import { createProductionRuntime } from '../runtime';
 
 describe('application data paths', () => {
@@ -47,6 +52,15 @@ describe('application data paths', () => {
 
     expect(defaultApplicationDataDirectory(options)).toBe('/state/data/agent-profile');
     expect(defaultDatabasePathFor(options)).toBe('/state/data/agent-profile/trace.db');
+  });
+
+  it('keeps project data below an explicit project root', () => {
+    expect(projectDataDirectoryFor('/workspace/agent-profile')).toBe(
+      '/workspace/agent-profile/.agent-profile',
+    );
+    expect(projectDatabasePathFor('/workspace/agent-profile')).toBe(
+      '/workspace/agent-profile/.agent-profile/trace.db',
+    );
   });
   it('creates a selected data directory before opening the production database', async () => {
     const root = mkdtempSync(join(tmpdir(), 'agent-profile-data-path-'));

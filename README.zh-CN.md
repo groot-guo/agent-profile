@@ -70,6 +70,8 @@ Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web
 ./packages/cli/bin/agent-profile.mjs help
 ./packages/cli/bin/agent-profile.mjs version --json
 ./packages/cli/bin/agent-profile.mjs doctor --data-dir ./local-data
+./packages/cli/bin/agent-profile.mjs doctor --project . --json
+./packages/cli/bin/agent-profile.mjs serve --project . --open
 ./packages/cli/bin/agent-profile.mjs sources --json
 ./packages/cli/bin/agent-profile.mjs sync --source codex --source zed
 ./packages/cli/bin/agent-profile.mjs sessions --limit 20 --json
@@ -88,9 +90,11 @@ Web 开发产物写入 `apps/web/.next-dev`，生产构建产物写入 `apps/web
 `agent-profile-cli/v1`。它不会启动 HTTP，也不会导入来源数据。打开 Runtime 可能会创建
 所选数据库，并执行常规增量 migration 和默认定价/模型窗口数据初始化。
 
-CLI Runtime 命令的数据库路径优先级依次为 `--database`、`--data-dir/trace.db`、
-`TRACE_DB_PATH` 和平台应用数据目录默认值。成功 exit code 为 `0`，命令用法错误为 `2`，
-Runtime 失败为 `1`。
+CLI Runtime 命令的数据库路径优先级依次为 `--database`、`--data-dir/trace.db`、显式项目的
+`<project>/.agent-profile/trace.db`、`TRACE_DB_PATH` 和平台应用数据目录默认值。`--project`
+必须指向已存在的目录；它会规范化项目根目录，限定导入与数据管理操作，并把缺失的 `cwd`
+证据标记为“未分配”，不会猜测归属。成功 exit code 为 `0`，命令用法错误为 `2`，Runtime
+失败为 `1`。
 
 `serve` 启动私有 Next.js 进程，并通过同一个回环 Fastify origin 暴露 Web UI 与 `/api`。
 公开端口默认 `3000`，私有 Web 端口默认 `3001`；只有传入 `--open` 才打开浏览器。
@@ -320,11 +324,19 @@ AUTO_SCAN_DIR="" pnpm dev
 - 默认数据库在 macOS 为 `~/Library/Application Support/agent-profile/trace.db`，Windows
   为 `%LOCALAPPDATA%\agent-profile\trace.db`，Linux 为
   `${XDG_DATA_HOME:-~/.local/share}/agent-profile/trace.db`；应用文件与可变数据彼此分离。
+- `agent-profile --project <path>` 是显式项目作用域。除非同时传入 `--database` 或
+  `--data-dir`，可变数据库位于 `<project>/.agent-profile/trace.db`，该目录默认已加入 Git
+  ignore。只有来源捕获的 `cwd` 位于规范化项目根目录内，Session 才会被纳入；根目录外的
+  Session 计为“排除”，缺失 `cwd` 的 Session 计为“未分配”。全局模式保留所有已导入
+  Session，但仍显示未分配覆盖度。
+- 项目作用域的 rebuild 不会删除其他项目的行；项目作用域 reset 只删除当前项目内的
+  Session、Span 和来源关系。Task、Outcome、配置快照、cohort、experiment 及其逻辑关联仍
+  会保留。数据管理界面和导入状态会明确显示全局/当前项目，并展示纳入、排除、未分配覆盖度。
 - T103 之前源码 workspace 的 `apps/server/trace.db` 不会自动搬迁。可继续通过
   `--database apps/server/trace.db` 或 `TRACE_DB_PATH` 使用；也可在所有 Agent Profile
   进程停止后复制到新默认位置。
-- parser 或指标变化后的常规恢复方式是“强制重建”。危险区清空会删除全部生成的
-  Session/Span（包括标签和备注），但保留定价、模型窗口、migration、Task、Outcome、
+- parser 或指标变化后的常规恢复方式是“强制重建”。全局模式的危险区清空会删除全部生成的
+  Session/Span（包括标签和备注），项目模式只删除当前项目的生成行；两者都保留定价、模型窗口、migration、Task、Outcome、
   Configuration Snapshot、cohort、experiment 和逻辑 Session 关联，随后可从当前可用来源
   重新同步运行证据。
 - 提示词审查是临时计算：提示词文本不会写入数据库，也不会由该功能发送给语义模型服务。

@@ -1,5 +1,6 @@
 export interface LocalApplicationOptions {
   databasePath: string;
+  projectRoot?: string | null;
   defaultScanDir: string;
   host: string;
   port: number;
@@ -27,6 +28,7 @@ export interface LocalApplicationDependencies {
   startWebServer: (options: { port: number }) => Promise<WebServerHandle>;
   createRuntime: (options: {
     databasePath: string;
+    projectRoot?: string | null;
     autoScanDir: string;
     defaultScanDir: string;
   }) => ServeRuntime;
@@ -91,6 +93,7 @@ export async function startLocalApplication(
   const webServer = await dependencies.startWebServer({ port: options.webPort });
   const runtime = dependencies.createRuntime({
     databasePath: options.databasePath,
+    projectRoot: options.projectRoot ?? null,
     autoScanDir: options.defaultScanDir,
     defaultScanDir: options.defaultScanDir,
   });

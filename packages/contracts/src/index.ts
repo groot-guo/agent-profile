@@ -44,6 +44,8 @@ export type {
   ImportSourceId,
   ImportSourceState,
   ImportSourceStatusResponse,
+  ProjectCoverage,
+  ProjectScope,
   PublicScanResult,
   ResetBody,
   ResetResponse,

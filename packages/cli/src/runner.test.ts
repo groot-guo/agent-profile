@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,7 @@ import type {
   ImportJobStatusResponse,
 } from '@agent-profile/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseCliArguments, resolveDatabasePath } from './arguments';
+import { parseCliArguments, resolveDatabasePath, resolveProjectRoot } from './arguments';
 import type { CliDependencies, CliRuntime } from './runner';
 import { runCli } from './runner';
 
@@ -274,6 +274,32 @@ describe('CLI runner', () => {
     ).toBe('/workspace/environment.db');
   });
 
+  it('selects an existing project root and defaults its data below .agent-profile', () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'agent-profile-project-'));
+    temporaryDirectories.push(projectRoot);
+    expect(parseCliArguments(['doctor', '--project', projectRoot])).toMatchObject({
+      command: 'doctor',
+      projectPath: projectRoot,
+    });
+    const normalized = resolveProjectRoot(projectRoot, '/workspace');
+    expect(normalized).toBe(realpathSync(projectRoot));
+    expect(
+      resolveDatabasePath(
+        { command: 'doctor', json: false, databasePath: undefined, dataDir: undefined },
+        { TRACE_DB_PATH: '/global/trace.db' },
+        '/workspace',
+        '/default/trace.db',
+        normalized,
+      ),
+    ).toBe(join(normalized, '.agent-profile', 'trace.db'));
+  });
+
+  it('rejects a project path that is not an existing directory', () => {
+    expect(() => resolveProjectRoot('/workspace/missing-project', '/workspace')).toThrow(
+      '--project directory is not available',
+    );
+  });
+
   it('parses loopback serve options and rejects unsafe or conflicting ports', () => {
     expect(parseCliArguments(['serve', '--help'])).toMatchObject({
       command: 'help',
@@ -369,6 +395,33 @@ describe('CLI runner', () => {
         { id: 'codex', available: true, state: 'idle' },
         { id: 'zed', available: false, state: 'idle' },
       ],
+    });
+  });
+
+  it('passes an explicit project scope into the Runtime and report', async () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), 'agent-profile-project-cli-'));
+    temporaryDirectories.push(projectRoot);
+    const normalizedProjectRoot = realpathSync(projectRoot);
+    const { dependencies, output, runtimeOptions } = createDependencies();
+
+    const exitCode = await runCli(['doctor', '--project', projectRoot, '--json'], dependencies);
+
+    expect(exitCode).toBe(0);
+    expect(runtimeOptions).toEqual([
+      {
+        databasePath: join(normalizedProjectRoot, '.agent-profile', 'trace.db'),
+        projectRoot: normalizedProjectRoot,
+        autoScanDir: null,
+        defaultScanDir: '~/.claude/projects',
+      },
+    ]);
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      command: 'doctor',
+      scope: {
+        mode: 'project',
+        projectRoot: normalizedProjectRoot,
+        label: normalizedProjectRoot.split('/').at(-1),
+      },
     });
   });
 

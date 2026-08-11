@@ -289,7 +289,9 @@ stored Session IDs. Archives require Node.js 22+ and external `zstd`; only the
 current host platform/architecture is emitted and darwin-arm64 is the first
 smoke-tested target.
 `doctor` resolves its database from `--database`, `--data-dir/trace.db`,
-`TRACE_DB_PATH`, or the platform application-data default, in that order. It never starts
+the explicit project's `<project>/.agent-profile/trace.db`, `TRACE_DB_PATH`, or the platform
+application-data default, in that order. `--project` requires an existing directory and passes
+the normalized root into the shared Runtime. It never starts
 imports or HTTP, and returns exit status `2` for usage errors and `1` for Runtime
 failures. `sources` refreshes the same bounded source status returned by the
 compatibility API. `sync` uses the shared import service, waits for selected
@@ -311,9 +313,27 @@ The default database is outside application files:
 `~/Library/Application Support/agent-profile/trace.db` on macOS,
 `%LOCALAPPDATA%\agent-profile\trace.db` on Windows, and
 `${XDG_DATA_HOME:-~/.local/share}/agent-profile/trace.db` on Linux.
-Explicit database/data-directory options and `TRACE_DB_PATH` take precedence.
+Explicit database/data-directory options take precedence over project defaults;
+the explicit project default takes precedence over `TRACE_DB_PATH` so a project
+selection cannot silently reuse the global environment database.
 Pre-T103 `apps/server/trace.db` files are not copied implicitly; users may keep
 selecting that path or copy it while all processes are stopped.
+
+An explicit CLI `--project <path>` selects a normalized project root. Without an
+explicit database or data directory, the Runtime stores mutable data at
+`<project>/.agent-profile/trace.db`; the repository ignores that directory by
+default. The import coordinator evaluates captured Session `cwd` against the
+root with a path boundary: inside is included, outside is excluded, and missing
+`cwd` is unassigned. Global mode keeps all imported Sessions. Source results
+retain bounded included/excluded/unassigned coverage, while project-scoped
+stored counts, discovery, summary, rebuild, and reset use the same boundary.
+Scoped reset deletes only matching Sessions, Spans, and source relationships;
+Task/Outcome and configuration records remain retained by the existing data
+management contract.
+
+The Home, Stats, and Agent Profile aggregate builders accept the same optional
+project root, so an explicitly scoped Runtime does not silently mix another
+project's aggregate totals into the current Web view.
 
 `stats`, `profiles`, and `task-profile <id>` are read-only Runtime adapters over
 the current aggregate statistics, Agent Process Profile, and TaskRepository

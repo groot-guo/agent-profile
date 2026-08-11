@@ -3,17 +3,14 @@ import {
   type HomeSessionHighlight,
   type HomeStatisticsResponse,
 } from '@agent-profile/contracts';
-import {
-  classifySessionProject,
-  identifyModel,
-  type ModelIdentityKind,
-} from '@agent-profile/core';
+import { classifySessionProject, identifyModel, type ModelIdentityKind } from '@agent-profile/core';
 import type { FastifyInstance } from 'fastify';
 import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
+import { projectScopeSql } from '../project-scope';
 import type { AppRuntime } from '../runtime';
 
-type StatsRuntime = Pick<AppRuntime, 'database'>;
+type StatsRuntime = Pick<AppRuntime, 'database'> & Partial<Pick<AppRuntime, 'projectRoot'>>;
 
 interface StatsOverview {
   totalSessions: number;
@@ -105,7 +102,11 @@ const HOME_SESSION_HIGHLIGHT_COLUMNS = `
   COALESCE(s.total_cost, 0) AS totalCost,
   COALESCE(s.cost_unknown_count, 0) AS costUnknownCount`;
 
-export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
+export function loadDashboardSpanAggregates(
+  database: StatsQueryConnection,
+  projectRoot?: string | null,
+) {
+  const sessionScope = projectScopeSql(projectRoot, 'sessions');
   const modelRows = database
     .prepare(
       `SELECT COALESCE(spans.model, 'unknown') as model,
@@ -117,21 +118,23 @@ export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
        INNER JOIN sessions ON sessions.id = spans.session_id
        WHERE spans.type = 'llm_turn'
          AND ${primarySessionPredicate()}
+         AND ${sessionScope.clause}
        GROUP BY COALESCE(spans.model, 'unknown')`,
     )
-    .all() as {
+    .all(...sessionScope.parameters) as {
     model: string;
     count: number;
     inputTokens: number;
     outputTokens: number;
     cost: number;
   }[];
+  const recentScope = projectScopeSql(projectRoot, 'sessions');
   const recentTools = database
     .prepare(
       `WITH recent_sessions AS (
         SELECT sessions.id
         FROM sessions
-        WHERE ${primarySessionPredicate()}
+        WHERE ${primarySessionPredicate()} AND ${recentScope.clause}
         ORDER BY start_time DESC
         LIMIT 30
        )
@@ -144,7 +147,7 @@ export function loadDashboardSpanAggregates(database: StatsQueryConnection) {
        ORDER BY count DESC, spans.name ASC
        LIMIT 15`,
     )
-    .all() as ToolFrequency[];
+    .all(...recentScope.parameters) as ToolFrequency[];
   const modelMap = new Map<
     string,
     (typeof modelRows)[number] & { model: string; kind: ModelIdentityKind; rawModels: string[] }
@@ -286,7 +289,11 @@ export function buildProjectStats(sessions: Record<string, unknown>[]) {
   return { byProject, baselineProjects, anomalySessions };
 }
 
-export function buildHomeStatistics(database: DatabaseConnection): HomeStatisticsResponse {
+export function buildHomeStatistics(
+  database: DatabaseConnection,
+  projectRoot?: string | null,
+): HomeStatisticsResponse {
+  const scope = projectScopeSql(projectRoot, 's');
   const overview = database
     .prepare(
       `SELECT
@@ -308,15 +315,15 @@ export function buildHomeStatistics(database: DatabaseConnection): HomeStatistic
         COALESCE(SUM(CASE WHEN s.cost_status = 'excluded' THEN 1 ELSE 0 END), 0)
           AS sessionsExcluded
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}`,
+       WHERE ${primarySessionPredicate('s')} AND ${scope.clause}`,
     )
-    .get() as HomeStatisticsResponse['overview'];
+    .get(...scope.parameters) as HomeStatisticsResponse['overview'];
   const recentTools = database
     .prepare(
       `WITH recent_sessions AS (
         SELECT s.id
         FROM sessions s
-        WHERE ${primarySessionPredicate('s')}
+        WHERE ${primarySessionPredicate('s')} AND ${scope.clause}
         ORDER BY s.start_time DESC, s.id DESC
         LIMIT 30
        )
@@ -329,16 +336,17 @@ export function buildHomeStatistics(database: DatabaseConnection): HomeStatistic
        ORDER BY count DESC, spans.name ASC
        LIMIT 15`,
     )
-    .all() as HomeStatisticsResponse['recentTools'];
+    .all(...scope.parameters) as HomeStatisticsResponse['recentTools'];
 
   return {
     schemaVersion: HOME_STATISTICS_SCHEMA_VERSION,
     overview,
     recentTools,
-    topByCost: loadHomeHighlights(database, 'COALESCE(s.total_cost, 0)'),
+    topByCost: loadHomeHighlights(database, 'COALESCE(s.total_cost, 0)', projectRoot),
     topByTokens: loadHomeHighlights(
       database,
       '(COALESCE(s.input_tokens, 0) + COALESCE(s.cache_creation_tokens, 0) + COALESCE(s.cache_read_tokens, 0) + COALESCE(s.output_tokens, 0))',
+      projectRoot,
     ),
   };
 }
@@ -346,16 +354,18 @@ export function buildHomeStatistics(database: DatabaseConnection): HomeStatistic
 function loadHomeHighlights(
   database: DatabaseConnection,
   orderExpression: string,
+  projectRoot?: string | null,
 ): HomeSessionHighlight[] {
+  const scope = projectScopeSql(projectRoot, 's');
   return database
     .prepare(
       `SELECT ${HOME_SESSION_HIGHLIGHT_COLUMNS}
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}
+       WHERE ${primarySessionPredicate('s')} AND ${scope.clause}
        ORDER BY ${orderExpression} DESC, s.id DESC
        LIMIT 10`,
     )
-    .all() as HomeSessionHighlight[];
+    .all(...scope.parameters) as HomeSessionHighlight[];
 }
 
 function projectForStats(session: Record<string, unknown>): string {
@@ -380,8 +390,11 @@ function percentile(values: number[], quantile: number): number {
   return sorted[Math.floor(sorted.length * quantile)] || 0;
 }
 
-export function buildStatsReport(database: DatabaseConnection): StatsReport {
-  const overview = loadStatsOverview(database);
+export function buildStatsReport(
+  database: DatabaseConnection,
+  projectRoot?: string | null,
+): StatsReport {
+  const overview = loadStatsOverview(database, projectRoot);
   if (overview.totalSessions === 0) {
     return {
       overview,
@@ -394,12 +407,15 @@ export function buildStatsReport(database: DatabaseConnection): StatsReport {
     };
   }
 
-  const byAgent = loadAgentStats(database);
-  const { byProject, baselineProjects, anomalySessions } = loadProjectStatistics(database);
-  const { modelMap, recentTools } = loadDashboardSpanAggregates(database);
+  const byAgent = loadAgentStats(database, projectRoot);
+  const { byProject, baselineProjects, anomalySessions } = loadProjectStatistics(
+    database,
+    projectRoot,
+  );
+  const { modelMap, recentTools } = loadDashboardSpanAggregates(database, projectRoot);
   const { byModel, modelDistribution } = buildModelViews(modelMap);
-  const { costBins, tokenBins } = loadDistributionBins(database);
-  const trends = loadTrends(database);
+  const { costBins, tokenBins } = loadDistributionBins(database, projectRoot);
+  const trends = loadTrends(database, projectRoot);
 
   return {
     overview,
@@ -422,7 +438,11 @@ export function buildStatsReport(database: DatabaseConnection): StatsReport {
   };
 }
 
-function loadStatsOverview(database: DatabaseConnection): StatsOverview {
+function loadStatsOverview(
+  database: DatabaseConnection,
+  projectRoot?: string | null,
+): StatsOverview {
+  const scope = projectScopeSql(projectRoot, 's');
   return database
     .prepare(
       `SELECT
@@ -441,12 +461,13 @@ function loadStatsOverview(database: DatabaseConnection): StatsOverview {
         COALESCE(SUM(CASE WHEN s.cost_status = 'excluded' THEN 1 ELSE 0 END), 0)
           AS sessionsExcluded
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}`,
+       WHERE ${primarySessionPredicate('s')} AND ${scope.clause}`,
     )
-    .get() as StatsOverview;
+    .get(...scope.parameters) as StatsOverview;
 }
 
-function loadAgentStats(database: DatabaseConnection): AgentStats[] {
+function loadAgentStats(database: DatabaseConnection, projectRoot?: string | null): AgentStats[] {
+  const scope = projectScopeSql(projectRoot, 's');
   return database
     .prepare(
       `SELECT
@@ -456,18 +477,22 @@ function loadAgentStats(database: DatabaseConnection): AgentStats[] {
         COALESCE(SUM(s.total_cost), 0) AS totalCost,
         COALESCE(AVG(COALESCE(s.cache_hit_rate, 0)), 0) AS avgCacheHitRate
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}
+       WHERE ${primarySessionPredicate('s')} AND ${scope.clause}
        GROUP BY COALESCE(NULLIF(s.agent, ''), 'unknown')
        ORDER BY sessions DESC, agent ASC`,
     )
-    .all() as AgentStats[];
+    .all(...scope.parameters) as AgentStats[];
 }
 
-function loadProjectStatistics(database: DatabaseConnection): {
+function loadProjectStatistics(
+  database: DatabaseConnection,
+  projectRoot?: string | null,
+): {
   byProject: ProjectStats[];
   baselineProjects: ReturnType<typeof buildProjectStats>['baselineProjects'];
   anomalySessions: string[];
 } {
+  const scope = projectScopeSql(projectRoot, 's');
   const rows = database
     .prepare(
       `WITH primary_rows AS (
@@ -478,7 +503,7 @@ function loadProjectStatistics(database: DatabaseConnection): {
           COALESCE(s.total_cost, 0) AS cost,
           COALESCE(s.cache_hit_rate, 0) AS cache_hit_rate
         FROM sessions s
-        WHERE ${primarySessionPredicate('s')}
+        WHERE ${primarySessionPredicate('s')} AND ${scope.clause}
        ), ranked AS (
         SELECT
           primary_rows.*,
@@ -506,7 +531,7 @@ function loadProjectStatistics(database: DatabaseConnection): {
        GROUP BY project
        ORDER BY sessions DESC, project ASC`,
     )
-    .all() as Array<{
+    .all(...scope.parameters) as Array<{
     project: string;
     sessions: number;
     totalTokens: number;
@@ -537,7 +562,7 @@ function loadProjectStatistics(database: DatabaseConnection): {
           ${HOME_PROJECT_EXPRESSION} AS project,
           COALESCE(s.total_cost, 0) AS cost
         FROM sessions s
-        WHERE ${primarySessionPredicate('s')}
+        WHERE ${primarySessionPredicate('s')} AND ${scope.clause}
        ), ranked AS (
         SELECT
           primary_rows.*,
@@ -563,7 +588,7 @@ function loadProjectStatistics(database: DatabaseConnection): {
          AND ranked.cost > baselines.median_cost * 3
        ORDER BY ranked.start_time DESC, ranked.id DESC`,
     )
-    .all() as Array<{ id: string }>;
+    .all(...scope.parameters) as Array<{ id: string }>;
   return {
     byProject: rows.map((row) => ({
       cwd: row.project,
@@ -576,10 +601,14 @@ function loadProjectStatistics(database: DatabaseConnection): {
   };
 }
 
-function loadDistributionBins(database: DatabaseConnection): {
+function loadDistributionBins(
+  database: DatabaseConnection,
+  projectRoot?: string | null,
+): {
   costBins: DistributionData['costBins'];
   tokenBins: DistributionData['tokenBins'];
 } {
+  const scope = projectScopeSql(projectRoot, 's');
   const row = database
     .prepare(
       `SELECT
@@ -596,9 +625,9 @@ function loadDistributionBins(database: DatabaseConnection): {
         SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 500000 AND ${SESSION_TOKEN_SQL} < 1000000 THEN 1 ELSE 0 END) AS token4,
         SUM(CASE WHEN ${SESSION_TOKEN_SQL} >= 1000000 THEN 1 ELSE 0 END) AS token5
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}`,
+       WHERE ${primarySessionPredicate('s')} AND ${scope.clause}`,
     )
-    .get() as Record<string, number>;
+    .get(...scope.parameters) as Record<string, number>;
   return {
     costBins: [
       { bin: '¥0', min: 0, max: 0.001, count: row.cost0 },
@@ -619,7 +648,11 @@ function loadDistributionBins(database: DatabaseConnection): {
   };
 }
 
-function loadTrends(database: DatabaseConnection): NonNullable<StatsReport['trends']> {
+function loadTrends(
+  database: DatabaseConnection,
+  projectRoot?: string | null,
+): NonNullable<StatsReport['trends']> {
+  const scope = projectScopeSql(projectRoot, 's');
   return database
     .prepare(
       `SELECT
@@ -629,13 +662,15 @@ function loadTrends(database: DatabaseConnection): NonNullable<StatsReport['tren
         COUNT(*) AS sessions,
         AVG(COALESCE(s.cache_hit_rate, 0)) AS avgCacheHit
        FROM sessions s
-       WHERE ${primarySessionPredicate('s')}
+       WHERE ${primarySessionPredicate('s')} AND ${scope.clause}
        GROUP BY strftime('%Y-%m-%d', s.start_time / 1000, 'unixepoch')
        ORDER BY day ASC`,
     )
-    .all() as NonNullable<StatsReport['trends']>;
+    .all(...scope.parameters) as NonNullable<StatsReport['trends']>;
 }
 export function registerStatsRoutes(app: FastifyInstance, runtime: StatsRuntime): void {
-  app.get('/api/stats', async () => buildStatsReport(runtime.database));
-  app.get('/api/home-statistics', async () => buildHomeStatistics(runtime.database));
+  app.get('/api/stats', async () => buildStatsReport(runtime.database, runtime.projectRoot));
+  app.get('/api/home-statistics', async () =>
+    buildHomeStatistics(runtime.database, runtime.projectRoot),
+  );
 }

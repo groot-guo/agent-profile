@@ -7,6 +7,7 @@ import {
   type Span,
 } from '@agent-profile/core';
 import type { DatabaseConnection } from '../database';
+import { projectScopeSql } from '../project-scope';
 import type { LoadedSourceSession, SourceRevision, StoredSessionRevision } from './types';
 
 type PricingLookup = (model?: string, at?: number) => Pricing | undefined;
@@ -58,7 +59,7 @@ export class SessionRepository {
   private readonly resetTransaction;
 
   constructor(
-    database: DatabaseConnection,
+    private readonly database: DatabaseConnection,
     private readonly pricingLookup: PricingLookup,
   ) {
     this.getRevisionStatement = database.prepare(`
@@ -425,24 +426,43 @@ export class SessionRepository {
       this.deleteChildRelationshipsStatement.run(sessionId);
       this.deleteSessionStatement.run(sessionId);
     });
-    this.resetTransaction = database.transaction(() => {
+    this.resetTransaction = database.transaction((projectRoot?: string | null) => {
+      const scope = projectScopeSql(projectRoot, 'sessions');
+      const rows = database
+        .prepare(
+          `SELECT id, tags, notes
+           FROM sessions
+           WHERE ${scope.clause}`,
+        )
+        .all(...scope.parameters) as Array<{
+        id: string;
+        tags: string | null;
+        notes: string | null;
+      }>;
       const counts = {
-        sessions: (
-          database.prepare('SELECT COUNT(*) as count FROM sessions').get() as { count: number }
-        ).count,
-        spans: (database.prepare('SELECT COUNT(*) as count FROM spans').get() as { count: number })
-          .count,
-        annotatedSessions: (
-          database
-            .prepare(
-              "SELECT COUNT(*) as count FROM sessions WHERE TRIM(COALESCE(tags, '')) <> '' OR TRIM(COALESCE(notes, '')) <> ''",
-            )
-            .get() as { count: number }
-        ).count,
+        sessions: rows.length,
+        spans: 0,
+        annotatedSessions: rows.filter((row) => (row.tags ?? '').trim() || (row.notes ?? '').trim())
+          .length,
       };
-      database.prepare('DELETE FROM spans').run();
-      database.prepare('DELETE FROM session_relationships').run();
-      database.prepare('DELETE FROM sessions').run();
+      if (rows.length === 0) return counts;
+
+      const ids = rows.map((row) => row.id);
+      const placeholders = ids.map(() => '?').join(', ');
+      counts.spans = (
+        database
+          .prepare(`SELECT COUNT(*) as count FROM spans WHERE session_id IN (${placeholders})`)
+          .get(...ids) as { count: number }
+      ).count;
+      database.prepare(`DELETE FROM spans WHERE session_id IN (${placeholders})`).run(...ids);
+      database
+        .prepare(
+          `DELETE FROM session_relationships
+           WHERE child_session_id IN (${placeholders})
+              OR parent_session_id IN (${placeholders})`,
+        )
+        .run(...ids, ...ids);
+      database.prepare(`DELETE FROM sessions WHERE id IN (${placeholders})`).run(...ids);
       return counts;
     });
   }
@@ -462,6 +482,13 @@ export class SessionRepository {
       updatedAt: row.updatedAt ?? undefined,
       fingerprint: row.fingerprint ?? undefined,
     };
+  }
+
+  getSessionCwd(sessionId: string): string | null | undefined {
+    const row = this.database.prepare('SELECT cwd FROM sessions WHERE id = ?').get(sessionId) as
+      | { cwd: string | null }
+      | undefined;
+    return row ? row.cwd : undefined;
   }
 
   isCurrent(sessionId: string, revision: SourceRevision): boolean {
@@ -542,8 +569,12 @@ export class SessionRepository {
     return 'removed';
   }
 
-  resetGeneratedData(): { sessions: number; spans: number; annotatedSessions: number } {
-    return this.resetTransaction();
+  resetGeneratedData(projectRoot?: string | null): {
+    sessions: number;
+    spans: number;
+    annotatedSessions: number;
+  } {
+    return this.resetTransaction(projectRoot);
   }
 }
 

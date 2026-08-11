@@ -5,6 +5,7 @@ import type {
 } from '@agent-profile/contracts';
 import type { DatabaseConnection } from '../database';
 import { primarySessionPredicate } from '../primary-sessions';
+import { projectScopeDescriptor, projectScopeSql } from '../project-scope';
 import type { AppRuntime } from '../runtime';
 import type { ImportJobStatus } from './import-job-manager';
 
@@ -18,7 +19,7 @@ export class ImportServiceError extends Error {
 
 export async function getImportStatus(runtime: AppRuntime): Promise<ImportJobStatusResponse> {
   const status = await runtime.imports.jobs.refreshAvailability();
-  return withStoredCounts(runtime.database, status);
+  return withStoredCounts(runtime.database, status, runtime.projectRoot);
 }
 
 export async function startImport(
@@ -37,7 +38,11 @@ export async function startImport(
     throw new ImportServiceError('operation_conflict');
   }
 
-  return withStoredCounts(runtime.database, await jobs.start(selectedSourceIds, operation));
+  return withStoredCounts(
+    runtime.database,
+    await jobs.start(selectedSourceIds, operation),
+    runtime.projectRoot,
+  );
 }
 
 export async function runImport(
@@ -52,19 +57,23 @@ export async function runImport(
 function withStoredCounts(
   database: DatabaseConnection,
   status: ImportJobStatus,
+  projectRoot: string | null,
 ): ImportJobStatusResponse {
+  const scope = projectScopeSql(projectRoot, 'sessions');
   const rows = database
     .prepare(
       `SELECT COALESCE(source_kind, agent) as sourceKind, COUNT(*) as sessions
        FROM sessions
        WHERE COALESCE(source_kind, agent) IS NOT NULL
          AND ${primarySessionPredicate()}
+         AND ${scope.clause}
        GROUP BY COALESCE(source_kind, agent)`,
     )
-    .all() as { sourceKind: string; sessions: number }[];
+    .all(...scope.parameters) as { sourceKind: string; sessions: number }[];
   const counts = new Map(rows.map((row) => [row.sourceKind, row.sessions]));
   return {
     ...status,
+    scope: projectScopeDescriptor(projectRoot),
     sources: status.sources.map((source) => ({
       ...source,
       storedSessions: counts.get(source.id) ?? 0,

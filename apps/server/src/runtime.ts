@@ -6,12 +6,13 @@ import type { ImportSourceDefinition } from './ingestion/import-job-manager';
 import { ImportRuntime } from './ingestion/import-runtime';
 import { createLlmDiagnoser, type SemanticDiagnoser } from './llm-diagnoser';
 import { ModelCatalogService } from './model-catalog/service';
+import { normalizeProjectRoot } from './project-scope';
 import {
   loadProviderConfiguration,
-  providerStatus,
-  saveProviderConfiguration,
   type ProviderConfiguration,
   type ProviderStatus,
+  providerStatus,
+  saveProviderConfiguration,
 } from './provider-config';
 
 export type PricingResolver = (model?: string, at?: number) => Pricing | undefined;
@@ -19,6 +20,7 @@ export type ContextWindowResolver = (model?: string) => number | undefined;
 
 export interface AppRuntime {
   database: DatabaseConnection;
+  projectRoot: string | null;
   clock: () => number;
   modelCatalog: ModelCatalogService;
   pricingResolver: PricingResolver;
@@ -34,6 +36,7 @@ export interface AppRuntime {
 
 export interface RuntimeOptions {
   database: DatabaseConnection;
+  projectRoot?: string | null;
   autoScanDir: string | null;
   defaultScanDir: string;
   clock?: () => number;
@@ -50,6 +53,7 @@ export const defaultDatabasePath = defaultDatabasePathFor();
 export function createRuntime(options: RuntimeOptions): AppRuntime {
   const { database } = options;
   const clock = options.clock ?? (() => Date.now());
+  const projectRoot = normalizeProjectRoot(options.projectRoot);
   const modelCatalog = new ModelCatalogService(database, clock);
   modelCatalog.seedDefaults();
 
@@ -59,6 +63,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     modelCatalog.lookupContextWindow(model);
   const imports = new ImportRuntime({
     database,
+    projectRoot,
     pricingResolver,
     autoScanDir: options.autoScanDir,
     defaultScanDir: options.defaultScanDir,
@@ -80,6 +85,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
 
   return {
     database,
+    projectRoot,
     clock,
     modelCatalog,
     pricingResolver,

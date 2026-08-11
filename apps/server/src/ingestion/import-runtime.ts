@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { type ScanResult, zedThreadsDbPath } from '@agent-profile/core';
 import type { DatabaseConnection } from '../database';
+import { normalizeProjectRoot } from '../project-scope';
 import type { PricingResolver } from '../runtime';
 import { SessionUpdateTracker } from '../session-update-tracker';
 import { importFromSource } from './import-coordinator';
@@ -26,6 +27,7 @@ import { ZedSourceAdapter } from './zed-adapter';
 export interface ImportRuntimeOptions {
   database: DatabaseConnection;
   pricingResolver: PricingResolver;
+  projectRoot?: string | null;
   autoScanDir: string | null;
   defaultScanDir: string;
   sourceDefinitions?: ImportSourceDefinition[];
@@ -47,9 +49,11 @@ export class ImportRuntime {
   private readonly openCodeDatabasePath = `${homedir()}/.local/share/opencode/opencode.db`;
   private readonly zedDatabasePath = zedThreadsDbPath();
   private readonly clock: () => number;
+  readonly projectRoot: string | null;
 
   constructor(options: ImportRuntimeOptions) {
     this.clock = options.clock ?? (() => Date.now());
+    this.projectRoot = normalizeProjectRoot(options.projectRoot);
     this.updates = new SessionUpdateTracker({ clock: this.clock });
     this.repository = new SessionRepository(options.database, options.pricingResolver);
     this.autoScanDir = options.autoScanDir;
@@ -101,7 +105,7 @@ export class ImportRuntime {
   }
 
   resetGeneratedData(): { sessions: number; spans: number; annotatedSessions: number } {
-    return this.repository.resetGeneratedData();
+    return this.repository.resetGeneratedData(this.projectRoot);
   }
 
   async waitForIdle(): Promise<void> {
@@ -145,7 +149,7 @@ export class ImportRuntime {
           importFromSource(
             new ZedSourceAdapter({ databasePath: this.zedDatabasePath }),
             this.repository,
-            { force: operation === 'rebuild' },
+            { force: operation === 'rebuild', projectRoot: this.projectRoot },
           ),
       },
       {
@@ -155,6 +159,7 @@ export class ImportRuntime {
         run: (operation) =>
           importFromSource(new MiMoSourceAdapter(this.mimoDatabasePath), this.repository, {
             force: operation === 'rebuild',
+            projectRoot: this.projectRoot,
           }),
       },
       {
@@ -164,6 +169,7 @@ export class ImportRuntime {
         run: (operation) =>
           importFromSource(new OpenCodeSourceAdapter(this.openCodeDatabasePath), this.repository, {
             force: operation === 'rebuild',
+            projectRoot: this.projectRoot,
           }),
       },
     ];
@@ -174,17 +180,17 @@ export class ImportRuntime {
     agent?: string,
     options: { force?: boolean } = {},
   ): Promise<ScanResult> {
-    return importFromSource(
-      new TranscriptSourceAdapter(directory, agent),
-      this.repository,
-      options,
-    );
+    return importFromSource(new TranscriptSourceAdapter(directory, agent), this.repository, {
+      ...options,
+      projectRoot: this.projectRoot,
+    });
   }
 
   private scanTranscriptFile(file: string, agent: 'claude-code' | 'codex'): Promise<ScanResult> {
     return importFromSource(
       new TranscriptSourceAdapter(dirname(file), agent, [file]),
       this.repository,
+      { projectRoot: this.projectRoot },
     );
   }
 

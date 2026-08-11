@@ -8,7 +8,8 @@
     "./reports": "./src/reports-service.ts",
     "./sessions": "./src/session-discovery-service.ts",
     "./runtime": "./src/runtime.ts",
-    "./http-server": "./src/http-server.ts"
+    "./http-server": "./src/http-server.ts",
+    "./data-path": "./src/data-path.ts"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",

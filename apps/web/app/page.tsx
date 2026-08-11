@@ -525,6 +525,12 @@ export default function HomePage() {
   };
 
   const showFirstRunImport = !loading && totalCount === 0 && Boolean(importStatus?.active);
+  const scopeLabel =
+    importStatus?.scope?.mode === 'project'
+      ? `当前项目 · ${importStatus.scope.label}`
+      : importStatus
+        ? '全局本地数据'
+        : '作用域读取中…';
   if (showFirstRunImport && importStatus) {
     return (
       <div className="first-run-import-shell">
@@ -552,6 +558,7 @@ export default function HomePage() {
             <div>
               <div className="session-filter-eyebrow">Session index</div>
               <h1>会话浏览</h1>
+              <div style={{ color: C.mute, fontSize: FS.cap, marginTop: 5 }}>{scopeLabel}</div>
             </div>
             <div className="session-filter-result" aria-live="polite">
               <strong className="tnum">{matchedCount}</strong>

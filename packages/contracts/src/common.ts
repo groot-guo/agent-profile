@@ -8,6 +8,20 @@ export type ImportSourceState = 'idle' | 'scanning' | 'completed' | 'failed';
 export type ImportOperation = 'sync' | 'rebuild';
 export type ScanSkipReason = 'unchanged_revision' | 'not_importable' | 'excluded_non_actionable';
 
+export interface ProjectScope {
+  mode: 'global' | 'project';
+  projectRoot: string | null;
+  label: string;
+}
+
+export interface ProjectCoverage {
+  projectRoot: string | null;
+  discovered: number;
+  included: number;
+  excluded: number;
+  unassigned: number;
+}
+
 export interface PublicScanResult {
   scanned: number;
   imported: number;
@@ -17,6 +31,7 @@ export interface PublicScanResult {
   failed: number;
   protectedAnnotatedSessions: number;
   skipReasons: Record<ScanSkipReason, number>;
+  projectCoverage?: ProjectCoverage;
 }
 
 export interface ImportSourceStatusResponse {
@@ -36,6 +51,7 @@ export interface ImportJobStatusResponse {
   active: boolean;
   operation: ImportOperation | null;
   sources: ImportSourceStatusResponse[];
+  scope?: ProjectScope;
 }
 
 export interface DataManagementSummary {
@@ -51,6 +67,12 @@ export interface DataManagementSummary {
   cohorts: number;
   experiments: number;
   resetConfirmation: string;
+  scope?: ProjectScope;
+  coverage?: {
+    includedSessions: number;
+    excludedSessions: number;
+    unassignedSessions: number;
+  };
 }
 
 export interface ResetResponse {

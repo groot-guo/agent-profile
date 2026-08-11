@@ -39,7 +39,10 @@ export function createDefaultCliDependencies(): CliDependencies {
       runImport(runtime as Parameters<typeof runImport>[0], sourceIds),
     discoverSessions: (runtime, options) => {
       const appRuntime = runtime as Parameters<typeof getImportStatus>[0];
-      return discoverSessions(appRuntime.database, options);
+      return discoverSessions(appRuntime.database, {
+        ...options,
+        projectRoot: appRuntime.projectRoot,
+      });
     },
     getStatsReport: (runtime) => {
       const appRuntime = runtime as Parameters<typeof getImportStatus>[0];

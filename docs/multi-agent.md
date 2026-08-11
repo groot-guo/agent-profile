@@ -227,6 +227,22 @@ Adding or changing an adapter requires an explicit roadmap task that records:
 
 - source format/version assumptions and fixtures;
 - normalized field mapping and missing-data semantics;
+
+## Explicit project data scope
+
+The analytical `project_key` remains a Session classification and UI filter; it
+is not a data-management boundary. CLI Runtime commands can opt into an
+explicit `--project <path>` scope. The root is normalized and, unless an
+explicit `--database` or `--data-dir` overrides the location, the database is
+kept under `<project>/.agent-profile/trace.db`.
+
+During a project-scoped import, a captured `cwd` inside the root is included,
+one outside the root is excluded, and a missing `cwd` is unassigned. No source
+storage folder or transcript path is used to guess project membership. Import
+status reports all three coverage states. Scoped rebuild leaves rows from
+other roots untouched; scoped reset deletes only matching Sessions, Spans, and
+source relationships, while Task/Outcome records remain retained and may
+continue to reference an unavailable Session.
 - incremental identity and replacement behavior;
 - privacy/truncation rules;
 - parser, import, and cross-source metric verification;

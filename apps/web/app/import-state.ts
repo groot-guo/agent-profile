@@ -42,7 +42,11 @@ export function sourceStatusText(source: ImportSourceStatus): string {
       source.result.protectedAnnotatedSessions > 0
         ? ` · 保留 ${source.result.protectedAnnotatedSessions} 个已标注会话（需手动处理）`
         : '';
-    return `已完成 · 新增 ${source.result.imported} · 更新 ${source.result.updated} · 跳过 ${source.result.skipped}${protectedText}`;
+    const projectCoverage = source.result.projectCoverage;
+    const scopeText = projectCoverage?.projectRoot
+      ? ` · 项目范围纳入 ${projectCoverage.included} · 排除 ${projectCoverage.excluded} · 未分配 ${projectCoverage.unassigned}`
+      : '';
+    return `已完成 · 新增 ${source.result.imported} · 更新 ${source.result.updated} · 跳过 ${source.result.skipped}${scopeText}${protectedText}`;
   }
   if (source.available) return `已发现 · ${source.storedSessions} 个会话`;
   return '本机未发现';

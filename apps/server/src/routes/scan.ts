@@ -10,6 +10,7 @@ import {
 } from '@agent-profile/contracts';
 import type { FastifyInstance } from 'fastify';
 import { getImportStatus, ImportServiceError, startImport } from '../ingestion/import-service';
+import { classifyProjectCwd, projectScopeDescriptor } from '../project-scope';
 import type { AppRuntime } from '../runtime';
 
 const RESET_CONFIRMATION = 'RESET LOCAL DATA';
@@ -50,7 +51,9 @@ export function registerScanRoutes(app: FastifyInstance, runtime: AppRuntime): v
     },
   );
 
-  app.get('/api/data-management/summary', async () => dataManagementSummary(database));
+  app.get('/api/data-management/summary', async () =>
+    dataManagementSummary(database, runtime.projectRoot),
+  );
 
   app.post<{ Body: ResetBody }>(
     '/api/data-management/reset',
@@ -62,7 +65,7 @@ export function registerScanRoutes(app: FastifyInstance, runtime: AppRuntime): v
       if (jobs.snapshot().active) {
         return reply.status(409).send({ error: 'import job already active' });
       }
-      const before = dataManagementSummary(database);
+      const before = dataManagementSummary(database, runtime.projectRoot);
       const response: ResetResponse = {
         deleted: imports.resetGeneratedData(),
         retained: {
@@ -91,19 +94,47 @@ export function registerScanRoutes(app: FastifyInstance, runtime: AppRuntime): v
   );
 }
 
-function dataManagementSummary(database: AppRuntime['database']): DataManagementSummary {
+function dataManagementSummary(
+  database: AppRuntime['database'],
+  projectRoot: string | null,
+): DataManagementSummary {
   const count = (table: string) =>
     (database.prepare(`SELECT COUNT(*) as count FROM ${table}`).get() as { count: number }).count;
-  const annotatedSessions = (
-    database
-      .prepare(
-        "SELECT COUNT(*) as count FROM sessions WHERE TRIM(COALESCE(tags, '')) <> '' OR TRIM(COALESCE(notes, '')) <> ''",
-      )
-      .get() as { count: number }
-  ).count;
+  const sessionRows = database.prepare('SELECT id, cwd, tags, notes FROM sessions').all() as Array<{
+    id: string;
+    cwd: string | null;
+    tags: string | null;
+    notes: string | null;
+  }>;
+  const includedRows = projectRoot
+    ? sessionRows.filter((row) => classifyProjectCwd(row.cwd, projectRoot) === 'included')
+    : sessionRows;
+  const excludedSessions = projectRoot
+    ? sessionRows.filter((row) => classifyProjectCwd(row.cwd, projectRoot) === 'excluded').length
+    : 0;
+  const unassignedSessions = sessionRows.filter(
+    (row) => classifyProjectCwd(row.cwd, projectRoot) === 'unassigned',
+  ).length;
+  const annotatedSessions = includedRows.filter(
+    (row) => (row.tags ?? '').trim() !== '' || (row.notes ?? '').trim() !== '',
+  ).length;
+  const spans =
+    projectRoot && includedRows.length > 0
+      ? (
+          database
+            .prepare(
+              `SELECT COUNT(*) as count FROM spans WHERE session_id IN (${includedRows
+                .map(() => '?')
+                .join(', ')})`,
+            )
+            .get(...includedRows.map((row) => row.id)) as { count: number }
+        ).count
+      : projectRoot
+        ? 0
+        : count('spans');
   return {
-    sessions: count('sessions'),
-    spans: count('spans'),
+    sessions: includedRows.length,
+    spans,
     annotatedSessions,
     pricingRows: count('pricing'),
     modelContextRows: count('model_context'),
@@ -114,5 +145,11 @@ function dataManagementSummary(database: AppRuntime['database']): DataManagement
     cohorts: count('cohorts'),
     experiments: count('experiments'),
     resetConfirmation: RESET_CONFIRMATION,
+    scope: projectScopeDescriptor(projectRoot),
+    coverage: {
+      includedSessions: includedRows.length,
+      excludedSessions,
+      unassignedSessions,
+    },
   };
 }

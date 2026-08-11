@@ -86,6 +86,8 @@ The source workspace also provides the first `agent-profile` CLI entry point:
 ./packages/cli/bin/agent-profile.mjs help
 ./packages/cli/bin/agent-profile.mjs version --json
 ./packages/cli/bin/agent-profile.mjs doctor --data-dir ./local-data
+./packages/cli/bin/agent-profile.mjs doctor --project . --json
+./packages/cli/bin/agent-profile.mjs serve --project . --open
 ./packages/cli/bin/agent-profile.mjs sources --json
 ./packages/cli/bin/agent-profile.mjs sync --source codex --source zed
 ./packages/cli/bin/agent-profile.mjs sessions --limit 20 --json
@@ -107,9 +109,12 @@ create the selected database and applies ordinary additive migrations and
 default Model Catalog pricing/model-context seeding.
 
 For CLI Runtime commands, the database path is selected from `--database`, then
-`--data-dir/trace.db`, then `TRACE_DB_PATH`, then the platform application-data
-default. Exit status is `0` for success, `2` for command usage errors, and `1`
-for Runtime failures.
+`--data-dir/trace.db`, then the explicit project's
+`<project>/.agent-profile/trace.db`, then `TRACE_DB_PATH`, then the platform
+application-data default. `--project` must name an existing directory; it
+normalizes that root, scopes imports and data-management operations, and labels
+missing `cwd` evidence as unassigned instead of guessing. Exit status is `0`
+for success, `2` for command usage errors, and `1` for Runtime failures.
 
 `serve` starts a private Next.js process and exposes both the Web UI and `/api`
 through one loopback Fastify origin. It defaults to public port `3000`, private
@@ -449,13 +454,28 @@ AUTO_SCAN_DIR="" pnpm dev
   on macOS, `%LOCALAPPDATA%\agent-profile\trace.db` on Windows, and
   `${XDG_DATA_HOME:-~/.local/share}/agent-profile/trace.db` on Linux. Application
   files and mutable data are separate.
+- `agent-profile --project <path>` is the explicit project scope. Unless
+  `--database` or `--data-dir` is also supplied, its mutable database lives at
+  `<project>/.agent-profile/trace.db`; that directory is ignored by Git by
+  default. Imported Sessions are retained only when captured `cwd` is inside
+  the normalized root. Sessions outside it are reported as excluded, and
+  Sessions without captured `cwd` are reported as unassigned. Global mode keeps
+  all imported Sessions and still exposes unassigned coverage.
+- A project-scoped rebuild never deletes another project's rows. A project-
+  scoped reset deletes only in-scope Sessions, Spans, and source relationships;
+  Tasks, Outcomes, configuration snapshots, cohorts, experiments, and their
+  logical links remain retained. The data-management UI and import status show
+  whether the current scope is global or a project and expose included,
+  excluded, and unassigned coverage.
 - A pre-T103 source-workspace database at `apps/server/trace.db` is not moved
   automatically. Continue using it with `--database apps/server/trace.db` or
   `TRACE_DB_PATH`, or copy it to the new default while every Agent Profile
   process is stopped.
 - A forced rebuild is the normal recovery path after parser or metric changes.
-  The danger-zone reset deletes every generated Session/Span, including tags
-  and notes, but retains Model Catalog pricing/history/aliases/context,
+  In global mode the danger-zone reset deletes every generated Session/Span,
+  including tags and notes; in project mode it deletes only the selected
+  project's generated rows. Both modes retain Model Catalog
+  pricing/history/aliases/context,
   recalculation audit, migration,
   Tasks, Outcomes, Configuration Snapshots, cohorts, experiments, and their
   logical Session links, plus locally collected Runtime events/coverage and bounded

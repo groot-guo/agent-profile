@@ -1,9 +1,10 @@
 import { mkdirSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
-import { dirname, join, win32 } from 'node:path';
+import { dirname, join, resolve, win32 } from 'node:path';
 
 const APPLICATION_DIRECTORY = 'agent-profile';
 const DATABASE_FILE_NAME = 'trace.db';
+const PROJECT_DATA_DIRECTORY = '.agent-profile';
 
 export interface ApplicationDataPathOptions {
   platform?: NodeJS.Platform;
@@ -34,6 +35,14 @@ export function defaultDatabasePathFor(options: ApplicationDataPathOptions = {})
   return currentPlatform === 'win32'
     ? win32.join(dataDirectory, DATABASE_FILE_NAME)
     : join(dataDirectory, DATABASE_FILE_NAME);
+}
+
+export function projectDataDirectoryFor(projectRoot: string): string {
+  return join(resolve(projectRoot), PROJECT_DATA_DIRECTORY);
+}
+
+export function projectDatabasePathFor(projectRoot: string): string {
+  return join(projectDataDirectoryFor(projectRoot), DATABASE_FILE_NAME);
 }
 
 export function ensureDatabaseDirectory(databasePath: string): void {

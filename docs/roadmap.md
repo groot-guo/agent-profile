@@ -63,48 +63,6 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
   terminal Task evidence with Node requirements, package name, installation,
   scope limitations, and release/publish boundary.
 
-### T147 Project-scoped local data management
-
-- status: planned
-- started_at: 2026-08-11
-- task_chain: follows T146. It is separate from CLI distribution and from the
-  existing analytical project filters, which are not a data-management scope.
-- purpose: let a CLI user explicitly manage evidence for one selected local
-  project without treating every user-level Agent history record as belonging
-  to that project.
-- scope: explicit project-root configuration/CLI options; project-local data
-  directory policy; import-time project eligibility; scoped data-management
-  summary, rebuild, and reset behavior; coverage for unassigned Sessions; UI
-  scope labels and current documentation.
-- evidence: `--data-dir .agent-profile` can place a database below the current
-  directory, but current imports still scan user-level Claude, Codex, Zed,
-  MiMo, and OpenCode sources. Existing `project_key` is an imported Session
-  classification and UI filter; the current data-management reset deletes
-  generated data for the entire selected database.
-- decision_record: introduce explicit project selection (for example
-  `agent-profile init` and `--project .`) rather than silently treating process
-  cwd as an import filter. Normalize a project root, retain only Sessions whose
-  captured cwd is within that root, and label unavailable cwd evidence as
-  unassigned. Make destructive operations scoped atomically across Sessions,
-  Spans, and relationships; define Task/Outcome retention before deleting data.
-- dependencies: T146 CLI command/distribution surface; source-provided cwd
-  coverage; schema/migration plan; explicit user approval for any destructive
-  project-scoped reset.
-- risks: path normalization and parent-directory matching can misclassify data;
-  missing cwd must not become a guessed inclusion; relationship and Task/Outcome
-  links can become dangling if cleanup is not transactional; project-local data
-  must remain ignored by version control by default.
-- acceptance: a user can select a project explicitly; imports report included,
-  excluded, and unassigned coverage without guessing; the UI clearly distinguishes
-  current-project from global scope; scoped rebuild/reset cannot affect another
-  project; project-local data is not accidentally committed.
-- verification: focused Core/Server/CLI/Web tests for path containment,
-  import/revision behavior, scoped cleanup, and UI scope labels; migration and
-  clean-project smoke tests; `pnpm check:roadmap`; `git diff --check`.
-- documentation: update `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
-  `docs/multi-agent.md`, and terminal Task evidence with data location,
-  coverage, isolation, reset, and migration semantics.
-
 ## Terminal Task Index
 
 | Task | Title | Status |
@@ -112,6 +70,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | [T151](roadmap-archive/2026-q3.md#t151) | Web development-cache ignore correction | completed |
 | [T150](roadmap-archive/2026-q3.md#t150) | isolated Next development cache recovery | completed |
 | [T149](roadmap-archive/2026-q3.md#t149) | price-revision synchronization workflow | completed |
+| [T147](roadmap-archive/2026-q3.md#t147) | project-scoped local data management | completed |
 | [T148](roadmap-archive/2026-q3.md#t148) | model-context Session refresh linkage | completed |
 | [T145](roadmap-archive/2026-q3.md#t145) | Codex delegation lineage and bounded local titles | completed |
 | [T144](roadmap-archive/2026-q3.md#t144) | Next.js development compiler memory containment | completed |

@@ -37,7 +37,7 @@ import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
 type SessionRuntime = Pick<AppRuntime, 'database' | 'pricingResolver' | 'contextWindowResolver'> &
-  Partial<Pick<AppRuntime, 'imports' | 'clock'>>;
+  Partial<Pick<AppRuntime, 'projectRoot' | 'imports' | 'clock'>>;
 
 interface GitCommit {
   hash: string;
@@ -208,7 +208,7 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
   const getPricing = pricingResolver;
   const getModelContext = contextWindowResolver;
   app.get('/api/sessions', async () => {
-    return listPrimarySessionSummaries(db);
+    return listPrimarySessionSummaries(db, runtime.projectRoot);
   });
 
   app.get<{
@@ -235,6 +235,7 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
         sort: req.query.sort as SessionDiscoverySort | undefined,
         quickView: req.query.view as SessionDiscoveryQuickView | undefined,
         selectedId: req.query.selected,
+        projectRoot: runtime.projectRoot,
         now: runtime.clock?.() ?? Date.now(),
         availableSourceKinds: runtime.imports
           ? new Set(

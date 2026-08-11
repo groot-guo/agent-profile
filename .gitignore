@@ -6,6 +6,7 @@ dist/
 trace.db
 trace.db-wal
 trace.db-shm
+.agent-profile/
 *.tsbuildinfo
 .tmp-ui-*
 .codegraph/

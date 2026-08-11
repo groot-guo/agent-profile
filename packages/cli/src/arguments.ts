@@ -1,10 +1,12 @@
-import { resolve } from 'node:path';
+import { realpathSync, statSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 import { parseArgs } from 'node:util';
 import type {
   CliCommand,
   CliOutcomeEvidenceSource,
   CliOutcomeEvidenceStatus,
 } from '@agent-profile/contracts';
+import { projectDatabasePathFor } from 'trace-server/data-path';
 
 const DATABASE_FILE_NAME = 'trace.db';
 const DEFAULT_SERVE_HOST = '127.0.0.1';
@@ -34,6 +36,7 @@ Options:
   --json               Write a versioned JSON report
   --database <path>    Select an explicit SQLite database path
   --data-dir <path>    Select a directory containing trace.db
+  --project <path>     Select a project root and its local data scope
   --source <id>        Limit sync to a source; may be repeated
   --host <address>     Select a loopback listen address for serve
   --port <number>      Select the public serve port (default 3000)
@@ -56,6 +59,7 @@ export interface ParsedCliArguments {
   json: boolean;
   databasePath: string | undefined;
   dataDir: string | undefined;
+  projectPath: string | undefined;
   sourceIds: string[] | undefined;
   limit: number | undefined;
   cursor: string | undefined;
@@ -82,6 +86,7 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     version?: boolean;
     database?: string;
     'data-dir'?: string;
+    project?: string;
     source?: string[];
     limit?: string;
     cursor?: string;
@@ -110,6 +115,7 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
         version: { type: 'boolean' },
         database: { type: 'string' },
         'data-dir': { type: 'string' },
+        project: { type: 'string' },
         source: { type: 'string', multiple: true },
         limit: { type: 'string' },
         cursor: { type: 'string' },
@@ -148,6 +154,9 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
   if (values['data-dir'] !== undefined && !values['data-dir'].trim()) {
     throw new CliUsageError('--data-dir must not be empty');
   }
+  if (values.project !== undefined && !values.project.trim()) {
+    throw new CliUsageError('--project must not be empty');
+  }
   if (values.source?.some((sourceId) => !sourceId.trim())) {
     throw new CliUsageError('--source must not be empty');
   }
@@ -183,8 +192,10 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
   } else if (positionals.length > 1) {
     throw new CliUsageError(`Unexpected arguments: ${positionals.slice(1).join(', ')}`);
   }
-  if (!usesRuntime(requestedCommand) && (values.database || values['data-dir'])) {
-    throw new CliUsageError('--database and --data-dir are only supported by Runtime commands');
+  if (!usesRuntime(requestedCommand) && (values.database || values['data-dir'] || values.project)) {
+    throw new CliUsageError(
+      '--database, --data-dir, and --project are only supported by Runtime commands',
+    );
   }
   if (requestedCommand !== 'sync' && values.source) {
     throw new CliUsageError('--source is only supported by sync');
@@ -248,6 +259,7 @@ export function parseCliArguments(argv: string[]): ParsedCliArguments {
     json: values.json === true,
     databasePath: values.database,
     dataDir: values['data-dir'],
+    projectPath: values.project?.trim() || undefined,
     sourceIds: values.source,
     limit,
     cursor: values.cursor,
@@ -271,11 +283,27 @@ export function resolveDatabasePath(
   env: NodeJS.ProcessEnv,
   cwd: string,
   defaultDatabasePath: string,
+  projectRoot?: string | null,
 ): string {
-  if (options.databasePath) return resolve(cwd, options.databasePath);
-  if (options.dataDir) return resolve(cwd, options.dataDir, DATABASE_FILE_NAME);
-  if (env.TRACE_DB_PATH?.trim()) return resolve(cwd, env.TRACE_DB_PATH.trim());
+  if (options.databasePath) return resolvePath(cwd, options.databasePath);
+  if (options.dataDir) return resolvePath(cwd, options.dataDir, DATABASE_FILE_NAME);
+  if (projectRoot) return projectDatabasePathFor(projectRoot);
+  if (env.TRACE_DB_PATH?.trim()) return resolvePath(cwd, env.TRACE_DB_PATH.trim());
   return defaultDatabasePath;
+}
+
+export function resolveProjectRoot(projectPath: string | undefined, cwd: string): string | null {
+  if (!projectPath) return null;
+  const candidate = resolvePath(cwd, projectPath);
+  try {
+    if (!statSync(candidate).isDirectory()) {
+      throw new CliUsageError('--project must point to a directory');
+    }
+    return realpathSync(candidate);
+  } catch (error) {
+    if (error instanceof CliUsageError) throw error;
+    throw new CliUsageError(`--project directory is not available: ${candidate}`);
+  }
 }
 
 export function isCliCommand(value: string): value is CliCommand {

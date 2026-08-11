@@ -1,11 +1,12 @@
 import type { ScanResult } from '@agent-profile/core';
+import { classifyProjectCwd } from '../project-scope';
 import type { SessionRepository } from './session-repository';
 import type { SourceAdapter } from './types';
 
 export async function importFromSource(
   adapter: SourceAdapter,
   repository: SessionRepository,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; projectRoot?: string | null } = {},
 ): Promise<ScanResult> {
   const items = await adapter.discover();
   const result: ScanResult = {
@@ -16,6 +17,13 @@ export async function importFromSource(
     removed: 0,
     failed: 0,
     protectedAnnotatedSessions: 0,
+    projectCoverage: {
+      projectRoot: options.projectRoot ?? null,
+      discovered: items.length,
+      included: 0,
+      excluded: 0,
+      unassigned: 0,
+    },
     sessionIds: [],
     skipReasons: { unchanged_revision: 0, not_importable: 0, excluded_non_actionable: 0 },
   };
@@ -25,9 +33,24 @@ export async function importFromSource(
     result.skipReasons[reason]++;
   };
 
+  const recordProjectCoverage = (cwd: string | null | undefined): boolean => {
+    const coverage = result.projectCoverage;
+    if (!coverage) return true;
+    const classification = classifyProjectCwd(cwd, options.projectRoot);
+    coverage[classification]++;
+    if (!options.projectRoot && classification === 'unassigned') {
+      coverage.included++;
+      return true;
+    }
+    if (classification === 'included') return true;
+    skip('not_importable');
+    return false;
+  };
+
   for (const item of items) {
     try {
       if (!options.force && item.sessionId && repository.isCurrent(item.sessionId, item.revision)) {
+        if (!recordProjectCoverage(repository.getSessionCwd(item.sessionId))) continue;
         skip('unchanged_revision');
         continue;
       }
@@ -49,6 +72,25 @@ export async function importFromSource(
         }
         if (cleanup === 'removed') result.removed++;
         skip('excluded_non_actionable');
+        continue;
+      }
+
+      if (!recordProjectCoverage(loaded.parsed.meta.cwd)) {
+        const previousCwd = repository.getSessionCwd(loaded.parsed.sessionId);
+        if (
+          options.projectRoot &&
+          classifyProjectCwd(previousCwd, options.projectRoot) === 'included'
+        ) {
+          const cleanup = repository.removeGeneratedIfUnannotated(
+            loaded.parsed.sessionId,
+            item.revision.kind,
+          );
+          if (cleanup === 'removed') result.removed++;
+          if (cleanup === 'annotated') {
+            result.failed++;
+            result.protectedAnnotatedSessions++;
+          }
+        }
         continue;
       }
 

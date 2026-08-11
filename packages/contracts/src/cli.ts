@@ -3,6 +3,7 @@ import type {
   ImportSourceId,
   ImportSourceState,
   ImportSourceStatusResponse,
+  ProjectScope,
 } from './common';
 
 export const CLI_SCHEMA_VERSION = 'agent-profile-cli/v1';
@@ -56,6 +57,7 @@ export interface CliDoctorReport {
     active: boolean;
   };
   sources: CliDoctorSource[];
+  scope?: ProjectScope;
   limitations: string[];
 }
 
@@ -70,6 +72,7 @@ export interface CliSourcesReport {
   command: 'sources';
   imports: CliImportStatus;
   sources: ImportSourceStatusResponse[];
+  scope?: ProjectScope;
   limitations: string[];
 }
 
@@ -79,6 +82,7 @@ export interface CliSyncReport {
   requestedSources: ImportSourceId[];
   imports: CliImportStatus;
   sources: ImportSourceStatusResponse[];
+  scope?: ProjectScope;
   limitations: string[];
 }
 
@@ -90,6 +94,7 @@ export interface CliServeReport {
   databasePath: string;
   host: string;
   port: number;
+  scope?: ProjectScope;
   limitations: string[];
 }
 
@@ -123,6 +128,7 @@ export interface CliSessionDiscoveryPage {
 export interface CliSessionsReport extends CliSessionDiscoveryPage {
   schemaVersion: typeof CLI_SCHEMA_VERSION;
   command: 'sessions';
+  scope?: ProjectScope;
   limitations: string[];
 }
 
@@ -147,7 +153,14 @@ export interface CliStatsData {
   byProject: { cwd: string; sessions: number; totalTokens: number; totalCost: number }[];
   byModel: {
     model: string;
-    kind: 'model' | 'provider_only' | 'runtime_mode' | 'unknown';
+    kind:
+      | 'model'
+      | 'provider_only'
+      | 'runtime_mode'
+      | 'synthetic'
+      | 'opaque'
+      | 'review_required'
+      | 'unknown';
     rawModels: string[];
     sessions: number;
     totalInputTokens: number;
@@ -160,7 +173,14 @@ export interface CliStatsData {
     tokenBins: { bin: string; min: number; max: number | null; count: number }[];
     modelDistribution: {
       model: string;
-      kind: 'model' | 'provider_only' | 'runtime_mode' | 'unknown';
+      kind:
+        | 'model'
+        | 'provider_only'
+        | 'runtime_mode'
+        | 'synthetic'
+        | 'opaque'
+        | 'review_required'
+        | 'unknown';
       rawModels: string[];
       count: number;
       tokens: number;
@@ -188,6 +208,7 @@ export interface CliStatsReport {
   schemaVersion: typeof CLI_SCHEMA_VERSION;
   command: 'stats';
   statistics: CliStatsData;
+  scope?: ProjectScope;
   limitations: string[];
 }
 
@@ -204,6 +225,7 @@ export interface CliProfilesReport {
   schemaVersion: typeof CLI_SCHEMA_VERSION;
   command: 'profiles';
   agentProfiles: CliAgentProfilesData;
+  scope?: ProjectScope;
   limitations: string[];
 }
 

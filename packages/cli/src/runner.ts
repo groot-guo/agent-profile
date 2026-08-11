@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import {
   CLI_SCHEMA_VERSION,
   type CliDiagnosisReport,
@@ -22,6 +23,7 @@ import {
   type CliVersionReport,
   type ImportJobStatusResponse,
   type ImportSourceId,
+  type ProjectScope,
 } from '@agent-profile/contracts';
 import { ImportServiceError } from 'trace-server/imports';
 import { SessionDiscoveryError } from 'trace-server/sessions';
@@ -31,6 +33,7 @@ import {
   type ParsedCliArguments,
   parseCliArguments,
   resolveDatabasePath,
+  resolveProjectRoot,
   USAGE,
 } from './arguments';
 import { formatReport } from './format';
@@ -50,6 +53,7 @@ export interface CliRuntime {
 
 export interface CliRuntimeOptions {
   databasePath: string;
+  projectRoot?: string | null;
   autoScanDir: null;
   defaultScanDir: string;
 }
@@ -69,7 +73,7 @@ export interface CliDependencies {
   ) => Promise<ImportJobStatusResponse>;
   discoverSessions: (
     runtime: CliRuntime,
-    options: { limit?: number; cursor?: string },
+    options: { limit?: number; cursor?: string; projectRoot?: string | null },
   ) => CliSessionDiscoveryPage;
   getStatsReport: (runtime: CliRuntime) => CliStatsData;
   getAgentProfileReport: (runtime: CliRuntime) => CliProfilesReport['agentProfiles'];
@@ -124,11 +128,13 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
       return 0;
     }
 
+    const projectRoot = resolveProjectRoot(options.projectPath, dependencies.cwd);
     const databasePath = resolveDatabasePath(
       options,
       dependencies.env,
       dependencies.cwd,
       dependencies.defaultDatabasePath,
+      projectRoot,
     );
     if (
       options.command === 'serve' &&
@@ -138,6 +144,7 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
     ) {
       const report = await dependencies.startServe({
         databasePath,
+        ...(projectRoot ? { projectRoot } : {}),
         defaultScanDir: dependencies.defaultScanDir,
         host: options.host,
         port: options.port,
@@ -149,6 +156,7 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
           schemaVersion: CLI_SCHEMA_VERSION,
           command: 'serve',
           ...report,
+          scope: scopeFor(projectRoot),
           limitations: [
             'Serve listens on loopback only; non-local access remains outside the current security model.',
             'The Web process is private and all browser/API traffic uses the reported public origin.',
@@ -160,57 +168,69 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
       return 0;
     }
     if (options.command === 'sources') {
-      const report = await sources(databasePath, dependencies);
+      const report = await sources(databasePath, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'sync') {
-      const report = await sync(databasePath, options.sourceIds, dependencies);
+      const report = await sync(databasePath, options.sourceIds, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return hasFailedRequestedSource(report) ? 1 : 0;
     }
     if (options.command === 'sessions') {
-      const report = await sessions(databasePath, options.limit, options.cursor, dependencies);
+      const report = await sessions(
+        databasePath,
+        options.limit,
+        options.cursor,
+        dependencies,
+        projectRoot,
+      );
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'stats') {
-      const report = await stats(databasePath, dependencies);
+      const report = await stats(databasePath, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'profiles') {
-      const report = await profiles(databasePath, dependencies);
+      const report = await profiles(databasePath, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'task-profile' && options.taskId) {
-      const report = await taskProfile(databasePath, options.taskId, dependencies);
+      const report = await taskProfile(databasePath, options.taskId, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'diagnosis' && options.taskId) {
-      const report = await diagnosis(databasePath, options.taskId, dependencies);
+      const report = await diagnosis(databasePath, options.taskId, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'evidence' && options.taskId) {
-      const report = await evidence(databasePath, options.taskId, dependencies);
+      const report = await evidence(databasePath, options.taskId, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'task-outcome' && options.taskId && options.evidenceKind) {
-      const report = await taskOutcome(options, databasePath, options.taskId, dependencies);
+      const report = await taskOutcome(
+        options,
+        databasePath,
+        options.taskId,
+        dependencies,
+        projectRoot,
+      );
       writeReport(report, options.json, dependencies);
       return 0;
     }
     if (options.command === 'task-feedback' && options.taskId) {
-      const report = await taskFeedback(databasePath, options.taskId, dependencies);
+      const report = await taskFeedback(databasePath, options.taskId, dependencies, projectRoot);
       writeReport(report, options.json, dependencies);
       return 0;
     }
 
-    const report = await doctor(databasePath, dependencies);
+    const report = await doctor(databasePath, dependencies, projectRoot);
     writeReport(report, options.json, dependencies);
     return 0;
   } catch (error) {
@@ -222,10 +242,13 @@ export async function runCli(argv: string[], dependencies: CliDependencies): Pro
 async function sources(
   databasePath: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliSourcesReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
-    return sourcesReport(await dependencies.getImportStatus(runtime));
+    return sourcesReport(await dependencies.getImportStatus(runtime), projectRoot);
   } finally {
     await runtime.close();
   }
@@ -235,12 +258,15 @@ async function sync(
   databasePath: string,
   sourceIds: string[] | undefined,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliSyncReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     const status = await dependencies.syncImports(runtime, sourceIds);
     return {
-      ...sourcesReport(status),
+      ...sourcesReport(status, projectRoot),
       command: 'sync',
       requestedSources: (sourceIds ??
         status.sources.map((source) => source.id)) as ImportSourceId[],
@@ -265,13 +291,21 @@ async function sessions(
   limit: number | undefined,
   cursor: string | undefined,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliSessionsReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
       command: 'sessions',
-      ...dependencies.discoverSessions(runtime, { limit, cursor }),
+      scope: scopeFor(projectRoot),
+      ...dependencies.discoverSessions(runtime, {
+        limit,
+        cursor,
+        ...(projectRoot ? { projectRoot } : {}),
+      }),
       limitations: [
         'Only primary Sessions are listed; Codex child records remain directly addressable through the Web/API.',
         'Session paths, transcript identifiers, Span metadata, and content are omitted.',
@@ -283,12 +317,19 @@ async function sessions(
   }
 }
 
-async function stats(databasePath: string, dependencies: CliDependencies): Promise<CliStatsReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+async function stats(
+  databasePath: string,
+  dependencies: CliDependencies,
+  projectRoot: string | null,
+): Promise<CliStatsReport> {
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
       command: 'stats',
+      scope: scopeFor(projectRoot),
       statistics: dependencies.getStatsReport(runtime),
       limitations: [
         'Statistics describe all current primary Sessions in the selected local database.',
@@ -303,12 +344,16 @@ async function stats(databasePath: string, dependencies: CliDependencies): Promi
 async function profiles(
   databasePath: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliProfilesReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
       command: 'profiles',
+      scope: scopeFor(projectRoot),
       agentProfiles: dependencies.getAgentProfileReport(runtime),
       limitations: [
         'Agent Process Profiles describe observed process distributions, not universal quality rankings.',
@@ -324,8 +369,11 @@ async function taskProfile(
   databasePath: string,
   taskId: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliTaskProfileReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
@@ -346,8 +394,11 @@ async function diagnosis(
   databasePath: string,
   sessionId: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliDiagnosisReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
@@ -367,8 +418,11 @@ async function evidence(
   databasePath: string,
   sessionId: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliEvidenceReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
@@ -389,8 +443,11 @@ async function taskOutcome(
   databasePath: string,
   taskId: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliTaskOutcomeReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     const evidence: CliOutcomeEvidenceInput = {
       kind: options.evidenceKind as string,
@@ -427,8 +484,11 @@ async function taskFeedback(
   databasePath: string,
   taskId: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliTaskFeedbackReport> {
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
@@ -448,15 +508,19 @@ async function taskFeedback(
 async function doctor(
   databasePath: string,
   dependencies: CliDependencies,
+  projectRoot: string | null,
 ): Promise<CliDoctorReport> {
   const existedBeforeRuntime = dependencies.fileExists(databasePath);
-  const runtime = dependencies.createRuntime(runtimeOptions(databasePath, dependencies));
+  const runtime = dependencies.createRuntime(
+    runtimeOptions(databasePath, dependencies, projectRoot),
+  );
   try {
     const imports = await runtime.imports.jobs.refreshAvailability();
     return {
       schemaVersion: CLI_SCHEMA_VERSION,
       command: 'doctor',
       database: { path: databasePath, existedBeforeRuntime },
+      scope: scopeFor(projectRoot),
       imports: { active: imports.active },
       sources: imports.sources.map((source) => ({
         id: source.id,
@@ -474,9 +538,14 @@ async function doctor(
   }
 }
 
-function runtimeOptions(databasePath: string, dependencies: CliDependencies): CliRuntimeOptions {
+function runtimeOptions(
+  databasePath: string,
+  dependencies: CliDependencies,
+  projectRoot: string | null,
+): CliRuntimeOptions {
   return {
     databasePath,
+    ...(projectRoot ? { projectRoot } : {}),
     autoScanDir: null,
     defaultScanDir: dependencies.defaultScanDir,
   };
@@ -514,15 +583,27 @@ function writeReport(report: CliReport, asJson: boolean, dependencies: CliDepend
   dependencies.writeStdout(asJson ? `${JSON.stringify(report)}\n` : formatReport(report));
 }
 
-function sourcesReport(status: ImportJobStatusResponse): CliSourcesReport {
+function sourcesReport(
+  status: ImportJobStatusResponse,
+  projectRoot: string | null,
+): CliSourcesReport {
   return {
     schemaVersion: CLI_SCHEMA_VERSION,
     command: 'sources',
+    scope: status.scope ?? scopeFor(projectRoot),
     imports: importStatus(status),
     sources: status.sources,
     limitations: [
       'Source availability is checked locally; source paths and transcript identifiers are omitted.',
     ],
+  };
+}
+
+function scopeFor(projectRoot: string | null): ProjectScope {
+  return {
+    mode: projectRoot ? 'project' : 'global',
+    projectRoot,
+    label: projectRoot ? basename(projectRoot) || projectRoot : 'global',
   };
 }
 

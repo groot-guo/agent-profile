@@ -30,14 +30,16 @@ export class LocalReportNotFoundError extends Error {
   }
 }
 
-export function getStatsReport(runtime: Pick<AppRuntime, 'database'>): StatsReport {
-  return buildStatsReport(runtime.database);
+export function getStatsReport(
+  runtime: Pick<AppRuntime, 'database'> & Partial<Pick<AppRuntime, 'projectRoot'>>,
+): StatsReport {
+  return buildStatsReport(runtime.database, runtime.projectRoot);
 }
 
 export function getAgentProfileReport(
-  runtime: Pick<AppRuntime, 'database' | 'clock'>,
+  runtime: Pick<AppRuntime, 'database' | 'clock'> & Partial<Pick<AppRuntime, 'projectRoot'>>,
 ): AgentProfileReport {
-  return buildProfileReport(runtime.database, runtime.clock());
+  return buildProfileReport(runtime.database, runtime.clock(), runtime.projectRoot);
 }
 
 export function getTaskProfileReport(

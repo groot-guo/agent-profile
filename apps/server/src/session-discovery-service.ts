@@ -15,6 +15,7 @@ import {
 import type { SessionSummary } from '@agent-profile/core';
 import type { DatabaseConnection } from './database';
 import { primarySessionPredicate } from './primary-sessions';
+import { projectScopeSql } from './project-scope';
 import { SESSION_COLS } from './routes/shared';
 
 export const DEFAULT_SESSION_DISCOVERY_LIMIT = 20;
@@ -25,6 +26,7 @@ export const MAX_WEB_SESSION_DISCOVERY_LIMIT = 200;
 export interface SessionDiscoveryOptions {
   limit?: number;
   cursor?: string;
+  projectRoot?: string | null;
 }
 
 export interface WebSessionDiscoveryOptions {
@@ -39,6 +41,7 @@ export interface WebSessionDiscoveryOptions {
   selectedId?: string;
   now?: number;
   availableSourceKinds?: ReadonlySet<string>;
+  projectRoot?: string | null;
 }
 
 export type SessionDiscoveryErrorCode =
@@ -81,6 +84,7 @@ interface NormalizedWebDiscoveryOptions {
   startedAfter: number | null;
   now: number;
   availableSourceKinds?: ReadonlySet<string>;
+  projectRoot: string | null;
 }
 
 interface DiscoveryRow
@@ -201,15 +205,20 @@ const CLI_SESSION_COLUMNS = `
   message_count AS messageCount,
   imported_at AS importedAt`;
 
-export function listPrimarySessionSummaries(database: DatabaseConnection): SessionSummary[] {
+export function listPrimarySessionSummaries(
+  database: DatabaseConnection,
+  projectRoot?: string | null,
+): SessionSummary[] {
+  const scope = projectScopeSql(projectRoot, 'sessions');
   return database
     .prepare(
       `SELECT ${SESSION_COLS}
        FROM sessions
        WHERE ${primarySessionPredicate()}
+         AND ${scope.clause}
        ORDER BY start_time DESC`,
     )
-    .all() as SessionSummary[];
+    .all(...scope.parameters) as SessionSummary[];
 }
 
 export function discoverSessions(
@@ -218,15 +227,19 @@ export function discoverSessions(
 ): CliSessionDiscoveryPage {
   const limit = validatedLimit(options.limit);
   const cursor = options.cursor === undefined ? null : decodeCursor(options.cursor);
+  const scope = projectScopeSql(options.projectRoot, 'sessions');
   const cursorClause = cursor ? 'AND (start_time < ? OR (start_time = ? AND id < ?))' : '';
-  const parameters: Array<number | string> = cursor
-    ? [cursor.startTime, cursor.startTime, cursor.id, limit + 1]
-    : [limit + 1];
+  const parameters: Array<number | string> = [
+    ...scope.parameters,
+    ...(cursor ? [cursor.startTime, cursor.startTime, cursor.id] : []),
+    limit + 1,
+  ];
   const rows = database
     .prepare(
       `SELECT ${CLI_SESSION_COLUMNS}
        FROM sessions
        WHERE ${primarySessionPredicate()}
+         AND ${scope.clause}
          ${cursorClause}
        ORDER BY start_time DESC, id DESC
        LIMIT ?`,
@@ -296,8 +309,11 @@ export function discoverSessionPage(
   ).count;
   const total = (
     database
-      .prepare(`SELECT COUNT(*) AS count FROM sessions s WHERE ${primarySessionPredicate('s')}`)
-      .get() as { count: number }
+      .prepare(
+        `SELECT COUNT(*) AS count FROM sessions s
+         WHERE ${primarySessionPredicate('s')} AND ${projectScopeSql(normalized.projectRoot, 's').clause}`,
+      )
+      .get(...projectScopeSql(normalized.projectRoot, 's').parameters) as { count: number }
   ).count;
 
   return {
@@ -333,6 +349,7 @@ export function discoverSessionPage(
           normalized.selectedId,
           normalized.now,
           normalized.availableSourceKinds,
+          normalized.projectRoot,
         )
       : null,
   };
@@ -370,6 +387,7 @@ function normalizeWebOptions(
     startedAfter,
     now,
     availableSourceKinds: options.availableSourceKinds,
+    projectRoot: options.projectRoot ?? null,
   };
 }
 
@@ -382,6 +400,9 @@ function webFilters(
 } {
   const clauses = [primarySessionPredicate('s')];
   const parameters: Array<number | string> = [];
+  const scope = projectScopeSql(options.projectRoot, 's');
+  clauses.push(scope.clause);
+  parameters.push(...scope.parameters);
   if (options.agent && exclude !== 'agent') {
     clauses.push('s.agent = ?');
     parameters.push(options.agent);
@@ -445,16 +466,18 @@ function loadSelectedDiscoverySession(
   selectedId: string,
   now: number,
   availableSourceKinds?: ReadonlySet<string>,
+  projectRoot?: string | null,
 ): SessionDiscoveryItem | null {
+  const scope = projectScopeSql(projectRoot, 's');
   const row = database
     .prepare(
       `${ANOMALY_CTE}
        SELECT ${WEB_SESSION_COLUMNS}, s.start_time AS sortValue
        FROM sessions s
        LEFT JOIN anomaly_sessions ON anomaly_sessions.id = s.id
-       WHERE s.id = ?`,
+       WHERE s.id = ? AND ${scope.clause}`,
     )
-    .get(selectedId) as DiscoveryRow | undefined;
+    .get(selectedId, ...scope.parameters) as DiscoveryRow | undefined;
   return row ? toDiscoveryItem(row, now, availableSourceKinds) : null;
 }
 
@@ -524,6 +547,7 @@ function webQueryKey(options: NormalizedWebDiscoveryOptions): string {
     timeRange: options.timeRange,
     sort: options.sort,
     quickView: options.quickView,
+    projectRoot: options.projectRoot,
   });
 }
 

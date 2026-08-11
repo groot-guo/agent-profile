@@ -264,6 +264,13 @@ export interface ScanResult {
   failed: number;
   /** Generated sessions retained because user tags or notes require manual action. */
   protectedAnnotatedSessions: number;
+  projectCoverage?: {
+    projectRoot: string | null;
+    discovered: number;
+    included: number;
+    excluded: number;
+    unassigned: number;
+  };
   sessionIds: string[];
   skipReasons: Record<ScanSkipReason, number>;
 }

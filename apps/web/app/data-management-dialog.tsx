@@ -62,7 +62,11 @@ export function DataManagementDialog({
         <div>
           <span>Local data</span>
           <h2 id="data-management-title">数据管理</h2>
-          <p>维护本地生成的分析数据；普通同步请使用侧栏的“同步数据”。</p>
+          <p>
+            维护本地生成的分析数据；当前作用域：{' '}
+            {summary?.scope?.mode === 'project' ? `项目 ${summary.scope.label}` : '全局本地数据'}
+            。普通同步请使用侧栏的“同步数据”。
+          </p>
         </div>
         <button type="button" onClick={onClose} aria-label="关闭数据管理弹窗">
           <CloseGlyph />
@@ -88,7 +92,7 @@ export function DataManagementDialog({
         </div>
         {summary ? (
           <p>
-            将删除 {summary.sessions} 个会话和 {summary.spans} 个 Span
+            将删除当前作用域内的 {summary.sessions} 个会话和 {summary.spans} 个 Span
             {summary.annotatedSessions > 0
               ? `，其中 ${summary.annotatedSessions} 个带标签或备注`
               : ''}
@@ -96,6 +100,8 @@ export function DataManagementDialog({
             Outcome、{summary.configSnapshots} 个配置快照、{summary.cohorts} 个 cohort 和{' '}
             {summary.experiments} 个 experiment 保留。操作前请停止 Server 并备份
             apps/server/trace.db（或 TRACE_DB_PATH 指定文件）。
+            {summary.coverage &&
+              ` 项目覆盖：纳入 ${summary.coverage.includedSessions}，排除 ${summary.coverage.excludedSessions}，未分配 ${summary.coverage.unassignedSessions}。`}
           </p>
         ) : (
           <p>正在读取影响范围…</p>

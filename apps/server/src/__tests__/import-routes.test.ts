@@ -173,6 +173,64 @@ describe('import status routes', () => {
     });
   });
 
+  it('reports and resets only the selected project scope', async () => {
+    const scopedApp = Fastify();
+    const scopedRuntime = createRuntime({
+      database: createDatabase(':memory:'),
+      projectRoot: '/workspace/project',
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+    });
+    registerScanRoutes(scopedApp, scopedRuntime);
+    await scopedApp.ready();
+    try {
+      for (const [id, cwd] of [
+        ['inside', '/workspace/project/src'],
+        ['outside', '/workspace/other'],
+        ['unassigned', null],
+      ] as const) {
+        scopedRuntime.database
+          .prepare(
+            `INSERT INTO sessions (id, file_path, agent, start_time, imported_at, cwd)
+             VALUES (?, ?, 'fixture', 1, 1, ?)`,
+          )
+          .run(id, `fixture://${id}`, cwd);
+        scopedRuntime.database
+          .prepare(
+            `INSERT INTO spans (id, session_id, type, name, start_time)
+             VALUES (?, ?, 'llm_turn', 'fixture', 1)`,
+          )
+          .run(`${id}-span`, id);
+      }
+
+      const summary = await scopedApp.inject({
+        method: 'GET',
+        url: '/api/data-management/summary',
+      });
+      expect(summary.json()).toMatchObject({
+        sessions: 1,
+        spans: 1,
+        scope: { mode: 'project', projectRoot: '/workspace/project', label: 'project' },
+        coverage: { includedSessions: 1, excludedSessions: 1, unassignedSessions: 1 },
+      });
+
+      const reset = await scopedApp.inject({
+        method: 'POST',
+        url: '/api/data-management/reset',
+        payload: { confirmation: 'RESET LOCAL DATA' },
+      });
+      expect(reset.statusCode).toBe(200);
+      expect(reset.json()).toMatchObject({ deleted: { sessions: 1, spans: 1 } });
+      expect(scopedRuntime.database.prepare('SELECT id FROM sessions ORDER BY id').all()).toEqual([
+        { id: 'outside' },
+        { id: 'unassigned' },
+      ]);
+    } finally {
+      await scopedApp.close();
+      await scopedRuntime.close();
+    }
+  });
+
   async function waitForIdleImport(): Promise<void> {
     for (let attempt = 0; attempt < 100; attempt++) {
       const status = await app.inject({ method: 'GET', url: '/api/imports/status' });
