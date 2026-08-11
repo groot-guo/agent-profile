@@ -2,6 +2,7 @@ node_modules/
 dist/
 .next/
 .next-dev/
+/apps/web/.next-dev-*
 trace.db
 trace.db-wal
 trace.db-shm

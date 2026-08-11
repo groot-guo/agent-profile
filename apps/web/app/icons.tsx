@@ -1,20 +1,18 @@
-import {
-  Anthropic,
-  Claude,
-  ClaudeCode,
-  Codex,
-  Cursor,
-  DeepSeek,
-  Gemini,
-  GeminiCLI,
-  GithubCopilot,
-  Kimi,
-  OpenAI,
-  OpenCode,
-  Windsurf,
-  XiaomiMiMo,
-  Zencoder,
-} from '@lobehub/icons';
+import Anthropic from '@lobehub/icons/es/Anthropic/components/Mono';
+import Claude from '@lobehub/icons/es/Claude/components/Mono';
+import ClaudeCode from '@lobehub/icons/es/ClaudeCode/components/Mono';
+import Codex from '@lobehub/icons/es/Codex/components/Mono';
+import Cursor from '@lobehub/icons/es/Cursor/components/Mono';
+import DeepSeek from '@lobehub/icons/es/DeepSeek/components/Mono';
+import Gemini from '@lobehub/icons/es/Gemini/components/Mono';
+import GeminiCLI from '@lobehub/icons/es/GeminiCLI/components/Mono';
+import GithubCopilot from '@lobehub/icons/es/GithubCopilot/components/Mono';
+import Kimi from '@lobehub/icons/es/Kimi/components/Mono';
+import OpenAI from '@lobehub/icons/es/OpenAI/components/Mono';
+import OpenCode from '@lobehub/icons/es/OpenCode/components/Mono';
+import Windsurf from '@lobehub/icons/es/Windsurf/components/Mono';
+import XiaomiMiMo from '@lobehub/icons/es/XiaomiMiMo/components/Mono';
+import Zencoder from '@lobehub/icons/es/Zencoder/components/Mono';
 import type { CSSProperties, ReactNode } from 'react';
 import { AGENT_COLORS, AGENT_LABELS, R } from './theme';
 

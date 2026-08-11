@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -H 127.0.0.1 -p 3001",
+    "dev": "node ./scripts/dev.mjs",
+    "dev:clean": "node ./scripts/clean-dev-cache.mjs",
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 3001",
     "test": "vitest run",
