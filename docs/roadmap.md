@@ -6,39 +6,115 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
-### T144 Development startup import memory containment
+### T146 npm-installable CLI distribution
+
+- status: blocked
+- started_at: 2026-08-11
+- blocked_at: 2026-08-11
+- blocker: local `npm whoami` returned `ENEEDAUTH`; an authenticated npm
+  identity is required to verify the owned scope before package metadata or a
+  reproducible `npx` command can be chosen. No registry login or publication
+  was attempted by this Task.
+- resume: the maintainer runs `npm login` (or otherwise authenticates this
+  machine), confirms the desired owned scope/package name, then this Task
+  resumes with local packing and clean-prefix verification only.
+- task_chain: follows T149; T147 follows T146 for project-scoped data
+  management. This Task deliberately excludes a desktop App, a native
+  single-file executable, self-updating code, and external publication.
+- purpose: make the existing `agent-profile` CLI installable from an npm package
+  under an npm scope owned by the maintainer, with `npm install -g` and `npx`
+  use paths that retain `serve --open` and its local Web UI.
+- scope: package identity and metadata; build/pack assembly for the CLI bundle,
+  Next standalone/static/public assets, and runtime-native dependency contract;
+  package-relative Web entry resolution; clean-install smoke coverage; current
+  installation and operational documentation.
+- evidence: `@agent-profile/cli` is already a public npm package for an
+  unrelated project and must not be used. The local CLI currently declares a
+  `bin` but its normal build emits only `dist`; `web` is listed as publishable
+  content but is not assembled there. The existing local release archive is
+  not a substitute: it contains build-machine absolute Next dependency links
+  and copies a Node-ABI-specific SQLite addon.
+- decision_record: use an owned scoped package name
+  `@<npm-user>/agent-profile` (or an explicitly authorized organization scope),
+  rather than claim an unowned namespace. Publish a normal Node CLI package
+  first so npm installs the platform-matching native dependency; package the
+  Web assets with it so `serve --open` remains supported. Do not convert the
+  process to a desktop App or a Node SEA binary in this Task.
+- dependencies: a maintainer npm account and verified owned scope; Node version
+  support policy; existing CLI and Next production build paths. Registry login,
+  access tokens, 2FA, and an actual `npm publish` remain maintainer-controlled
+  external actions.
+- assumptions: CLI users have a supported Node runtime; an npm package can
+  retain the current loopback-only UI/API boundary without exposing a network
+  server; the package name is supplied by `npm whoami` before publication.
+- risks: a packed Web standalone may retain workspace-specific links; the
+  native SQLite dependency must be installed for the target Node/platform; the
+  final package must not include source transcripts, local databases, secrets,
+  or build-machine paths.
+- acceptance: a packed tarball contains the executable and all required Web
+  assets; installation in a clean temporary prefix can run `doctor` and
+  `serve --open` without any source-workspace path; `npx <owned-package>` is
+  documented and reproducible after publication; no publish occurs during
+  implementation or verification.
+- verification: focused CLI/Web build and tests; `npm pack --dry-run`; unpacked
+  clean-prefix install and loopback UI/API smoke test; package-content audit;
+  `pnpm check:roadmap`; `git diff --check`.
+- documentation: update `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`, and
+  terminal Task evidence with Node requirements, package name, installation,
+  scope limitations, and release/publish boundary.
+
+### T147 Project-scoped local data management
 
 - status: planned
 - started_at: 2026-08-11
-- purpose: bound the peak memory used by `pnpm dev` startup without removing
-  local-source synchronization, so large transcript histories do not compete
-  with the Server watcher and Next.js development process at once.
-- scope: import-job scheduling and focused regression coverage; current
-  startup/operational documentation and this Task register.
-- dependencies: the existing source-adapter contract, revision-skip behavior,
-  atomic Session replacement, source-observation serialization, and T82 scale
-  measurement guidance.
-- assumptions: independent source scans are currently launched concurrently;
-  each adapter may temporarily hold a full source Session while parsing, so a
-  process-wide source-import concurrency limit reduces startup high-water
-  memory at the cost of longer total synchronization time.
-- risks: delayed sources must remain visible as active work, manual or observed
-  synchronization must not race queued startup jobs, and a failed source must
-  not prevent later queued sources from running.
-- acceptance: startup and other manager-owned source imports run with a
-  documented bounded concurrency of one; the server remains asynchronous and
-  reports pending work as active; failures release the slot for later sources;
-  focused tests prove no two source loads run concurrently and preserve result
-  status; current documentation explains the memory/latency trade-off.
-- verification: focused import-manager tests, Server TypeScript build, focused
-  Biome check, `pnpm check:roadmap`, and `git diff --check`.
-- documentation: update `README.md`, `ARCHITECTURE.md`, and terminal Task
-  evidence after implementation.
+- task_chain: follows T146. It is separate from CLI distribution and from the
+  existing analytical project filters, which are not a data-management scope.
+- purpose: let a CLI user explicitly manage evidence for one selected local
+  project without treating every user-level Agent history record as belonging
+  to that project.
+- scope: explicit project-root configuration/CLI options; project-local data
+  directory policy; import-time project eligibility; scoped data-management
+  summary, rebuild, and reset behavior; coverage for unassigned Sessions; UI
+  scope labels and current documentation.
+- evidence: `--data-dir .agent-profile` can place a database below the current
+  directory, but current imports still scan user-level Claude, Codex, Zed,
+  MiMo, and OpenCode sources. Existing `project_key` is an imported Session
+  classification and UI filter; the current data-management reset deletes
+  generated data for the entire selected database.
+- decision_record: introduce explicit project selection (for example
+  `agent-profile init` and `--project .`) rather than silently treating process
+  cwd as an import filter. Normalize a project root, retain only Sessions whose
+  captured cwd is within that root, and label unavailable cwd evidence as
+  unassigned. Make destructive operations scoped atomically across Sessions,
+  Spans, and relationships; define Task/Outcome retention before deleting data.
+- dependencies: T146 CLI command/distribution surface; source-provided cwd
+  coverage; schema/migration plan; explicit user approval for any destructive
+  project-scoped reset.
+- risks: path normalization and parent-directory matching can misclassify data;
+  missing cwd must not become a guessed inclusion; relationship and Task/Outcome
+  links can become dangling if cleanup is not transactional; project-local data
+  must remain ignored by version control by default.
+- acceptance: a user can select a project explicitly; imports report included,
+  excluded, and unassigned coverage without guessing; the UI clearly distinguishes
+  current-project from global scope; scoped rebuild/reset cannot affect another
+  project; project-local data is not accidentally committed.
+- verification: focused Core/Server/CLI/Web tests for path containment,
+  import/revision behavior, scoped cleanup, and UI scope labels; migration and
+  clean-project smoke tests; `pnpm check:roadmap`; `git diff --check`.
+- documentation: update `README.md`, `README.zh-CN.md`, `ARCHITECTURE.md`,
+  `docs/multi-agent.md`, and terminal Task evidence with data location,
+  coverage, isolation, reset, and migration semantics.
 
 ## Terminal Task Index
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T151](roadmap-archive/2026-q3.md#t151) | Web development-cache ignore correction | completed |
+| [T150](roadmap-archive/2026-q3.md#t150) | isolated Next development cache recovery | completed |
+| [T149](roadmap-archive/2026-q3.md#t149) | price-revision synchronization workflow | completed |
+| [T148](roadmap-archive/2026-q3.md#t148) | model-context Session refresh linkage | completed |
+| [T145](roadmap-archive/2026-q3.md#t145) | Codex delegation lineage and bounded local titles | completed |
+| [T144](roadmap-archive/2026-q3.md#t144) | Next.js development compiler memory containment | completed |
 | [T143](roadmap-archive/2026-q3.md#t143) | Codex review initiator, no-provider evidence, and retroactive pricing | completed |
 | [T142](roadmap-archive/2026-q3.md#t142) | Codex Session-scoped Span ownership and evidence status repair | completed |
 | [T141](roadmap-archive/2026-q3.md#t141) | Codex metadata and agent-lineage evidence repair | completed |

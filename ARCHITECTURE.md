@@ -462,7 +462,7 @@ improve throughput.
 | Agent | Local source | Import model |
 | --- | --- | --- |
 | Claude Code | project transcript JSONL | file mtime/size fingerprint; message/tool blocks and parent chains |
-| Codex | dated rollout JSONL plus the read-only `~/.codex/state_*.sqlite` metadata database | parser-contract revision plus file mtime/size and matched state-record fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), exact state-record title/agent identity, captured `session_meta.cwd` project evidence when present, per-turn `turn_context.payload.model`, response items, events, and call IDs; generated Span IDs are scoped as `codex:<session>:<source-id>` |
+| Codex | dated rollout JSONL plus the read-only `~/.codex/state_*.sqlite` metadata database and adjacent `session_index.jsonl` | parser-contract revision plus file mtime/size and matched state/session metadata fingerprint; rollout `session_meta.id` thread identity (legacy `session_id` fallback), local `session_index.jsonl.thread_name` title when available (bounded state title fallback, delegation envelopes discarded), agent identity, captured `session_meta.cwd` project evidence when present, per-turn `turn_context.payload.model`, response items, events, and call IDs; generated Span IDs are scoped as `codex:<session>:<source-id>` |
 | Zed | threads SQLite database with zstd-compressed JSON payloads | parser-contract version plus `updated_at` and payload metadata fingerprint; changed payloads are decoded lazily, tagged User/Agent messages become LLM-turn/answer/tool-call Spans, `request_token_usage` supplies observed input/output tokens, and `folder_paths` supplies cwd |
 | MiMo | `mimocode.db` SQLite database | `mimo-v2` parser-contract revision plus `time_updated`, message/part counts, and a hashed `external_import` metadata fingerprint; exact `cc` imports whose absolute `source_path` is below `~/.claude/projects` are excluded before message/part loading, while native and ambiguous rows remain source-visible |
 | OpenCode | `opencode.db` SQLite database | parser-contract version plus `time_updated` and message/part counts; changed Session rows and their message/part evidence are loaded lazily from a read-only connection |
@@ -515,12 +515,15 @@ Profiles, and per-source stored-Session counts—exclude a Codex record when it 
 marked as a review initiator or has no main-chain Span. This keeps one
 top-level Session count per visible Codex Task without deleting child evidence
 or inferring relationships from titles, paths, models, or timing. The importer combines the rollout's
-`parent_thread_id`/`sub_agent_activity` evidence with the read-only Codex state
-database's exact thread and `thread_spawn_edges` records. It persists the
+`parent_thread_id`/`sub_agent_activity` evidence, explicit
+`<codex_delegation><source_thread_id>` markers, and the read-only Codex state
+database's thread and `thread_spawn_edges` records. It persists the
 child's nickname, role, path, call start, callback time, and callback status
 (`observed` or `final_answer`) only when those fields are source-captured.
 State metadata can repair a relationship when either rollout is imported first,
-but it cannot invent call or callback times. The Session detail surface labels
+but it cannot invent call or callback times. Delegation wrapper input is used
+only to extract the explicit parent ID and is not persisted as Session title or
+content. The Session detail surface labels
 whether the counterpart is imported, unavailable, or not captured and shows
 only determined relationship fields. Combined resource attribution remains
 future work, so primary aggregates still omit resource usage stored only in a
@@ -581,7 +584,12 @@ for auditability.
 - `model_context` — per-model context-window limits. Built-in rows are
   conservative vendor-specification seeds, audited against vendor catalog entry
   points on 2026-07-27 (T58); they are not transcript-observed values and user
-  edits take precedence because startup uses `INSERT OR IGNORE`.
+  edits take precedence because startup uses `INSERT OR IGNORE`. The current
+  exact raw-model value is resolved while Session analysis is read; it is never
+  copied over historical Session/Span context usage. A successful manual or
+  imported context mutation publishes one empty-ID Session-update reset so open
+  views re-read their existing bounded responses without materializing all
+  Sessions for that model.
 - `cost_recalculation_runs` — scope, fixed pricing revision, before/after
   unknown coverage, calculator version, and completed execution audit.
 - `schema_migrations` — ordered, idempotent schema changes and their application
@@ -732,8 +740,8 @@ scopes:
 
 | Surface | Owner and storage | Effective scope | Unknown/provenance behavior |
 | --- | --- | --- | --- |
-| `model_context` | Model Catalog seed/service and compatibility `/api/model-context` route; one exact raw model row in SQLite | Context-window utilization and context-bloat diagnosis for Sessions using that raw model | No alias or provider fallback; an unlisted model resolves to `undefined`/`null`. Bundled source entry points live in `apps/server/src/model-catalog/defaults.ts`; these are reference values, not transcript evidence. |
-| `pricing` | Model Catalog schedules, history, explicit pricing-equivalent aliases, and compatibility `/api/pricing` route | Stored Span/Session cost calculation and explicit scoped historical recomputation | Exact active raw-model schedule wins; only an explicit `pricingEquivalent=true` alias may select another pricing key. Selection uses the LLM Span `startTime`; missing and unsupported schemes remain unknown. |
+| `model_context` | Model Catalog seed/service and compatibility `/api/model-context` route; one exact raw model row in SQLite | Context-window utilization and context-bloat diagnosis for Sessions using that raw model | No alias or provider fallback; an unlisted model resolves to `undefined`/`null`. A successful update sends one constant-size Session-update reset so open views reload their bounded analysis; it does not rewrite historical usage or collect affected Session IDs. Bundled source entry points live in `apps/server/src/model-catalog/defaults.ts`; these are reference values, not transcript evidence. |
+| `pricing` | Model Catalog schedules, history, explicit pricing-equivalent aliases, and compatibility `/api/pricing` route | Stored Span/Session cost calculation and explicit scoped historical recomputation | Exact active raw-model schedule wins; only an explicit `pricingEquivalent=true` alias may select another pricing key. The newest active revision intentionally applies retroactively, while `effectiveFrom` remains provenance; missing and unsupported schemes remain unknown. Inventory also exposes `historicalCostSyncPending` when an indexed scalar check finds a stored LLM Span whose persisted pricing model, applicability time, or revision differs from the current supported schedule. It returns no affected IDs. |
 | Diagnosis thresholds | `DEFAULT_THRESHOLDS` in `packages/core/src/diagnosis.ts` | Deterministic heuristic finding boundaries for one analysis request | They are code-owned policy, not a user-editable Runtime or Task setting. The diagnostic `wastedCost` is an estimate only: it uses the current analysis-time input price as an upper bound and does not rewrite stored cost. |
 | Configuration Snapshot | Task repository `config_snapshots` row | Explicit Task-linked Agent/model/version evidence | It records the supplied identifiers and source hash; it does not silently snapshot pricing, context limits, prompts, or rules. |
 
@@ -785,7 +793,8 @@ The current server/UI support:
   data, explicit pricing-equivalent aliases, and previewed cost recomputation;
 - a `/settings/models` Web workspace that consumes only those public APIs,
   prioritizes observed unknown/unsupported identities, preserves price history,
-  and gates scoped recalculation behind a fixed-revision preview and explicit
+  marks durable model-scoped historical-price synchronization work, and gates
+  scoped recalculation behind a fixed-revision preview and explicit
   confirmation.
 
 Mutable pricing and model-context requests have runtime JSON-schema validation.
@@ -798,6 +807,13 @@ normalized model/time scope transactionally (including older Spans), rebuilds
 affected Session totals, and records the run. Recompute selects the same latest
 active pricing independently for each historical LLM Span and records
 calculator version `v1`.
+The inventory's `historicalCostSyncPending` flag survives page reloads, so a
+price configured before the current Web session can still direct the user to
+the matching model's preview. Its SQLite query is an indexed `EXISTS` check on
+the stored pricing provenance and returns only a Boolean; saving a price does
+not enumerate matching Spans or Sessions, trigger Preview, or begin a write.
+The Web notice points to the existing model-scoped Preview action, and explicit
+confirmation remains required before Execute.
 After a successful execute, the runtime publishes a content-free
 session-update signal (T137) listing the affected Session IDs so open
 discovery, statistics, Profile, and detail surfaces refetch instead of showing
@@ -1160,9 +1176,35 @@ page exposes the same contract and privacy boundaries.
 - API: port `3000` by default, configurable through `PORT`.
 - Web: port `3001` by default; API origin is configurable through
   `NEXT_PUBLIC_API`.
-- Next.js development output is isolated in `apps/web/.next-dev`; production
-  builds continue to use `apps/web/.next`, so a build does not invalidate
-  chunks used by a running development server.
+- The normal Web development launcher assigns one generated output directory
+  per port: `apps/web/.next-dev-3001` for root `pnpm dev`, or
+  `apps/web/.next-dev-<port>` when run with `--port <port>`. It also writes the
+  corresponding ignored sidecar TypeScript configuration
+  `.next-dev-<port>.tsconfig.json`; that file extends the source configuration
+  and contains only the port-specific generated type path, so Next does not
+  rewrite source `apps/web/tsconfig.json`. A lock prevents a second launcher
+  from sharing an active port's cache, and the launcher rejects hostname
+  overrides to retain its loopback `127.0.0.1` binding. Production builds
+  continue to use `apps/web/.next`, so a build does not invalidate chunks used
+  by a running development server.
+- `pnpm --filter agent-profile-web dev:clean -- --port <port> --confirm` removes
+  only that stopped port's generated `.next-dev-<port>` tree, sidecar
+  configuration, and stale lock. It refuses without `--confirm` and refuses a
+  live lock; it never deletes `.next`, `trace.db`, Sessions, pricing, or other
+  product data.
+- The Web development compiler enables Next.js
+  `experimental.webpackMemoryOptimizations`. This reduces Webpack's transient
+  string-buffer allocations and purges its input filesystem between compiler
+  phases; it remains tied to the repository's pinned Next.js version.
+- Shared Agent icons import only the required `@lobehub/icons` Mono components
+  instead of the package root barrel, avoiding the root barrel's UI/avatar
+  dependency graph during development compilation.
+- On the maintainer's Darwin arm64 Node v24.18.0 sample, the same sequential
+  route set measured roughly 2.75 GB peak RSS before the compiler option and
+  1.67 GB sampled peak after it, then settled near 115 MB after idle. These are
+  local development high-water measurements, not a memory guarantee for every
+  route, machine, or hot-reload pattern; the original user sample reached
+  5.1 GB under a longer-lived process.
 - Semantic diagnosis uses Anthropic-native or OpenAI-compatible endpoints when
   `LLM_API_KEY` and optional `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_BASE_URL`
   are configured.

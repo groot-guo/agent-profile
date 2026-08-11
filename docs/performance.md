@@ -21,6 +21,107 @@ measures query, analysis, and serialization work without opening a network
 listener. The fixture and benchmark never read local transcript content and do
 not modify the normal `trace.db`.
 
+## T144 Next.js development compiler measurement
+
+The reported `next-server` pressure is a separate development-compiler
+workload; it is not covered by the synthetic SQLite benchmark above. On
+2026-08-11, Node v24.18.0 / Darwin arm64, a sequential smoke pass requested the
+same nine Web routes (`/`, `/stats`, `/projects`, `/profiles`, `/compare`,
+`/tasks`, `/prompt-review`, `/settings/models`, and a Session detail route) and
+sampled the private Next process with `ps`. Every request returned HTTP 200.
+
+| Web development configuration | Sampled peak RSS | Post-idle RSS |
+| --- | ---: | ---: |
+| Direct icon components, before `webpackMemoryOptimizations` | ~2.75 GB | ~0.63 GB |
+| Direct icon components + `experimental.webpackMemoryOptimizations` | ~1.67 GB | ~0.11 GB |
+
+The option is enabled in `apps/web/next.config.js`. It is a Next.js experimental
+Webpack optimization that reduces transient compiler string-buffer caching and
+purges the shared input filesystem between compiler phases. The direct Mono
+imports in `apps/web/app/icons.tsx` keep the shared icon module graph bounded;
+the production build's first-load JavaScript fell from about 154/161 kB to
+131/138 kB for the Home/Session routes during this change. These values are
+local high-water measurements, not a guarantee for long-running hot reloads or
+all machines. The supplied user sample reached 5.1 GB in a longer-lived
+process, so Turbopack comparison and heap-retainer profiling remain separate
+follow-up work if the issue recurs.
+
+## T150 Next.js development-cache recovery and isolation
+
+The missing `server/pages/_document.js` was an incomplete generated-output
+symptom, not a Session or SQLite-data problem. A temporary Next server and the
+normal Web process had shared one fixed `.next-dev` writer tree. T150 replaces
+that normal path with a port-scoped cache: `pnpm dev` uses `.next-dev-3001`, and
+`pnpm --filter agent-profile-web dev -- --port 43101` uses
+`.next-dev-43101`. A same-port lock rejects a second writer.
+
+The companion cleanup command requires both the exact port and `--confirm`:
+`pnpm --filter agent-profile-web dev:clean -- --port 3001 --confirm`. It
+refuses a live lock and removes only the matching generated cache, its ignored
+sidecar TypeScript configuration, and a stale lock after the process stops. It
+does not remove `.next`, `trace.db`, source transcripts, Sessions, pricing, or
+other application data.
+
+This is a cache-integrity recovery, not a memory reduction. Two temporary
+instances on ports 43101 and 43102 independently compiled `/settings/models`
+(637 modules each) and returned HTTP 200; the source `tsconfig.json` stayed
+unchanged and a production build still used `.next`. The T144 compiler-memory
+measurements and any Turbopack/heap-retainer work therefore remain separate.
+The launcher itself keeps one lock and one small sidecar file per Web process;
+it neither reads Session history nor retains a cross-process cache in memory.
+
+## T148 model-context refresh boundedness
+
+Saving an exact-model context window now publishes one `reset` event through
+the existing Session-update tracker. The event carries an empty `sessionIds`
+array: the server does not query, allocate, or send the potentially unbounded
+set of Sessions whose Spans use that model. Open Home, Project, and Session
+views already interpret a reset as one ordinary bounded refetch.
+
+Configuration import uses the same rule: even when it contains multiple model
+context rows, it commits them first and emits one reset afterward. Neither path
+rewrites `sessions.peak_context_tokens`, other Session aggregates, or Span token
+evidence. Focused regression coverage verifies a manual save and a two-row
+import each advance the update cursor exactly once with no IDs, while preserved
+Session/Span fields remain unchanged. This is an O(1)-in-Session-count
+notification boundary rather than a new large-history memory benchmark.
+
+### Change-level memory-safety rule
+
+Any future change that adds an import, refresh, fan-out, cache, or large-data
+path must state its cardinality bound and verify it with focused tests or a
+reproducible measurement. It must not turn a bounded request into an unbounded
+Session/Span read, materialize a whole history merely to notify clients, or
+raise the T144 development-compiler high-water without a before/after record.
+The appropriate check is proportional to the path: an O(1) notification needs
+payload/behavior coverage; a query or compiler-graph change also needs a
+measured memory smoke.
+
+## T149 durable historical-price synchronization marker
+
+The Model Catalog inventory now returns one Boolean,
+`historicalCostSyncPending`, per observed model. SQLite uses the migration-20
+`idx_spans_model_type_price_sync` index to answer an `EXISTS` query: it compares
+the stored LLM Span pricing model, applicability time, and revision with the
+current supported schedule. The result covers prices configured before the
+current browser session as well as a just-saved price, but returns no matching
+Span or Session IDs and does not materialize a history array.
+
+Saving a price only reloads the usual inventory response; it neither starts the
+existing Preview request nor executes the recalculation. When the Boolean is
+true, the Web shows an adjacent model-scoped Preview action. Preview and its
+potential scope work remain explicit user actions, and Execute still requires a
+fresh revision-bound confirmation. This keeps the new signal O(1) in response
+payload size and avoids adding another startup or configuration-save memory
+high-water path.
+
+On 2026-08-11, an isolated Next development smoke compiled
+`/settings/models` (637 modules) and returned HTTP 200. The private
+`next-server` RSS was `238,848 KB` (about 233 MB) afterward. It ran on a
+separate loopback port with no Server process, source scan, or transcript
+database, so this is a compiler-path regression smoke rather than an
+end-to-end import benchmark.
+
 ## Representative fixture
 
 | Dimension | Value |
