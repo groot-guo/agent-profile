@@ -563,6 +563,7 @@ describe('parseCodexTranscript', () => {
 
     const parsed = parseCodexTranscript(entries, { filePath: '/codex/review-mode.jsonl' });
 
+    expect(parsed?.meta.isReviewInitiator).toBe(true);
     const answers = parsed?.spans.filter((span) => span.type === 'answer') ?? [];
     expect(answers).toHaveLength(1);
     // answer 必须归属到消息真实 LLM turn，而不是 task_started 的进程 turn。

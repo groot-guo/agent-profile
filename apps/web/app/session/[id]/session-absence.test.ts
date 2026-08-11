@@ -48,6 +48,10 @@ describe('session absence states', () => {
       unavailable: false,
       tip: '会话中上下文窗口的最大占用',
     });
+    expect(contextAbsenceLabel({ messageCount: 1, peakContextTokens: 0 }, 1, 0)).toMatchObject({
+      value: '不可用',
+      unavailable: true,
+    });
     expect(cacheAbsenceLabel({ cacheHitRate: 0 }, 0)).toMatchObject({
       value: '不可用',
       unavailable: true,

@@ -13,7 +13,7 @@ The current implementation already provides:
 - an exact raw-model pricing lookup;
 - four separate token price classes: input, cache creation, cache read, and
   output;
-- time-aware pricing rows selected at the LLM Span start time;
+- newest-active pricing rows applied retroactively to historical LLM Spans;
 - CNY-per-million-token calculation;
 - explicit unknown pricing instead of a trusted estimate;
 - mutable pricing and model-context APIs with runtime request validation;
@@ -51,7 +51,7 @@ manually governed.
 | Configuration | Meaning | History requirement |
 | --- | --- | --- |
 | Model identity | Raw observed identifier, optional canonical display identity, provider | Preserve raw identity; aliases must be explicit |
-| Pricing schedule | Four token prices, currency/unit, applicability time and source | Time-aware and revision-aware |
+| Pricing schedule | Four token prices, currency/unit, optional effective-time provenance and source | Revision-aware; the newest active revision is retroactive |
 | Context specification | Configured model context-window limit and source | Preserve provenance and user override |
 | Analysis policy | Diagnosis thresholds and score settings | Separate versioned policy; not Model Catalog data |
 | Configuration Snapshot | Agent/model/rules/tool/prompt version used for one Task | Existing Task evidence; not mutable model reference data |
@@ -62,14 +62,14 @@ The pricing resolver receives:
 
 ```text
 raw model identifier
-LLM Span start time
+optional Span timestamp (retained for resolver compatibility and provenance)
 ```
 
 Resolution order:
 
-1. an active exact raw-model pricing schedule applicable at the Span time;
+1. the newest active exact raw-model pricing schedule;
 2. an explicitly configured alias marked `pricingEquivalent=true`, followed by
-   an applicable target-model schedule;
+   the newest active target-model schedule;
 3. unknown pricing.
 
 The resolver must never:
@@ -114,9 +114,11 @@ unit = per_million_tokens
 scheme = flat_four_token_classes
 ```
 
-Time is stored as an epoch millisecond and interpreted as UTC. The applicable
-record is the latest active schedule whose `effectiveFrom` is no later than the
-Span start time.
+`effectiveFrom` is stored as an epoch millisecond and interpreted as UTC. It is
+retained as configuration provenance and history metadata; it does not gate
+historical lookup. The newest active record (ordered by configuration creation
+and stable row order) is the record used for import and explicit
+recalculation, so adding a corrected price covers older Spans as well.
 
 Existing historical schedules should not be physically deleted through the
 normal UI. A correction either supersedes a record or creates a new revision.
@@ -256,14 +258,17 @@ and delegates to the same transactional service as versioned preview/execute.
 
 ## Diagnosis semantics
 
-Stored Span and Session cost uses the price effective at each LLM Span time.
-Estimated diagnosis waste must declare one of two policies:
+Stored Span and Session cost uses the newest active configured price at import
+or explicit recalculation time. Estimated diagnosis waste must declare one of
+two policies:
 
-- historical estimate — use the relevant evidence Span time; or
-- current planning estimate — use the price effective now.
+- current configured estimate — use the newest active configured price; or
+- unknown — leave the estimate unpriced when no supported exact/explicit-alias
+  record exists.
 
-The policy and applicable price time must be explicit in the report. T71 owns
-the audit and decision; implementation must not silently mix the two semantics.
+The policy and selected pricing revision must be explicit in the report. T71
+owns the audit and decision; implementation must not silently mix the two
+semantics.
 
 ## Implemented Server API
 

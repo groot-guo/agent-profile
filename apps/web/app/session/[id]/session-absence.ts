@@ -58,12 +58,16 @@ export function costAbsenceDisplay(
 export function contextAbsenceLabel(
   session: Pick<SessionSummary, 'messageCount' | 'peakContextTokens'>,
   llmTurnCount: number,
+  contextPointCount = llmTurnCount,
 ): { value: string; unavailable: boolean; tip: string } {
-  if (llmTurnCount === 0) {
+  if (llmTurnCount === 0 || contextPointCount === 0) {
     return {
       value: '不可用',
       unavailable: true,
-      tip: '该会话没有可观察的 LLM 回合，上下文用量未被捕获',
+      tip:
+        llmTurnCount === 0
+          ? '该会话没有可观察的 LLM 回合，上下文用量未被捕获'
+          : '该会话有 LLM 回合，但来源没有捕获可用的上下文 token 遥测',
     };
   }
   return {
@@ -96,7 +100,8 @@ export function costAbsenceLabel(
 ): CostAbsenceLabel {
   const status = session.costStatus;
   if (status === 'complete') return { kind: 'known', value: `¥${session.totalCost.toFixed(4)}` };
-  if (status === 'partial') return { kind: 'known', value: `¥${session.totalCost.toFixed(4)}（部分）` };
+  if (status === 'partial')
+    return { kind: 'known', value: `¥${session.totalCost.toFixed(4)}（部分）` };
   if (status === 'excluded') return { kind: 'excluded', label: '已排除' };
   if (status === 'not_captured') return { kind: 'token_not_captured', label: '不可用' };
   return { kind: 'unknown_pricing', label: '未定价' };

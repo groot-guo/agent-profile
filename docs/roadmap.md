@@ -6,10 +6,40 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 ## Active and Planned Tasks
 
+### T144 Development startup import memory containment
+
+- status: planned
+- started_at: 2026-08-11
+- purpose: bound the peak memory used by `pnpm dev` startup without removing
+  local-source synchronization, so large transcript histories do not compete
+  with the Server watcher and Next.js development process at once.
+- scope: import-job scheduling and focused regression coverage; current
+  startup/operational documentation and this Task register.
+- dependencies: the existing source-adapter contract, revision-skip behavior,
+  atomic Session replacement, source-observation serialization, and T82 scale
+  measurement guidance.
+- assumptions: independent source scans are currently launched concurrently;
+  each adapter may temporarily hold a full source Session while parsing, so a
+  process-wide source-import concurrency limit reduces startup high-water
+  memory at the cost of longer total synchronization time.
+- risks: delayed sources must remain visible as active work, manual or observed
+  synchronization must not race queued startup jobs, and a failed source must
+  not prevent later queued sources from running.
+- acceptance: startup and other manager-owned source imports run with a
+  documented bounded concurrency of one; the server remains asynchronous and
+  reports pending work as active; failures release the slot for later sources;
+  focused tests prove no two source loads run concurrently and preserve result
+  status; current documentation explains the memory/latency trade-off.
+- verification: focused import-manager tests, Server TypeScript build, focused
+  Biome check, `pnpm check:roadmap`, and `git diff --check`.
+- documentation: update `README.md`, `ARCHITECTURE.md`, and terminal Task
+  evidence after implementation.
+
 ## Terminal Task Index
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T143](roadmap-archive/2026-q3.md#t143) | Codex review initiator, no-provider evidence, and retroactive pricing | completed |
 | [T142](roadmap-archive/2026-q3.md#t142) | Codex Session-scoped Span ownership and evidence status repair | completed |
 | [T141](roadmap-archive/2026-q3.md#t141) | Codex metadata and agent-lineage evidence repair | completed |
 | [T140](roadmap-archive/2026-q3.md#t140) | evidence-safe Session detail absence states | completed |

@@ -157,7 +157,9 @@ export function SemanticDiagnosisDisclosure({
       ? `已完成 · ${report.provider || 'Provider'} · ${report.payload.redactions} 处脱敏`
       : report.status === 'not_configured'
         ? '未配置 Provider，未发送内容'
-        : 'Provider 请求失败，已保留本地诊断';
+        : report.status === 'insufficient_evidence'
+          ? '证据不足，未发送内容；已保留本地诊断'
+          : 'Provider 请求失败，已保留本地诊断';
   return (
     <div
       style={{
@@ -171,11 +173,14 @@ export function SemanticDiagnosisDisclosure({
       }}
     >
       <div style={{ color: C.text, fontWeight: 600 }}>{status}</div>
-      <div>
-        Provider payload：{report.payload.thinkingItems} 个 thinking、{report.payload.toolItems}{' '}
-        个工具输入，
-        {report.payload.characters} 字符；只保留有界、脱敏的本地 audit metadata。
-      </div>
+      {report.payload.mode === 'not_sent' ? (
+        <div>Provider payload：未发送；只保留有界、脱敏的本地 audit metadata。</div>
+      ) : (
+        <div>
+          Provider payload：{report.payload.thinkingItems} 个 thinking、{report.payload.toolItems}{' '}
+          个工具输入，{report.payload.characters} 字符；只保留有界、脱敏的本地 audit metadata。
+        </div>
+      )}
       {report.limitations.map((limitation) => (
         <div key={limitation}>· {limitation}</div>
       ))}

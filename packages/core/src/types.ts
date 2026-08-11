@@ -181,6 +181,7 @@ export interface ParsedMeta {
   sourceAgentRole?: string;
   sourceAgentPath?: string;
   sourceChildLineage?: SourceChildLineage[];
+  isReviewInitiator?: boolean;
   messageCount: number;
   agent: string;
 }
@@ -219,6 +220,7 @@ export interface SessionSummary {
   fileLines?: number;
   messageCount: number;
   importedAt: number;
+  isReviewInitiator?: boolean;
   tags?: string;
   notes?: string;
 }

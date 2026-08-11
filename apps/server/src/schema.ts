@@ -493,6 +493,13 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 19,
+    name: 'codex_review_initiator_sessions',
+    up(database) {
+      addColumn(database, 'sessions', 'is_review_initiator', 'INTEGER NOT NULL DEFAULT 0');
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {
@@ -528,6 +535,7 @@ function createBaseSchema(database: DatabaseConnection): void {
       avg_context_tokens      INTEGER DEFAULT 0,
       cache_hit_rate          REAL DEFAULT 0,
       message_count           INTEGER DEFAULT 0,
+      is_review_initiator     INTEGER NOT NULL DEFAULT 0,
       tags                    TEXT DEFAULT '',
       notes                   TEXT DEFAULT '',
       imported_at             INTEGER NOT NULL DEFAULT (unixepoch()*1000)

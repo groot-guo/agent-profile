@@ -15,8 +15,11 @@ export function createDatabase(filePath: string): DatabaseConnection {
 export function lookupPricing(
   database: DatabaseConnection,
   model?: string,
-  at = Date.now(),
+  _at = Date.now(),
 ): Pricing | undefined {
+  // Pricing edits are intentionally retroactive. `effective_from` remains
+  // provenance for the configured record, while the newest active revision is
+  // the one used when recalculating historical spans.
   if (!model) return undefined;
   const exact = database
     .prepare(
@@ -27,11 +30,10 @@ export function lookupPricing(
               pricing_scheme as pricingScheme, revision, status,
               created_at as createdAt, superseded_at as supersededAt
        FROM pricing
-       WHERE model = ? AND COALESCE(effective_from, 0) <= ?
-         AND COALESCE(status, 'active') IN ('active', 'unsupported')
-       ORDER BY COALESCE(effective_from, 0) DESC, revision DESC LIMIT 1`,
+       WHERE model = ? AND COALESCE(status, 'active') IN ('active', 'unsupported')
+       ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     )
-    .get(model, at) as Pricing | undefined;
+    .get(model) as Pricing | undefined;
   if (exact) {
     return isSupportedPricing(exact) ? { ...exact, pricingModel: exact.model } : undefined;
   }
@@ -51,11 +53,10 @@ export function lookupPricing(
               pricing_scheme as pricingScheme, revision, status,
               created_at as createdAt, superseded_at as supersededAt
        FROM pricing
-       WHERE model = ? AND COALESCE(effective_from, 0) <= ?
-         AND COALESCE(status, 'active') IN ('active', 'unsupported')
-       ORDER BY COALESCE(effective_from, 0) DESC, revision DESC LIMIT 1`,
+       WHERE model = ? AND COALESCE(status, 'active') IN ('active', 'unsupported')
+       ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     )
-    .get(alias.pricingModel, at) as Pricing | undefined;
+    .get(alias.pricingModel) as Pricing | undefined;
   return selected && isSupportedPricing(selected)
     ? { ...selected, pricingModel: selected.model }
     : undefined;

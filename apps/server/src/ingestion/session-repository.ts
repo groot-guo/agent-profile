@@ -35,6 +35,7 @@ interface StoredSessionAggregate {
   avgContextTokens: number;
   cacheHitRate: number;
   messageCount: number;
+  isReviewInitiator: number;
 }
 
 export class SessionRepository {
@@ -77,7 +78,8 @@ export class SessionRepository {
         cost_currency as costCurrency, cost_calculated_at as costCalculatedAt,
         cost_calculator_version as costCalculatorVersion,
         peak_context_tokens as peakContextTokens, avg_context_tokens as avgContextTokens,
-        cache_hit_rate as cacheHitRate, message_count as messageCount
+        cache_hit_rate as cacheHitRate, message_count as messageCount,
+        is_review_initiator as isReviewInitiator
       FROM sessions WHERE id = ?
     `);
     this.hasSpanStatement = database.prepare(
@@ -94,6 +96,7 @@ export class SessionRepository {
         cache_read_tokens, output_tokens, total_cost, cost_unknown_count,
         cost_status, cost_currency, cost_calculated_at, cost_calculator_version,
         peak_context_tokens, avg_context_tokens, cache_hit_rate, message_count,
+        is_review_initiator,
         imported_at
       ) VALUES (
         @id, @name, @filePath, @agent, @fileMtime, @fileSize, @fileLines,
@@ -102,6 +105,7 @@ export class SessionRepository {
         @cacheReadTokens, @outputTokens, @totalCost, @costUnknownCount,
         @costStatus, @costCurrency, @costCalculatedAt, @costCalculatorVersion,
         @peakContextTokens, @avgContextTokens, @cacheHitRate, @messageCount,
+        @isReviewInitiator,
         @importedAt
       )
       ON CONFLICT(id) DO UPDATE SET
@@ -134,6 +138,7 @@ export class SessionRepository {
         avg_context_tokens = excluded.avg_context_tokens,
         cache_hit_rate = excluded.cache_hit_rate,
         message_count = excluded.message_count,
+        is_review_initiator = excluded.is_review_initiator,
         imported_at = excluded.imported_at
     `);
     this.deleteSpansStatement = database.prepare('DELETE FROM spans WHERE session_id = ?');
@@ -230,7 +235,8 @@ export class SessionRepository {
         cost_calculator_version = @costCalculatorVersion,
         peak_context_tokens = @peakContextTokens,
         avg_context_tokens = @avgContextTokens, cache_hit_rate = @cacheHitRate,
-        message_count = @messageCount, imported_at = @importedAt
+        message_count = @messageCount, is_review_initiator = @isReviewInitiator,
+        imported_at = @importedAt
       WHERE id = @id
     `);
     this.refreshAverageContextStatement = database.prepare(`
@@ -283,6 +289,7 @@ export class SessionRepository {
           avgContextTokens: summary.avgContextTokens,
           cacheHitRate: summary.cacheHitRate,
           messageCount: summary.messageCount,
+          isReviewInitiator: summary.isReviewInitiator ? 1 : 0,
           importedAt: summary.importedAt,
         });
         this.deleteSpansStatement.run(summary.id);
@@ -377,6 +384,7 @@ export class SessionRepository {
           avgContextTokens: existing.avgContextTokens,
           cacheHitRate: totalInput > 0 ? cacheReadTokens / totalInput : 0,
           messageCount: existing.messageCount + summary.messageCount,
+          isReviewInitiator: existing.isReviewInitiator || summary.isReviewInitiator ? 1 : 0,
           importedAt,
         });
         this.refreshAverageContextStatement.run(existing.id, existing.id);

@@ -101,7 +101,7 @@ export function ModelEditor({
       await responseJson(response);
       setPreview(null);
       setResult(null);
-      await onReload('价格 revision 已保存；历史成本尚未重算，请先查看下方预览。');
+      await onReload('价格 revision 已保存；历史 Span 会按最新价格重算，请先查看下方预览。');
     } catch (error) {
       setPricingError(`保存失败：${String(error)}`);
     } finally {
@@ -247,7 +247,7 @@ export function ModelEditor({
               onChange={(value) => updatePricing('outputPrice', value)}
             />
             <Field
-              label="生效时间（本地）"
+              label="价格记录时间（本地）"
               type="datetime-local"
               value={pricingDraft.effectiveAt}
               onChange={(value) => updatePricing('effectiveAt', value)}
@@ -261,7 +261,8 @@ export function ModelEditor({
           </div>
           {pricingDraft.effectiveAt && (
             <p className={styles.helper}>
-              提交为 UTC：{new Date(pricingDraft.effectiveAt).toISOString()}
+              仅作价格 provenance，提交为 UTC：{new Date(pricingDraft.effectiveAt).toISOString()}；
+              不限制历史 Span 重算。
             </p>
           )}
           {pricingError && (

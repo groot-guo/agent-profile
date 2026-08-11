@@ -15,6 +15,7 @@ import {
   type DiagnosisResult,
   diagnoseSessionSync,
   type EfficiencyScore,
+  hasCapturedContextEvidence,
   isCrossSessionSpan,
   SESSION_ANALYSIS_SCHEMA_VERSION,
   type SessionDetail,
@@ -310,6 +311,15 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
          FROM spans s
          WHERE s.session_id = ? AND s.type = 'llm_turn'
            AND NOT ${ownershipExcludedExpression('s.')}
+           AND CASE
+             WHEN json_valid(s.metadata)
+               AND json_type(s.metadata, '$.tokenUsageSource') IS NOT NULL
+               THEN json_extract(s.metadata, '$.tokenUsageSource')
+             WHEN COALESCE(s.input_tokens, 0) + COALESCE(s.cache_creation_tokens, 0)
+               + COALESCE(s.cache_read_tokens, 0) + COALESCE(s.output_tokens, 0) > 0
+               THEN 'captured'
+             ELSE 'not_captured'
+           END <> 'not_captured'
          ORDER BY s.start_time ASC, s.id ASC`,
       )
       .all(req.params.id) as {
@@ -362,7 +372,10 @@ export function registerSessionRoutes(app: FastifyInstance, runtime: SessionRunt
     const analysis = await buildSessionAnalysisMetrics(runtime, session, spans);
 
     const context = spans
-      .filter((span) => !isCrossSessionSpan(span) && span.type === 'llm_turn')
+      .filter(
+        (span) =>
+          !isCrossSessionSpan(span) && span.type === 'llm_turn' && hasCapturedContextEvidence(span),
+      )
       .map((span) => ({
         startTime: span.startTime,
         contextTokens: span.contextTokens,

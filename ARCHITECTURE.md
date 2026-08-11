@@ -262,7 +262,7 @@ as requiring manual action instead of presenting them as retryable parse errors.
 | `apps/server/src/task-repository.ts` | Task/configuration/Outcome/cohort/experiment persistence boundary and Task Profile aggregation inputs |
 | `apps/server/src/runtime-event-collector.ts` | Metadata-only local Runtime event validation, idempotent append, ordering/coverage, and bounded references |
 | `apps/server/src/routes/scan.ts` | Thin HTTP import/data-management adapter over the Runtime import service; contains no import persistence SQL or production fallback |
-| `apps/server/src/database.ts` | SQLite creation, ordered migrations, and time-aware pricing lookup |
+| `apps/server/src/database.ts` | SQLite creation, ordered migrations, and latest-active pricing lookup |
 | `apps/server/src/db.ts` | Pricing/model-context default seeding and database-scoped model-context lookup helpers; it does not own a process-global connection |
 | `apps/server/src/routes/` | Health, sessions, Tasks/Outcomes/experiments, aggregate analysis, diagnosis, statistics, pricing, context-window, scan, export, and comparison APIs |
 | `apps/web` | Project/session navigation, Task verification workspace, dashboards, detail analysis, Agent profiles, ephemeral prompt review, comparisons, statistics, annotations, and configuration UI |
@@ -511,10 +511,10 @@ Codex Desktop also persists guardian/child rollouts as distinct source records.
 Their normalized Spans retain `is_sidechain = 1` and direct detail/evidence
 lookup by stored ID remains available. Primary Session surfaces—Session
 discovery, dashboard/statistics aggregates, project cohorts, Agent Process
-Profiles, and per-source stored-Session counts—exclude a Codex record only when
-it has no main-chain Span. This keeps one top-level Session count per visible
-Codex Task without deleting child evidence or inferring relationships from
-titles, paths, models, or timing. The importer combines the rollout's
+Profiles, and per-source stored-Session counts—exclude a Codex record when it is
+marked as a review initiator or has no main-chain Span. This keeps one
+top-level Session count per visible Codex Task without deleting child evidence
+or inferring relationships from titles, paths, models, or timing. The importer combines the rollout's
 `parent_thread_id`/`sub_agent_activity` evidence with the read-only Codex state
 database's exact thread and `thread_spawn_edges` records. It persists the
 child's nickname, role, path, call start, callback time, and callback status
@@ -529,8 +529,11 @@ child rollout.
 Each modern Codex LLM turn takes its model from that turn's captured
 `turn_context.payload.model`. `session_meta.model_provider` is provider evidence,
 not a concrete model, and is never promoted into `Span.model`. Advancing the
-Codex parser revision to `codex-v6` makes an ordinary sync atomically replace
-stale provider-labelled rows once; no generated-data reset is required. Codex
+Codex parser revision to `codex-v7` makes an ordinary sync atomically replace
+stale provider-labelled rows and persist explicit review-initiator metadata
+once; no generated-data reset is required. A review initiator remains directly
+inspectable by ID but is excluded from ordinary primary Session discovery and
+aggregates. Codex
 Span IDs and same-Session parent IDs are scoped with the normalized Session ID,
 so parent and child rollouts cannot overwrite each other when source turn IDs
 are reused. Migration 18 backfills the same scope for existing Codex rows while
@@ -670,8 +673,11 @@ from available source histories when recovery is necessary.
   aggregate LLM Span is labelled `tokenUsageSource=session_aggregate`; this
   preserves observed totals without implying per-message token or context
   behavior that the source did not capture.
-- Span cost uses all four token classes and the model price effective at the
-  span's `startTime`. The current contract is `CNY` per million tokens.
+- Span cost uses all four token classes and the newest active exact-model price
+  available when the Session is imported or explicitly recalculated. The
+  configured `effectiveFrom` remains provenance and does not prevent a price
+  correction from covering older Spans. The current contract is `CNY` per
+  million tokens.
   `costCurrency`, `pricingEffectiveFrom`, `pricingModel`, `pricingRevision`,
   `costCalculatedAt`, and `costCalculatorVersion` expose the selected schedule
   and calculation provenance. Unknown or unsupported pricing is surfaced as
@@ -784,12 +790,14 @@ The current server/UI support:
 
 Mutable pricing and model-context requests have runtime JSON-schema validation.
 New user pricing defaults to its write time; callers may supply an explicit
-`effectiveFrom`. `model-catalog/v1` adds observed-model inventory, price history,
-provenance, versioned content-free configuration import/export, and a two-step
-recalculation contract. Preview is read-only; execute rejects a stale pricing
-revision, recalculates the normalized model/time scope transactionally, rebuilds
-affected Session totals, and records the run. Recompute selects pricing
-independently for each historical LLM Span and records calculator version `v1`.
+`effectiveFrom` for provenance. `model-catalog/v1` adds observed-model inventory,
+price history, provenance, versioned content-free configuration import/export,
+and a two-step recalculation contract. Preview is read-only; execute rejects a
+stale pricing revision, applies the newest active exact-model revision to the
+normalized model/time scope transactionally (including older Spans), rebuilds
+affected Session totals, and records the run. Recompute selects the same latest
+active pricing independently for each historical LLM Span and records
+calculator version `v1`.
 After a successful execute, the runtime publishes a content-free
 session-update signal (T137) listing the affected Session IDs so open
 discovery, statistics, Profile, and detail surfaces refetch instead of showing

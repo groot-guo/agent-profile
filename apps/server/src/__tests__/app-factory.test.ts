@@ -60,7 +60,7 @@ describe('application factory', () => {
     ).toBe(true);
   });
 
-  it('uses the injected clock for pricing lookups without an explicit timestamp', () => {
+  it('uses the newest configured price for historical and current lookups', () => {
     const insert = runtime.database.prepare(
       `INSERT INTO pricing (
         model, input_price, cache_creation_price, cache_read_price, output_price, effective_from
@@ -70,8 +70,12 @@ describe('application factory', () => {
     insert.run('clock-priced-model', 10, 20, 30, 40, 1500);
 
     expect(runtime.pricingResolver('clock-priced-model')).toMatchObject({
-      inputPrice: 1,
-      effectiveFrom: 500,
+      inputPrice: 10,
+      effectiveFrom: 1500,
+    });
+    expect(runtime.pricingResolver('clock-priced-model', 1000)).toMatchObject({
+      inputPrice: 10,
+      effectiveFrom: 1500,
     });
     expect(runtime.pricingResolver('clock-priced-model', 2000)).toMatchObject({
       inputPrice: 10,

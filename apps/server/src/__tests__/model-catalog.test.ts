@@ -298,6 +298,52 @@ describe('ModelCatalogService', () => {
     await runtime.close();
   });
 
+  it('applies a newly configured price to older spans during explicit recalculation', async () => {
+    const runtime = createRuntime({
+      database: createDatabase(':memory:'),
+      autoScanDir: null,
+      defaultScanDir: '~/.claude/projects',
+      clock: () => 3_000,
+    });
+    insertSessionAndSpan(runtime.database, {
+      sessionId: 'retroactive-session',
+      spanId: 'retroactive-span',
+      model: 'retroactive-model',
+      startTime: 100,
+      unknown: true,
+    });
+    runtime.modelCatalog.upsertPricing({
+      model: 'retroactive-model',
+      inputPrice: 2,
+      cacheCreationPrice: 3,
+      cacheReadPrice: 4,
+      outputPrice: 5,
+      effectiveFrom: 2_000,
+    });
+
+    const preview = runtime.modelCatalog.previewRecalculation({
+      models: ['retroactive-model'],
+    });
+    expect(preview).toMatchObject({
+      before: { spans: 1, unknown: 1 },
+      after: { spans: 1, unknown: 0 },
+    });
+    const result = runtime.modelCatalog.executeRecalculation(
+      preview.scope,
+      preview.pricingRevision,
+    );
+    expect(result.updatedSpans).toBe(1);
+    expect(
+      runtime.database
+        .prepare(
+          `SELECT cost, cost_unknown as costUnknown, pricing_effective_from as pricingEffectiveFrom
+           FROM spans WHERE id = 'retroactive-span'`,
+        )
+        .get(),
+    ).toMatchObject({ cost: 14, costUnknown: 0, pricingEffectiveFrom: 2_000 });
+    await runtime.close();
+  });
+
   it('publishes a session-update signal after successful recalculation execution', async () => {
     const runtime = createRuntime({
       database: createDatabase(':memory:'),

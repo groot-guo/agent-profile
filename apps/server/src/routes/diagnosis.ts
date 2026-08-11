@@ -2,6 +2,7 @@ import {
   type DiagnosisResult,
   diagnoseSession,
   diagnoseSessionSync,
+  hasCapturedContextEvidence,
   type SemanticDiagnosisReport,
   type SessionDetail,
   type SessionSummary,
@@ -80,11 +81,7 @@ export async function diagnoseDetail(
   // 证据不足时抑制语义结论：若没有任何可观察的 LLM turn 遥测（token 未捕获
   // 或 stub turn），语义推断无法基于结构证据，必须报告证据不足而不是猜测。
   const llmTurns = detail.spans.filter((span) => span.type === 'llm_turn');
-  const hasObservedEvidence = llmTurns.some(
-    (turn) =>
-      turn.metadata?.tokenUsageSource !== undefined &&
-      turn.metadata?.tokenUsageSource !== 'not_captured',
-  );
+  const hasObservedEvidence = llmTurns.some(hasCapturedContextEvidence);
   if (!hasObservedEvidence && llmTurns.length > 0) {
     const semantic = evidenceInsufficientSemanticReport();
     recordAudit(detail.id, semantic, options);

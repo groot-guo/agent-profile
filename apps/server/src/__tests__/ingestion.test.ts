@@ -612,7 +612,7 @@ describe('session ingestion boundary', () => {
 
     const adapter = new TranscriptSourceAdapter(directory, 'codex');
     const [item] = await adapter.discover();
-    expect(item.revision.fingerprint).toMatch(/^file:codex-v6:/);
+    expect(item.revision.fingerprint).toMatch(/^file:codex-v7:/);
     expect(await importFromSource(adapter, repository)).toMatchObject({
       imported: 0,
       updated: 0,

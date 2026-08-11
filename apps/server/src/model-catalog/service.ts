@@ -3,11 +3,10 @@ import {
   COST_CALCULATOR_VERSION,
   COST_CURRENCY,
   COST_UNIT,
+  type CostStatus,
+  calcCost,
   identifyModel,
   isExcludedModel,
-  calcCost,
-  isRuntimeMode,
-  type CostStatus,
   type Pricing,
   type Span,
 } from '@agent-profile/core';
@@ -107,8 +106,8 @@ export class ModelCatalogService {
     seedModelContextDefaults(this.database);
   }
 
-  lookupPricing(model?: string, at = this.clock()): Pricing | undefined {
-    return lookupPricing(this.database, model, at);
+  lookupPricing(model?: string, _at = this.clock()): Pricing | undefined {
+    return lookupPricing(this.database, model, _at);
   }
 
   lookupContextWindow(model?: string): number | undefined {
@@ -595,9 +594,7 @@ export class ModelCatalogService {
       throw new Error('invalid_model_catalog_payload');
     }
     const filteredPricing = input.pricing.filter((row) => !this.isExcludedIdentity(row.model));
-    const filteredContext = input.modelContext.filter(
-      (row) => !this.isExcludedIdentity(row.model),
-    );
+    const filteredContext = input.modelContext.filter((row) => !this.isExcludedIdentity(row.model));
     const filteredAliases = input.pricingAliases.filter(
       (row) => !this.isExcludedIdentity(row.rawModel),
     );
@@ -681,15 +678,15 @@ export class ModelCatalogService {
     }
   }
 
-  private applicablePricingRecord(model: string | undefined, at: number): PricingRecord | null {
+  private applicablePricingRecord(model: string | undefined, _at: number): PricingRecord | null {
     if (!model) return null;
-    const exact = this.selectApplicablePricing(model, at);
+    const exact = this.selectApplicablePricing(model);
     if (exact) return exact;
     const alias = this.listAliases(model)[0];
-    return alias ? this.selectApplicablePricing(alias.pricingModel, at) : null;
+    return alias ? this.selectApplicablePricing(alias.pricingModel) : null;
   }
 
-  private selectApplicablePricing(model: string, at: number): PricingRecord | null {
+  private selectApplicablePricing(model: string): PricingRecord | null {
     return (
       (this.database
         .prepare(
@@ -700,11 +697,11 @@ export class ModelCatalogService {
             source_kind as sourceKind, source_reference as sourceReference,
             pricing_scheme as pricingScheme, revision, status,
             created_at as createdAt, superseded_at as supersededAt
-           FROM pricing WHERE model = ? AND COALESCE(effective_from, 0) <= ?
+           FROM pricing WHERE model = ?
              AND status IN ('active', 'unsupported')
-           ORDER BY COALESCE(effective_from, 0) DESC, revision DESC LIMIT 1`,
+             ORDER BY created_at DESC, rowid DESC LIMIT 1`,
         )
-        .get(model, at) as PricingRecord | undefined) ?? null
+        .get(model) as PricingRecord | undefined) ?? null
     );
   }
 
@@ -752,7 +749,6 @@ export class ModelCatalogService {
       unknown: spans.length - known,
     };
   }
-
 }
 
 function deriveSessionCostStatus(

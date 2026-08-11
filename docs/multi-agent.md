@@ -62,11 +62,17 @@ was not used.
   inherited blocks while evidence remains available for audit. Evidence APIs
   also preserve `source_user`, `corrupted_ownership`, and `not_captured`
   ownership states when the source marks them;
+- Codex Desktop review-mode rollouts are marked when the source emits
+  `entered_review_mode`. The review initiator is retained for direct inspection
+  and labeled as the initiator, but ordinary primary Session discovery,
+  statistics, and cohort aggregates exclude it; no title or prompt inference is
+  used to classify a normal conversation as review;
 - titles, `cwd`, source paths, timestamps, models, and other sources' event-level
   parent IDs must not be used to infer a persisted Session relationship;
 - primary Session lists, statistics, project cohorts, Agent Process Profiles,
-  and import-source counts exclude a Codex record only when every stored Span
-  is sidechain evidence. The child record remains available by direct stored ID;
+  and import-source counts exclude a Codex record when it is marked as a review
+  initiator or when every stored Span is sidechain evidence. The retained record
+  remains available by direct stored ID;
   child-only Sidechain resources are not merged into the parent. T119 now
   exposes the source-native relationship as a typed Task graph: `task-profile/v1`
   reports linked Session nodes, source-parent edges that touch a linked Session,

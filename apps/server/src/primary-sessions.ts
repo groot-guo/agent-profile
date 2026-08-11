@@ -6,12 +6,15 @@
  */
 export function primarySessionPredicate(alias: 'sessions' | 's' = 'sessions'): string {
   return `(
-    COALESCE(${alias}.agent, '') <> 'codex'
-    OR EXISTS (
-      SELECT 1
-      FROM spans primary_span
-      WHERE primary_span.session_id = ${alias}.id
-        AND primary_span.is_sidechain = 0
+    COALESCE(${alias}.is_review_initiator, 0) = 0
+    AND (
+      COALESCE(${alias}.agent, '') <> 'codex'
+      OR EXISTS (
+        SELECT 1
+        FROM spans primary_span
+        WHERE primary_span.session_id = ${alias}.id
+          AND primary_span.is_sidechain = 0
+      )
     )
   )`;
 }

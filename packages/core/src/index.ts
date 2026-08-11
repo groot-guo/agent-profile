@@ -151,6 +151,7 @@ export type { ZedThreadMeta } from './scanners/zed';
 export { hasZedThreadsDb, zedThreadsDbPath } from './scanners/zed';
 export {
   buildSessionAnalysisWindows,
+  hasCapturedContextEvidence,
   MAX_ANALYSIS_CONTEXT_POINTS,
   MAX_ANALYSIS_SIDECHAIN_TURNS,
   MAX_ANALYSIS_TOOL_EVENTS,

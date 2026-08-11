@@ -51,6 +51,14 @@ describe('session discovery service', () => {
     });
   });
 
+  it('keeps Codex review initiators out of ordinary primary discovery', () => {
+    insertSession(database, 'review-initiator', 1_200, false, true);
+
+    const page = discoverSessions(database, { limit: 20 });
+
+    expect(page.sessions.some((session) => session.id === 'review-initiator')).toBe(false);
+  });
+
   it('rejects malformed cursors before querying the database', () => {
     expect(() => discoverSessions(database, { cursor: 'not-a-cursor' })).toThrow(
       'invalid session cursor',
@@ -343,13 +351,22 @@ function insertSession(
   id: string,
   startTime: number,
   isCodexChild = false,
+  isReviewInitiator = false,
 ): void {
   database
     .prepare(
-      `INSERT INTO sessions (id, file_path, agent, start_time, imported_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (
+         id, file_path, agent, start_time, is_review_initiator, imported_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, `fixture://${id}`, isCodexChild ? 'codex' : 'claude-code', startTime, startTime);
+    .run(
+      id,
+      `fixture://${id}`,
+      isCodexChild || isReviewInitiator ? 'codex' : 'claude-code',
+      startTime,
+      isReviewInitiator ? 1 : 0,
+      startTime,
+    );
   database
     .prepare(
       `INSERT INTO spans (id, session_id, type, name, start_time, is_sidechain)

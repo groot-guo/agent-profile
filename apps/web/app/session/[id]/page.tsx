@@ -329,7 +329,7 @@ export default function SessionPage() {
   const dur = data.endTime ? data.endTime - data.startTime : 0;
   const llmTurnCount = spanSummary.llmTurns;
   const totalInputTokens = data.inputTokens + data.cacheCreationTokens + data.cacheReadTokens;
-  const contextAbsence = contextAbsenceLabel(data, llmTurnCount);
+  const contextAbsence = contextAbsenceLabel(data, llmTurnCount, context.total);
   const cacheAbsence = cacheAbsenceLabel(data, totalInputTokens);
   const costAbsence = costAbsenceDisplay(data);
   const mainTools = toolWindow.events;
@@ -414,6 +414,7 @@ export default function SessionPage() {
         }}
       >
         {data.claudeVersion && <Chip color={C.mute}>v{data.claudeVersion}</Chip>}
+        {data.isReviewInitiator && <Chip color={C.cc}>Review 发起者</Chip>}
         <Chip color={C.mute}>
           <span className="tnum">{data.messageCount}</span>&nbsp;条消息
         </Chip>

@@ -114,6 +114,7 @@ describe('database migrations', () => {
       { version: 16, name: 'retire_synthetic_zero_price_seed' },
       { version: 17, name: 'source_native_relationship_evidence' },
       { version: 18, name: 'codex_session_scoped_span_ids' },
+      { version: 19, name: 'codex_review_initiator_sessions' },
     ]);
 
     const legacySession = database
@@ -150,7 +151,8 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(18);
+    expect(count.count).toBe(19);
+    expect(columnsOf(database, 'sessions')).toContain('is_review_initiator');
     expect(columnsOf(database, 'session_relationships')).toEqual(
       expect.arrayContaining([
         'call_started_at',
@@ -358,27 +360,27 @@ describe('database migrations', () => {
     database.close();
   });
 
-  it('selects the price effective at the requested event time', () => {
+  it('uses the newest active price for historical spans regardless of event time', () => {
     const database = createDatabase(':memory:');
     const insert = database.prepare(
       `INSERT INTO pricing (
         model, input_price, cache_creation_price, cache_read_price, output_price,
-        currency, unit, effective_from
-      ) VALUES (?, ?, ?, ?, ?, 'CNY', 'per_million_tokens', ?)`,
+        currency, unit, effective_from, created_at
+      ) VALUES (?, ?, ?, ?, ?, 'CNY', 'per_million_tokens', ?, ?)`,
     );
-    insert.run('versioned-model', 1, 1, 0.1, 2, 1000);
-    insert.run('versioned-model', 5, 5, 0.5, 10, 2000);
+    insert.run('versioned-model', 1, 1, 0.1, 2, 2000, 100);
+    insert.run('versioned-model', 5, 5, 0.5, 10, 1000, 200);
 
-    expect(lookupPricing(database, 'versioned-model', 500)).toBeUndefined();
-    expect(lookupPricing(database, 'versioned-model', 1500)?.inputPrice).toBe(1);
-    expect(lookupPricing(database, 'versioned-model', 2500)).toMatchObject({
+    expect(lookupPricing(database, 'versioned-model', 500)).toMatchObject({
       inputPrice: 5,
-      effectiveFrom: 2000,
+      effectiveFrom: 1000,
     });
+    expect(lookupPricing(database, 'versioned-model', 1500)?.inputPrice).toBe(5);
+    expect(lookupPricing(database, 'versioned-model', 2500)?.inputPrice).toBe(5);
     database.close();
   });
 
-  it('does not fall back to an older flat price after an unsupported schedule applies', () => {
+  it('keeps the newest unsupported price from falling back to an older flat price', () => {
     const database = createDatabase(':memory:');
     const insert = database.prepare(
       `INSERT INTO pricing (
@@ -389,7 +391,7 @@ describe('database migrations', () => {
     insert.run('tiered-model', 1000, 'flat_four_token_classes', 'active');
     insert.run('tiered-model', 2000, 'long_context_tiered', 'unsupported');
 
-    expect(lookupPricing(database, 'tiered-model', 1500)).toBeDefined();
+    expect(lookupPricing(database, 'tiered-model', 1500)).toBeUndefined();
     expect(lookupPricing(database, 'tiered-model', 2500)).toBeUndefined();
     database.close();
   });

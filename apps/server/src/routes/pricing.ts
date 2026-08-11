@@ -89,7 +89,7 @@ export function registerPricingRoutes(app: FastifyInstance, runtime: PricingRunt
     },
   );
 
-  // 按每个 LLM span 的发生时间重新选择生效 pricing，并重建 session cost。
+  // 使用当前最新 active revision 覆盖全部历史 LLM span，并重建 session cost。
   app.post('/api/recompute-cost', async () => {
     const result = modelCatalog.executeRecalculation({}, modelCatalog.pricingRevision());
     return {

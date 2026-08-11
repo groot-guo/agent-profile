@@ -97,6 +97,24 @@ describe('session analysis windows', () => {
     expect(result.toolWindow).toMatchObject({ total: 1, isWindowed: false });
     expect(result.sidechainTurnWindow).toMatchObject({ total: 0, isWindowed: false });
   });
+
+  it('omits stub turns from context points while retaining the LLM turn summary', () => {
+    const result = buildSessionAnalysisWindows(
+      [
+        span({
+          id: 'stub',
+          type: 'llm_turn',
+          name: 'review',
+          startTime: 1,
+          metadata: { tokenUsageSource: 'not_captured', stubTurn: true },
+        }),
+      ],
+      () => undefined,
+    );
+
+    expect(result.summary.llmTurns).toBe(1);
+    expect(result.context).toMatchObject({ total: 0, points: [] });
+  });
 });
 
 function span(overrides: Partial<Span> & Pick<Span, 'id' | 'type' | 'name' | 'startTime'>): Span {

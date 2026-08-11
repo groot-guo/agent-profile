@@ -1,9 +1,10 @@
 # Cost and Consumption Statistics — Current State
 
 The implemented `/stats` page and `GET /api/stats` endpoint aggregate primary
-Sessions in the local database. A Codex source record containing only sidechain
-Spans remains stored and directly inspectable but is not counted as a peer
-top-level Session. Monetary values use the current `CNY per million tokens`
+Sessions in the local database. A Codex source record marked as a review
+initiator, or containing only sidechain Spans, remains stored and directly
+inspectable but is not counted as a peer top-level Session. Monetary values use
+the current `CNY per million tokens`
 contract. The statistics are descriptive process telemetry; source coverage,
 missing pricing, and calculation provenance must be considered before comparing
 agents.
@@ -44,6 +45,12 @@ the reviewed pricing revision and scope. After a successful run, a content-free
 session-update signal lists the affected Session IDs so open discovery,
 statistics, Profile, and detail surfaces refetch; a failed run leaves all
 aggregates unchanged.
+
+Adding a pricing revision does not silently rewrite stored costs. The explicit
+preview/execute flow applies the newest active exact-model price to every
+historical LLM Span in the selected scope, regardless of that row's optional
+`effectiveFrom`; the field remains inspectable provenance rather than a time
+filter.
 
 ## Grouped statistics
 

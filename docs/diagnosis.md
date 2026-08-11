@@ -135,6 +135,13 @@ remain a legacy fallback. Every LLM-assisted entry point reports
 payload is sent, and semantic conclusions are suppressed when the structural
 token/model telemetry required for the claim is not captured.
 
+An explicitly requested semantic diagnosis with no configured Provider reports
+`not_configured` and sends no payload; a Session whose LLM turns have no captured
+token/model telemetry reports `insufficient_evidence` and also sends no payload.
+Both states retain deterministic local diagnosis. Codex review initiators with
+stub-only turns therefore show unavailable context evidence rather than a
+measured zero.
+
 Session-detail presentation (T140) follows the same evidence boundary: cost,
 context, and cache panels render `not_captured` as unavailable rather than
 `¥0` or a zero percent, and a partial known subtotal is labeled partial.

@@ -128,6 +128,7 @@ export function analyzeSession(
     fileLines: fileMeta?.lines,
     messageCount: parsed.meta.messageCount,
     importedAt: calculatedAt,
+    isReviewInitiator: parsed.meta.isReviewInitiator ?? false,
   };
 
   return { summary, spans: parsed.spans };

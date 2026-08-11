@@ -403,10 +403,12 @@ Model, context, and diagnosis configuration has separate scopes:
   for utilization and context-bloat analysis. Unknown model IDs stay unconfigured
   and do not inherit a provider or alias value. Seed references and vendor entry
   points are recorded in `apps/server/src/model-catalog/defaults.ts`.
-- `/api/pricing` stores four token-class prices and an optional `effectiveFrom`.
-  Imported and recomputed Session costs use the price effective at each LLM Span's
-  start time; missing pricing remains unknown. `POST /api/recompute-cost` is the
-  compatibility full historical recalculation operation.
+- `/api/pricing` stores four token-class prices and an optional `effectiveFrom`
+  provenance field. Imported and explicitly recomputed Session costs use the
+  newest active price for the exact raw model, including historical LLM Spans
+  that predate the configured `effectiveFrom`; missing pricing remains unknown.
+  `POST /api/recompute-cost` is the compatibility full historical
+  recalculation operation.
 - `/api/model-catalog/*` exposes `model-catalog/v1`: observed raw-model inventory,
   pricing history/provenance, exact context configuration, explicit audited
   `pricingEquivalent` aliases, content-free configuration import/export, and

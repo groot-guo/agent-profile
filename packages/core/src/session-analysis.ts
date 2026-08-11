@@ -87,7 +87,8 @@ export function buildSessionAnalysisWindows(
   const mainTools = tools.filter((span) => !span.isSidechain);
   const sidechainTurns = turns.filter((span) => span.isSidechain);
   const sidechainTools = tools.filter((span) => span.isSidechain);
-  const contextPoints = turns.map((turn) => toContextPoint(turn, contextWindowLookup));
+  const contextTurns = turns.filter(hasCapturedContextEvidence);
+  const contextPoints = contextTurns.map((turn) => toContextPoint(turn, contextWindowLookup));
   const sampledContext = sampleContextPoints(contextPoints, MAX_ANALYSIS_CONTEXT_POINTS);
   const recentTools = mainTools.slice(-MAX_ANALYSIS_TOOL_EVENTS).map(toToolEvent);
   const sidechainTurnEvents = sidechainTurns
@@ -112,6 +113,17 @@ export function buildSessionAnalysisWindows(
       events: sidechainTurnEvents,
     },
   };
+}
+
+export function hasCapturedContextEvidence(span: Span): boolean {
+  if (span.type !== 'llm_turn') return false;
+  const source = span.metadata?.tokenUsageSource;
+  if (source === 'not_captured') return false;
+  return (
+    source !== undefined ||
+    span.contextTokens > 0 ||
+    span.inputTokens + span.cacheCreationTokens + span.cacheReadTokens + span.outputTokens > 0
+  );
 }
 
 function buildSpanSummary(

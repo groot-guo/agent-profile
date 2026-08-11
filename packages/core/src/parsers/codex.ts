@@ -460,6 +460,11 @@ export function parseCodexTranscript(
       ? meta.parent_thread_id
       : opts.sourceParentSessionId;
   const isSidechain = sourceParentSessionId !== undefined;
+  const isReviewInitiator =
+    !isSidechain &&
+    sorted.some(
+      (entry) => entry.type === 'event_msg' && entry.payload?.type === 'entered_review_mode',
+    );
 
   // Codex rollout does not carry a trustworthy thread title. Only the state
   // database title is accepted; reasoning is process evidence, not identity.
@@ -833,6 +838,7 @@ export function parseCodexTranscript(
       sourceAgentRole: nonEmptyString(opts.sourceAgentRole),
       sourceAgentPath: nonEmptyString(opts.sourceAgentPath),
       sourceChildLineage: childLineage.length > 0 ? childLineage : undefined,
+      isReviewInitiator,
       messageCount: spans.filter((span) => span.type === 'llm_turn' && !isCrossSessionSpan(span))
         .length,
       agent: 'codex',

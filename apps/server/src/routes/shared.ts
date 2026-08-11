@@ -9,7 +9,8 @@ export const SESSION_COLS = `id, name, file_path as filePath, agent, file_mtime 
   cost_calculated_at as costCalculatedAt, cost_calculator_version as costCalculatorVersion,
   peak_context_tokens as peakContextTokens,
   avg_context_tokens as avgContextTokens, cache_hit_rate as cacheHitRate,
-  message_count as messageCount, imported_at as importedAt, tags, notes`;
+  message_count as messageCount, is_review_initiator as isReviewInitiator,
+  imported_at as importedAt, tags, notes`;
 
 export const SPAN_COLS = `id, session_id as sessionId, parent_id as parentId, type, name,
   start_time as startTime, end_time as endTime, input_tokens as inputTokens,
