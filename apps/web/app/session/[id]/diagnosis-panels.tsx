@@ -43,21 +43,28 @@ export function DiagnosisList({
                 flexWrap: 'wrap',
               }}
             >
+              {f.title.startsWith('[LLM]') && <Chip color={C.link}>Provider 辅助</Chip>}
               <Chip color={SEV_COLOR[f.severity]}>
                 {SEV_LABEL[f.severity] || f.severity} · {DIAG_LABEL[f.type]}
               </Chip>
               <span style={{ fontSize: FS.base, color: C.text, fontWeight: 600 }}>{f.title}</span>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div className="tnum" style={{ fontSize: FS.base, fontWeight: 600, color: C.cc }}>
-                ~{fmtTokens(f.wastedTokens)}
-              </div>
-              <div
-                className="tnum"
-                style={{ fontSize: FS.cap, color: f.costUnknown ? C.medium : C.mute }}
-              >
-                {f.costUnknown ? '未定价' : `¥${f.wastedCost.toFixed(5)}`}
-              </div>
+              {f.title.startsWith('[LLM]') ? (
+                <div style={{ fontSize: FS.cap, color: C.link }}>语义推断</div>
+              ) : (
+                <>
+                  <div className="tnum" style={{ fontSize: FS.base, fontWeight: 600, color: C.cc }}>
+                    ~{fmtTokens(f.wastedTokens)}
+                  </div>
+                  <div
+                    className="tnum"
+                    style={{ fontSize: FS.cap, color: f.costUnknown ? C.medium : C.mute }}
+                  >
+                    {f.costUnknown ? '未定价' : `¥${f.wastedCost.toFixed(5)}`}
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <div
@@ -160,9 +167,12 @@ export function SemanticDiagnosisDisclosure({
     );
   }
 
+  const findingCount = report.findingCount ?? 0;
   const status =
     report.status === 'completed'
-      ? `已完成 · ${report.provider || 'Provider'} · ${report.payload.redactions} 处脱敏`
+      ? findingCount > 0
+        ? `已完成 · ${report.provider || 'Provider'} · ${findingCount} 条语义辅助结论 · ${report.payload.redactions} 处脱敏`
+        : `已完成 · ${report.provider || 'Provider'} · 未发现额外语义结论 · ${report.payload.redactions} 处脱敏`
       : report.status === 'not_configured'
         ? '未配置 Provider，未发送内容'
         : report.status === 'insufficient_evidence'
@@ -189,6 +199,14 @@ export function SemanticDiagnosisDisclosure({
           个工具输入，{report.payload.characters} 字符；只保留有界、脱敏的本地 audit metadata。
         </div>
       )}
+      {report.payload.mode === 'bounded_redacted' && (
+        <div>
+          分析依据：当前 Session 已归一化存储的 Span 摘要；本次最多使用任务标题、5 条 thinking
+          摘要（每条最多 500 字符）和 20 条工具名称/输入（各最多 200 字符），只判断 thinking
+          偏离、无效探索和工具偏离，不使用原始 transcript、完整工具输出或 Git 提交内容。
+        </div>
+      )}
+      {report.savedAt && <div>本次语义结果已保存，刷新后会恢复。</div>}
       {report.status === 'not_configured' && (
         <div>
           需要启用语义诊断？打开{' '}
@@ -196,6 +214,13 @@ export function SemanticDiagnosisDisclosure({
             Provider 设置
           </Link>{' '}
           完成配置。
+        </div>
+      )}
+      {report.status === 'completed' && (
+        <div>
+          {findingCount > 0
+            ? '语义结论已合并到下方诊断列表，带有“Provider 辅助”标记；本地确定性诊断仍同时保留。'
+            : '本次 Provider 没有追加语义结论；下方诊断列表仍包含本地确定性诊断结果。'}
         </div>
       )}
       {report.limitations.map((limitation) => (

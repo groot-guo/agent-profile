@@ -45,6 +45,10 @@ export interface SemanticDiagnosisReport {
   consent: 'not_granted' | 'granted';
   status: SemanticDiagnosisStatus;
   provider: 'anthropic' | 'openai' | null;
+  /** Number of parsed semantic findings added by the Provider for this run. */
+  findingCount?: number;
+  /** Local time when this bounded result was persisted for the Session. */
+  savedAt?: number;
   payload: {
     mode: 'not_sent' | 'bounded_redacted';
     thinkingItems: number;
