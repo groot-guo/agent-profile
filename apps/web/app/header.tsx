@@ -12,6 +12,7 @@ const NAV = [
   { href: '/tasks', label: '任务' },
   { href: '/profiles', label: '画像' },
   { href: '/settings/models', label: '模型' },
+  { href: '/settings/provider', label: 'Provider' },
   { href: '/prompt-review', label: '迭代' },
   { href: '/stats', label: '统计' },
 ];

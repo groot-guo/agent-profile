@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import Fastify from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../database';
+import { loadProviderConfiguration, providerStatus } from '../provider-config';
 import { registerProviderRoutes } from '../routes/provider';
 import { createRuntime } from '../runtime';
 
@@ -12,10 +13,33 @@ const tempDirectories: string[] = [];
 afterEach(() => {
   for (const directory of tempDirectories.splice(0))
     rmSync(directory, { recursive: true, force: true });
+  delete process.env.AGENT_PROFILE_DATA_DIR;
 });
 
 describe('Provider configuration routes', () => {
+  it('labels the legacy environment fallback as env-sourced', () => {
+    const configuration = loadProviderConfiguration({
+      dataDirectory: '/path/that/does/not/exist',
+      env: {
+        LLM_API_KEY: 'env-secret',
+        LLM_PROVIDER: 'openai',
+        LLM_MODEL: 'env-model',
+        LLM_BASE_URL: 'http://127.0.0.1:4100/v1',
+      },
+    });
+
+    expect(configuration).toMatchObject({ source: 'env', model: 'env-model' });
+    expect(providerStatus(configuration)).toMatchObject({
+      configured: true,
+      configSource: 'env',
+      keyConfigured: true,
+    });
+  });
+
   it('reports not_configured status without a key and never echoes the key', async () => {
+    const dataDirectory = mkdtempSync(join(tmpdir(), 'agent-profile-provider-empty-'));
+    tempDirectories.push(dataDirectory);
+    process.env.AGENT_PROFILE_DATA_DIR = dataDirectory;
     const runtime = createRuntime({
       database: createDatabase(':memory:'),
       autoScanDir: null,

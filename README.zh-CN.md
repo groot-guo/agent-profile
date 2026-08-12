@@ -294,6 +294,11 @@ Web 会先展示 disclosure：只发送有界且经过常见密钥脱敏的 Sess
 只保留 Session ID、时间、状态和 payload 计数，不保存原始来源或 provider 响应内容。未配置 Key
 或不主动 opt-in 时，仍只运行本地确定性诊断。
 
+Web 顶栏的 **Provider** 会打开 `/settings/provider`：这里会显示非敏感配置状态，并提供
+Provider、Base URL、模型和 API key 的配置表单。Session 诊断卡片在未配置时也会直接链接到
+该页面。保存后回到 Session，明确点击“允许并运行语义诊断”；仅保存配置不会发送 payload。
+API key 只在提交时发送给本机 Server，保存后会从表单清除，状态接口不会返回 key。
+
 模型、上下文和诊断配置分别属于不同范围：
 
 - `/api/model-context` 只编辑精确 raw model 的上下文窗口参考值，用于窗口利用率和上下文

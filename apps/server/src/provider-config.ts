@@ -23,6 +23,7 @@ export interface ProviderConfiguration {
   baseUrl: string;
   model: string;
   apiKey: string;
+  source?: Exclude<ProviderConfigSource, 'none'>;
 }
 
 const PROVIDER_FILE_NAME = 'provider.json';
@@ -85,6 +86,7 @@ export function loadProviderConfiguration(
           baseUrl: parsed.baseUrl.trim(),
           model: parsed.model.trim(),
           apiKey: parsed.apiKey.trim(),
+          source: 'file',
         };
       }
     } catch {
@@ -100,6 +102,7 @@ export function loadProviderConfiguration(
       baseUrl: (env.LLM_BASE_URL || 'https://api.openai.com/v1').trim(),
       model: (env.LLM_MODEL || DEFAULT_MODEL[provider]).trim(),
       apiKey: envKey,
+      source: 'env',
     };
   }
   return null;
@@ -139,7 +142,7 @@ export function providerStatus(
     model: configuration.model,
     endpointHost: host,
     endpointLocality: locality,
-    configSource: 'file',
+    configSource: configuration.source ?? 'file',
     testStatus: options.testStatus ?? 'untested',
     restartRequired: options.restartRequired ?? false,
     keyConfigured: true,

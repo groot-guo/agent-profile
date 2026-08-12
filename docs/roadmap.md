@@ -67,6 +67,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 
 | Task | Title | Status |
 | --- | --- | --- |
+| [T153](roadmap-archive/2026-q3.md#t153) | semantic Provider setup path | completed |
 | [T152](roadmap-archive/2026-q3.md#t152) | repository lint diagnostics cleanup | completed |
 | [T151](roadmap-archive/2026-q3.md#t151) | Web development-cache ignore correction | completed |
 | [T150](roadmap-archive/2026-q3.md#t150) | isolated Next development cache recovery | completed |

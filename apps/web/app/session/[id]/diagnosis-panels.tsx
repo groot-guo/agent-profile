@@ -1,4 +1,5 @@
 import type { DiagnosisResult } from '@agent-profile/core';
+import Link from 'next/link';
 import { C, DIAG_LABEL, FS, fmtTokens, R, SEV_COLOR, SEV_LABEL, SP } from '../../theme';
 import { Chip, Empty, SoftButton } from '../../ui';
 
@@ -137,6 +138,13 @@ export function SemanticDiagnosisDisclosure({
           摘要和工具输入发送到已配置的 Provider；Provider
           地址的本地性不会由本地进程验证，原始内容不会写入 audit。
         </div>
+        <div style={{ color: C.sub, fontSize: FS.cap, lineHeight: 1.6, marginTop: SP.xs }}>
+          尚未配置 Provider？先到{' '}
+          <Link href="/settings/provider" style={{ color: C.link }}>
+            Provider 设置
+          </Link>{' '}
+          填写服务地址、模型和 API key；保存后返回本页，再点击运行。
+        </div>
         {error && (
           <div style={{ color: C.medium, fontSize: FS.cap, marginTop: SP.xs }}>{error}</div>
         )}
@@ -179,6 +187,15 @@ export function SemanticDiagnosisDisclosure({
         <div>
           Provider payload：{report.payload.thinkingItems} 个 thinking、{report.payload.toolItems}{' '}
           个工具输入，{report.payload.characters} 字符；只保留有界、脱敏的本地 audit metadata。
+        </div>
+      )}
+      {report.status === 'not_configured' && (
+        <div>
+          需要启用语义诊断？打开{' '}
+          <Link href="/settings/provider" style={{ color: C.link }}>
+            Provider 设置
+          </Link>{' '}
+          完成配置。
         </div>
       )}
       {report.limitations.map((limitation) => (

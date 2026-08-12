@@ -402,6 +402,14 @@ local diagnosis only. When no LLM turn in the Session has captured token/model
 telemetry, semantic conclusions are suppressed and the diagnosis reports
 `insufficient_evidence` instead of guessing.
 
+The Web navigation entry **Provider** opens `/settings/provider`, where you can
+see the non-secret configuration status and save the provider, base URL, model,
+and API key. The Session diagnosis panel links to this page when no Provider is
+configured. After saving, return to the Session and explicitly click **Allow
+and run semantic diagnosis**; configuration alone never sends a Session
+payload. The API key is submitted to the local Server only, is cleared from the
+form after save, and is never returned by the status endpoint.
+
 Model, context, and diagnosis configuration has separate scopes:
 
 - `/api/model-context` edits the exact raw model's context-window reference used

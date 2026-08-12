@@ -135,6 +135,12 @@ remain a legacy fallback. Every LLM-assisted entry point reports
 payload is sent, and semantic conclusions are suppressed when the structural
 token/model telemetry required for the claim is not captured.
 
+The Web setup path is `/settings/provider` (also available as the **Provider**
+header entry). It displays the non-secret status and submits provider, base URL,
+model, and API key to the local Server. The Session diagnosis disclosure links
+there when no Provider is configured, and the user must return to the Session and
+explicitly opt in before a bounded, redacted payload is sent.
+
 An explicitly requested semantic diagnosis with no configured Provider reports
 `not_configured` and sends no payload; a Session whose LLM turns have no captured
 token/model telemetry reports `insufficient_evidence` and also sends no payload.
