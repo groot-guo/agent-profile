@@ -4,7 +4,9 @@ import {
   endpointLocalityLabel,
   loadProviderStatus,
   providerLabel,
+  providerTestLabel,
   saveProviderConfiguration,
+  testProvider,
 } from './provider-config';
 
 describe('Provider configuration helpers', () => {
@@ -26,6 +28,11 @@ describe('Provider configuration helpers', () => {
     expect(providerLabel(null)).toBe('未配置');
     expect(endpointLocalityLabel('loopback')).toBe('本机地址');
     expect(endpointLocalityLabel('external')).toBe('外部地址');
+    expect(providerTestLabel({ status: 'passed' })).toContain('通过');
+    expect(providerTestLabel({ status: 'failed', reason: 'timeout' })).toContain('超时');
+    expect(
+      providerTestLabel({ status: 'failed', reason: 'model_unavailable', httpStatus: 400 }),
+    ).toContain('模型 ID 不可用');
   });
 
   it('loads and saves status without exposing credentials in the helper', async () => {
@@ -34,6 +41,7 @@ describe('Provider configuration helpers', () => {
       provider: 'openai' as const,
       model: 'fixture-model',
       endpointHost: '127.0.0.1',
+      endpointUrl: 'http://127.0.0.1:4100/v1',
       endpointLocality: 'loopback' as const,
       configSource: 'file' as const,
       testStatus: 'untested' as const,
@@ -46,7 +54,12 @@ describe('Provider configuration helpers', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, status }),
+        json: async () => ({ ok: true, status, test: { status: 'passed' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, status, test: { status: 'passed' } }),
       });
 
     await expect(loadProviderStatus('/api', request)).resolves.toEqual(status);
@@ -61,11 +74,16 @@ describe('Provider configuration helpers', () => {
         },
         request,
       ),
-    ).resolves.toEqual(status);
+    ).resolves.toMatchObject({ status, test: { status: 'passed' } });
+    await expect(testProvider('/api', request)).resolves.toMatchObject({
+      status,
+      test: { status: 'passed' },
+    });
     expect(request).toHaveBeenCalledWith('/api/provider/status');
     expect(request).toHaveBeenCalledWith(
       '/api/provider/configuration',
       expect.objectContaining({ method: 'PUT' }),
     );
+    expect(request).toHaveBeenCalledWith('/api/provider/test', { method: 'POST' });
   });
 });

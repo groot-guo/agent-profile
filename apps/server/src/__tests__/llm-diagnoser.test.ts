@@ -1,7 +1,111 @@
 import { describe, expect, it } from 'vitest';
-import { createLlmDiagnoser, createSemanticDiagnosisAuditStore } from '../llm-diagnoser';
+import {
+  createLlmDiagnoser,
+  createSemanticDiagnosisAuditStore,
+  testProviderConnection,
+} from '../llm-diagnoser';
 
 describe('semantic diagnosis Provider client', () => {
+  it('tests OpenAI-compatible and Anthropic-native protocol shapes', async () => {
+    const requests: Array<{ input: Parameters<typeof fetch>[0]; init?: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      requests.push({ input, init });
+      return new Response('{}', { status: 200 });
+    };
+
+    await expect(
+      testProviderConnection(
+        {
+          provider: 'openai',
+          baseUrl: 'https://openai.example/v1/',
+          model: 'fixture-openai',
+          apiKey: 'openai-secret',
+        },
+        fetchImpl,
+      ),
+    ).resolves.toEqual({ status: 'passed' });
+    await expect(
+      testProviderConnection(
+        {
+          provider: 'anthropic',
+          baseUrl: 'https://anthropic.example/v1',
+          model: 'fixture-anthropic',
+          apiKey: 'anthropic-secret',
+        },
+        fetchImpl,
+      ),
+    ).resolves.toEqual({ status: 'passed' });
+
+    expect(requests[0]?.input).toBe('https://openai.example/v1/chat/completions');
+    expect(requests[0]?.init?.headers).toMatchObject({
+      Authorization: 'Bearer openai-secret',
+    });
+    expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
+      model: 'fixture-openai',
+      max_tokens: 1,
+    });
+    expect(requests[1]?.input).toBe('https://anthropic.example/v1/messages');
+    expect(requests[1]?.init?.headers).toMatchObject({
+      'x-api-key': 'anthropic-secret',
+      'anthropic-version': '2023-06-01',
+    });
+    expect(JSON.parse(String(requests[1]?.init?.body))).toMatchObject({
+      model: 'fixture-anthropic',
+      max_tokens: 1,
+    });
+  });
+
+  it('classifies HTTP and network probe failures without response content', async () => {
+    await expect(
+      testProviderConnection(
+        {
+          provider: 'openai',
+          baseUrl: 'https://provider.example/v1',
+          model: 'fixture',
+          apiKey: 'secret',
+        },
+        async () => new Response('provider-response-secret', { status: 401 }),
+      ),
+    ).resolves.toEqual({ status: 'failed', reason: 'authentication_error', httpStatus: 401 });
+    await expect(
+      testProviderConnection(
+        {
+          provider: 'openai',
+          baseUrl: 'https://provider.example/v1',
+          model: 'fixture',
+          apiKey: 'secret',
+        },
+        async () => {
+          throw new Error('network-secret');
+        },
+      ),
+    ).resolves.toEqual({ status: 'failed', reason: 'network_error' });
+  });
+
+  it('classifies a provider model rejection without exposing the response body', async () => {
+    const responseSecret = 'provider-response-secret';
+    await expect(
+      testProviderConnection(
+        {
+          provider: 'openai',
+          baseUrl: 'https://provider.example/v1',
+          model: 'unsupported-model',
+          apiKey: 'secret',
+        },
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code: '400',
+                message: `Invalid model name; ${responseSecret}`,
+              },
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    ).resolves.toEqual({ status: 'failed', reason: 'model_unavailable', httpStatus: 400 });
+  });
+
   it('keeps the local audit store bounded and content-free', () => {
     const store = createSemanticDiagnosisAuditStore(2);
     const payload = {
@@ -74,6 +178,7 @@ describe('semantic diagnosis Provider client', () => {
     expect(result?.semantic).toMatchObject({
       status: 'completed',
       provider: 'openai',
+      findingCount: 1,
       payload: {
         mode: 'bounded_redacted',
         thinkingItems: 1,
@@ -89,6 +194,46 @@ describe('semantic diagnosis Provider client', () => {
     expect(payload).not.toContain('sk-anothersecret123456789');
     expect(payload).not.toContain('super-secret-value');
     expect(payload).toContain('[REDACTED');
+  });
+
+  it('marks a non-JSON Provider response as failed instead of a completed empty diagnosis', async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: 'The session looks fine.' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    const diagnoser = createLlmDiagnoser('test-key', { fetchImpl, provider: 'openai' });
+
+    const result = await diagnoser?.diagnoseWithMetadata({
+      sessionId: 'session-1',
+      thinkingTexts: [],
+      toolCallSequence: [{ spanId: 'tool-1', name: 'Bash', input: '{}', isError: false }],
+    });
+
+    expect(result).toMatchObject({
+      findings: [],
+      semantic: { status: 'failed', findingCount: 0 },
+    });
+  });
+
+  it('keeps a valid empty semantic array as a completed zero-finding result', async () => {
+    const fetchImpl: typeof fetch = async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: '[]' } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    const diagnoser = createLlmDiagnoser('test-key', { fetchImpl, provider: 'openai' });
+
+    const result = await diagnoser?.diagnoseWithMetadata({
+      sessionId: 'session-1',
+      thinkingTexts: [],
+      toolCallSequence: [{ spanId: 'tool-1', name: 'Bash', input: '{}', isError: false }],
+    });
+
+    expect(result).toMatchObject({
+      findings: [],
+      semantic: { status: 'completed', findingCount: 0 },
+    });
   });
 
   it('reports Provider failure without throwing or retaining the response body', async () => {

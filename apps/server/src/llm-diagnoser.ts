@@ -6,6 +6,7 @@ import {
   redactSensitiveText,
   type SemanticDiagnosisReport,
 } from '@agent-profile/core';
+import type { ProviderConfiguration } from './provider-config';
 
 // LLM client for semantic diagnosis. Supports Anthropic (native) + OpenAI-compatible providers.
 // The client is only invoked by the diagnosis route after request-scoped opt-in.
@@ -20,6 +21,21 @@ const MAX_AUDIT_ENTRIES = 100;
 
 type SemanticProvider = 'anthropic' | 'openai';
 type ProviderCallStatus = 'completed' | 'failed';
+export type ProviderTestFailureReason =
+  | 'not_configured'
+  | 'timeout'
+  | 'network_error'
+  | 'authentication_error'
+  | 'model_unavailable'
+  | 'invalid_request'
+  | 'endpoint_not_found'
+  | 'http_error';
+
+export interface ProviderTestResult {
+  status: 'passed' | 'failed';
+  reason?: ProviderTestFailureReason;
+  httpStatus?: number;
+}
 
 export interface LlmDiagnoserOptions {
   fetchImpl?: typeof fetch;
@@ -47,6 +63,103 @@ export interface SemanticDiagnosisAuditStore {
   snapshot(): SemanticDiagnosisAuditEntry[];
 }
 
+const PROVIDER_TEST_TIMEOUT_MS = 10_000;
+const PROVIDER_ERROR_BODY_LIMIT = 4096;
+
+async function readProviderErrorHint(response: Response): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  try {
+    while (text.length < PROVIDER_ERROR_BODY_LIMIT) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+    }
+    if (text.length >= PROVIDER_ERROR_BODY_LIMIT) await reader.cancel();
+    return text.slice(0, PROVIDER_ERROR_BODY_LIMIT);
+  } catch {
+    return '';
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function classifyProviderHttpFailure(status: number, body: string): ProviderTestFailureReason {
+  if (status === 401 || status === 403) return 'authentication_error';
+  if (status === 404) return 'endpoint_not_found';
+  if (status === 400) {
+    const normalized = body.toLowerCase();
+    if (
+      normalized.includes('model') &&
+      /(invalid|not found|unavailable|unsupported|does not exist|unknown)/.test(normalized)
+    ) {
+      return 'model_unavailable';
+    }
+    return 'invalid_request';
+  }
+  return 'http_error';
+}
+
+export async function testProviderConnection(
+  configuration: ProviderConfiguration | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ProviderTestResult> {
+  if (!configuration) return { status: 'failed', reason: 'not_configured' };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROVIDER_TEST_TIMEOUT_MS);
+  const baseUrl = configuration.baseUrl.replace(/\/$/, '');
+  const isAnthropic = configuration.provider === 'anthropic';
+  const url = isAnthropic ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`;
+  const headers: Record<string, string> = isAnthropic
+    ? {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'x-api-key': configuration.apiKey,
+      }
+    : {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${configuration.apiKey}`,
+      };
+  const requestBody = isAnthropic
+    ? {
+        model: configuration.model,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'Respond with exactly OK.' }],
+      }
+    : {
+        model: configuration.model,
+        messages: [{ role: 'user', content: 'Respond with exactly OK.' }],
+        max_tokens: 1,
+        temperature: 0,
+      };
+
+  try {
+    const response = await fetchImpl(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+    if (response.ok) return { status: 'passed' };
+    const errorBody = await readProviderErrorHint(response);
+    return {
+      status: 'failed',
+      reason: classifyProviderHttpFailure(response.status, errorBody),
+      httpStatus: response.status,
+    };
+  } catch {
+    return {
+      status: 'failed',
+      reason: controller.signal.aborted ? 'timeout' : 'network_error',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function createSemanticDiagnosisAuditStore(
   maxEntries = MAX_AUDIT_ENTRIES,
 ): SemanticDiagnosisAuditStore {
@@ -72,6 +185,11 @@ function detectProvider(baseUrl: string, configured?: SemanticProvider): Semanti
 interface PromptBuildResult {
   prompt: string;
   payload: SemanticDiagnosisReport['payload'];
+}
+
+interface ParsedSemanticResponse {
+  findings: LlmFinding[];
+  valid: boolean;
 }
 
 function spanReference(index: number): string {
@@ -143,14 +261,18 @@ Only include genuine issues. Return empty array [] if none found.`,
   };
 }
 
-function parseResponse(content: string, spanIdsByReference: Map<string, string>): LlmFinding[] {
+function parseResponse(
+  content: string,
+  spanIdsByReference: Map<string, string>,
+): ParsedSemanticResponse {
   const jsonMatch = content.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return [];
+  if (!jsonMatch) return { findings: [], valid: false };
   try {
     const parsed: unknown = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((item): LlmFinding[] => {
-      if (!isRecord(item)) return [];
+    if (!Array.isArray(parsed)) return { findings: [], valid: false };
+    const findings: LlmFinding[] = [];
+    for (const item of parsed) {
+      if (!isRecord(item)) return { findings: [], valid: false };
       const type = item.type;
       const severity = item.severity;
       if (
@@ -159,7 +281,7 @@ function parseResponse(content: string, spanIdsByReference: Map<string, string>)
         typeof item.title !== 'string' ||
         typeof item.detail !== 'string'
       ) {
-        return [];
+        return { findings: [], valid: false };
       }
       const title = redactSensitiveText(item.title, 300).text;
       const detail = redactSensitiveText(item.detail, 1_000).text;
@@ -172,10 +294,11 @@ function parseResponse(content: string, spanIdsByReference: Map<string, string>)
             .filter((spanId): spanId is string => spanId !== undefined)
             .slice(0, 20)
         : [];
-      return [{ type, severity, title: `[LLM] ${title}`, detail, suggestion, spanIds }];
-    });
+      findings.push({ type, severity, title: `[LLM] ${title}`, detail, suggestion, spanIds });
+    }
+    return { findings, valid: true };
   } catch {
-    return [];
+    return { findings: [], valid: false };
   }
 }
 
@@ -213,9 +336,10 @@ async function callAnthropic(
     if (!res.ok) return { findings: [], status: 'failed' };
     const data = (await res.json()) as { content?: { type: string; text: string }[] };
     const textContent = data.content?.find((content) => content.type === 'text')?.text;
+    const parsed = textContent ? parseResponse(textContent, spanIdsByReference) : null;
     return {
-      findings: textContent ? parseResponse(textContent, spanIdsByReference) : [],
-      status: textContent ? 'completed' : 'failed',
+      findings: parsed?.findings ?? [],
+      status: parsed?.valid ? 'completed' : 'failed',
     };
   } catch {
     return { findings: [], status: 'failed' };
@@ -255,9 +379,10 @@ async function callOpenAI(
     if (!res.ok) return { findings: [], status: 'failed' };
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const content = data.choices?.[0]?.message?.content;
+    const parsed = content ? parseResponse(content, spanIdsByReference) : null;
     return {
-      findings: content ? parseResponse(content, spanIdsByReference) : [],
-      status: content ? 'completed' : 'failed',
+      findings: parsed?.findings ?? [],
+      status: parsed?.valid ? 'completed' : 'failed',
     };
   } catch {
     return { findings: [], status: 'failed' };
@@ -280,7 +405,7 @@ export function createLlmDiagnoser(
 
   const diagnoseWithMetadata = async (ctx: LlmDiagnoseContext): Promise<LlmDiagnosisResponse> => {
     const built = buildPrompt(ctx);
-    const baseReport: Omit<SemanticDiagnosisReport, 'status'> = {
+    const baseReport: Omit<SemanticDiagnosisReport, 'status' | 'findingCount'> = {
       requested: true,
       consent: 'granted',
       provider,
@@ -299,7 +424,7 @@ export function createLlmDiagnoser(
     if (ctx.thinkingTexts.length === 0 && ctx.toolCallSequence.length === 0) {
       return {
         findings: [],
-        semantic: { ...baseReport, status: 'completed' },
+        semantic: { ...baseReport, status: 'completed', findingCount: 0 },
       };
     }
 
@@ -315,7 +440,7 @@ export function createLlmDiagnoser(
         : await callOpenAI(built.prompt, key, baseUrl, model, fetchImpl, spanIdsByReference);
     return {
       findings: call.findings,
-      semantic: { ...baseReport, status: call.status },
+      semantic: { ...baseReport, status: call.status, findingCount: call.findings.length },
     };
   };
 

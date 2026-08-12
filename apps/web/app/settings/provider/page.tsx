@@ -11,7 +11,9 @@ import {
   type ProviderKind,
   type ProviderStatus,
   providerLabel,
+  providerTestLabel,
   saveProviderConfiguration,
+  testProvider,
 } from '../../provider-config';
 import { C, FS, R, SP } from '../../theme';
 import { Card, Notice } from '../../ui';
@@ -39,6 +41,7 @@ export default function ProviderSettingsPage() {
   const [form, setForm] = useState<ProviderConfigurationInput>(DEFAULT_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ export default function ProviderSettingsPage() {
           setForm((current) => ({
             ...current,
             ...defaults,
+            baseUrl: nextStatus.endpointUrl || defaults.baseUrl,
             model: nextStatus.model || defaults.model,
           }));
         }
@@ -80,22 +84,42 @@ export default function ProviderSettingsPage() {
     setSaving(true);
     setFeedback(null);
     try {
-      const nextStatus = await saveProviderConfiguration(API, {
+      const result = await saveProviderConfiguration(API, {
         provider: form.provider,
         baseUrl: form.baseUrl.trim(),
         model: form.model.trim(),
         apiKey: form.apiKey.trim(),
       });
-      setStatus(nextStatus);
+      setStatus(result.status);
       setForm((current) => ({ ...current, apiKey: '' }));
       setFeedback({
-        kind: 'ok',
-        text: 'Provider 已保存。API key 不会返回到页面；现在可返回 Session 运行语义诊断。',
+        kind: result.test.status === 'passed' ? 'ok' : 'err',
+        text:
+          result.test.status === 'passed'
+            ? 'Provider 已保存且连接测试通过。API key 不会返回到页面；现在可返回 Session 运行语义诊断。'
+            : `Provider 已保存，但${providerTestLabel(result.test)}。请检查配置后重新测试。`,
       });
     } catch (error: unknown) {
       setFeedback({ kind: 'err', text: `Provider 保存失败：${errorMessage(error)}` });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTest(): Promise<void> {
+    setTesting(true);
+    setFeedback(null);
+    try {
+      const result = await testProvider(API);
+      setStatus(result.status);
+      setFeedback({
+        kind: result.test.status === 'passed' ? 'ok' : 'err',
+        text: providerTestLabel(result.test),
+      });
+    } catch (error: unknown) {
+      setFeedback({ kind: 'err', text: `Provider 测试失败：${errorMessage(error)}` });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -139,7 +163,17 @@ export default function ProviderSettingsPage() {
                     ? '环境变量'
                     : '无'}
               </div>
-              {status.configured && <div style={{ color: C.mute }}>当前测试状态：未测试。</div>}
+              {status.configured && (
+                <div style={{ color: C.mute }}>
+                  当前测试状态：
+                  {status.testStatus === 'passed'
+                    ? '通过'
+                    : status.testStatus === 'failed'
+                      ? '失败'
+                      : '未测试'}
+                  。
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ color: C.sub, fontSize: FS.sm }}>正在读取 Provider 状态…</div>
@@ -196,6 +230,12 @@ export default function ProviderSettingsPage() {
                 style={FIELD_STYLE}
               />
             </label>
+            <div style={{ color: C.mute, fontSize: FS.cap, lineHeight: 1.6 }}>
+              保存会发出一次最小 probe 请求，可能消耗极少量 token。当前支持两种 wire protocol：
+              OpenAI-compatible（`/chat/completions`，可覆盖 OpenAI、DeepSeek 和兼容网关）以及
+              Anthropic-native（`/messages`）。Gemini、Azure 原生协议、Ollama 原生协议等尚未实现；
+              Base URL 和模型必须与服务商实际接口匹配；模型 ID 必须在当前 API key 可用的模型列表中。
+            </div>
             <button
               type="submit"
               disabled={saving || loading}
@@ -213,6 +253,26 @@ export default function ProviderSettingsPage() {
             >
               {saving ? '保存中…' : '保存 Provider 配置'}
             </button>
+            {status?.configured && (
+              <button
+                type="button"
+                disabled={testing || saving || loading}
+                onClick={() => void handleTest()}
+                style={{
+                  width: 'fit-content',
+                  padding: '8px 16px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: R.md,
+                  background: C.card,
+                  color: C.text,
+                  cursor: testing || saving || loading ? 'default' : 'pointer',
+                  opacity: testing || saving || loading ? 0.6 : 1,
+                  fontSize: FS.sm,
+                }}
+              >
+                {testing ? '测试中…' : '重新测试连接'}
+              </button>
+            )}
           </form>
         </Card>
 

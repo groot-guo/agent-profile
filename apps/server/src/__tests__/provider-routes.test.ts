@@ -33,7 +33,24 @@ describe('Provider configuration routes', () => {
       configured: true,
       configSource: 'env',
       keyConfigured: true,
+      endpointUrl: 'http://127.0.0.1:4100/v1',
     });
+  });
+
+  it('preserves only the safe path of a configured endpoint', () => {
+    const status = providerStatus({
+      provider: 'openai',
+      baseUrl: 'https://user:password@provider.example/v1?token=url-secret#fragment',
+      model: 'fixture-model',
+      apiKey: 'api-secret',
+    });
+
+    expect(status).toMatchObject({
+      endpointHost: 'provider.example',
+      endpointUrl: 'https://provider.example/v1',
+    });
+    expect(JSON.stringify(status)).not.toContain('password');
+    expect(JSON.stringify(status)).not.toContain('url-secret');
   });
 
   it('reports not_configured status without a key and never echoes the key', async () => {
@@ -45,6 +62,7 @@ describe('Provider configuration routes', () => {
       autoScanDir: null,
       defaultScanDir: '~/.claude/projects',
       clock: () => 1000,
+      providerFetch: async () => new Response('{}', { status: 200 }),
     });
     const app = Fastify({ logger: false });
     registerProviderRoutes(app, runtime);
@@ -60,6 +78,7 @@ describe('Provider configuration routes', () => {
     expect(response.body).not.toContain('secret');
     await app.close();
     await runtime.close();
+    delete process.env.AGENT_PROFILE_DATA_DIR;
   });
 
   it('stores a provider configuration in a server-only file and exposes non-secret status', async () => {
@@ -72,6 +91,7 @@ describe('Provider configuration routes', () => {
         autoScanDir: null,
         defaultScanDir: '~/.claude/projects',
         clock: () => 1000,
+        providerFetch: async () => new Response('{}', { status: 200 }),
       });
       const app = Fastify({ logger: false });
       registerProviderRoutes(app, runtime);
@@ -91,14 +111,20 @@ describe('Provider configuration routes', () => {
         configured: true,
         provider: 'openai',
         endpointHost: 'api.example.com',
+        endpointUrl: 'https://api.example.com/v1',
         endpointLocality: 'external',
         keyConfigured: true,
+        testStatus: 'passed',
       });
+      expect(put.json().test).toEqual({ status: 'passed' });
       expect(put.body).not.toContain('sk-super-secret-key-value');
 
       const status = await app.inject({ method: 'GET', url: '/api/provider/status' });
       expect(status.json()).toMatchObject({ configured: true, configSource: 'file' });
       expect(status.body).not.toContain('sk-super-secret-key-value');
+      const retest = await app.inject({ method: 'POST', url: '/api/provider/test' });
+      expect(retest.statusCode).toBe(200);
+      expect(retest.json()).toMatchObject({ ok: true, test: { status: 'passed' } });
       await app.close();
       await runtime.close();
     } finally {

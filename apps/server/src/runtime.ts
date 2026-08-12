@@ -4,16 +4,23 @@ import type { DatabaseConnection } from './database';
 import { createDatabase } from './database';
 import type { ImportSourceDefinition } from './ingestion/import-job-manager';
 import { ImportRuntime } from './ingestion/import-runtime';
-import { createLlmDiagnoser, type SemanticDiagnoser } from './llm-diagnoser';
+import {
+  createLlmDiagnoser,
+  type ProviderTestResult,
+  type SemanticDiagnoser,
+  testProviderConnection,
+} from './llm-diagnoser';
 import { ModelCatalogService } from './model-catalog/service';
 import { normalizeProjectRoot } from './project-scope';
 import {
   loadProviderConfiguration,
   type ProviderConfiguration,
   type ProviderStatus,
+  type ProviderTestStatus,
   providerStatus,
   saveProviderConfiguration,
 } from './provider-config';
+import { SemanticDiagnosisRepository } from './semantic-diagnosis-repository';
 
 export type PricingResolver = (model?: string, at?: number) => Pricing | undefined;
 export type ContextWindowResolver = (model?: string) => number | undefined;
@@ -26,9 +33,11 @@ export interface AppRuntime {
   pricingResolver: PricingResolver;
   contextWindowResolver: ContextWindowResolver;
   imports: ImportRuntime;
+  semanticDiagnosis: SemanticDiagnosisRepository;
   provider: {
     status(): ProviderStatus;
     configure(configuration: ProviderConfiguration): void;
+    test(): Promise<ProviderTestResult>;
     diagnoser(): SemanticDiagnoser | null;
   };
   close: () => Promise<void>;
@@ -37,6 +46,7 @@ export interface AppRuntime {
 export interface RuntimeOptions {
   database: DatabaseConnection;
   projectRoot?: string | null;
+  providerFetch?: typeof fetch;
   autoScanDir: string | null;
   defaultScanDir: string;
   clock?: () => number;
@@ -71,6 +81,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     onError: options.onImportError,
     clock,
   });
+  const semanticDiagnosis = new SemanticDiagnosisRepository(database);
   modelCatalog.onUpdate = (sessionIds) => imports.updates.publish(sessionIds);
   modelCatalog.onContextUpdate = () => imports.updates.publish([], true);
   let providerConfiguration = loadProviderConfiguration();
@@ -81,6 +92,7 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
         provider: providerConfiguration.provider,
       })
     : null;
+  let providerTestStatus: ProviderTestStatus = 'untested';
   let isClosed = false;
 
   return {
@@ -91,16 +103,25 @@ export function createRuntime(options: RuntimeOptions): AppRuntime {
     pricingResolver,
     contextWindowResolver,
     imports,
+    semanticDiagnosis,
     provider: {
-      status: () => providerStatus(providerConfiguration),
+      status: () => providerStatus(providerConfiguration, { testStatus: providerTestStatus }),
       configure: (configuration) => {
         saveProviderConfiguration(configuration);
         providerConfiguration = configuration;
+        providerTestStatus = 'untested';
         providerDiagnoser = createLlmDiagnoser(configuration.apiKey, {
           baseUrl: configuration.baseUrl,
           model: configuration.model,
           provider: configuration.provider,
         });
+      },
+      test: async () => {
+        const result = await testProviderConnection(providerConfiguration, options.providerFetch);
+        if (result.status === 'passed' || result.reason !== 'not_configured') {
+          providerTestStatus = result.status;
+        }
+        return result;
       },
       diagnoser: () => providerDiagnoser,
     },
