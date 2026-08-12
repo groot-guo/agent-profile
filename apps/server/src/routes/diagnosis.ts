@@ -1,4 +1,5 @@
 import {
+  type DiagnosisFinding,
   type DiagnosisResult,
   diagnoseSession,
   diagnoseSessionSync,
@@ -14,22 +15,27 @@ import {
   type SemanticDiagnosisAuditStore,
 } from '../llm-diagnoser';
 import type { AppRuntime } from '../runtime';
+import type { SemanticDiagnosisRepository } from '../semantic-diagnosis-repository';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
 type DiagnosisRuntime = Pick<AppRuntime, 'pricingResolver' | 'contextWindowResolver'> & {
   provider?: AppRuntime['provider'];
+  semanticDiagnosis?: SemanticDiagnosisRepository;
 };
 type DiagnosisRouteRuntime = Pick<
   AppRuntime,
   'clock' | 'database' | 'pricingResolver' | 'contextWindowResolver'
 > & {
   provider?: AppRuntime['provider'];
+  semanticDiagnosis?: SemanticDiagnosisRepository;
   auditStore?: SemanticDiagnosisAuditStore;
 };
 
 interface DiagnoseDetailOptions {
   semanticOptIn?: boolean;
   semanticDiagnoser?: SemanticDiagnoser | null;
+  semanticDiagnosis?: SemanticDiagnosisRepository;
+  sourceFingerprint?: string;
   auditStore?: SemanticDiagnosisAuditStore;
   clock?: () => number;
 }
@@ -67,7 +73,10 @@ export async function diagnoseDetail(
     contextWindowLookup: runtime.contextWindowResolver,
   };
   const base = diagnoseSessionSync(detail, pricingOptions);
+  const semanticDiagnosis = options.semanticDiagnosis ?? runtime.semanticDiagnosis;
   if (options.semanticOptIn !== true) {
+    const saved = semanticDiagnosis?.load(detail.id, options.sourceFingerprint);
+    if (saved) return mergeStoredSemanticDiagnosis(base, saved.semantic, saved.findings);
     return { ...base, semantic: notRequestedSemanticReport() };
   }
 
@@ -75,7 +84,7 @@ export async function diagnoseDetail(
   if (!diagnoser) {
     const semantic = notConfiguredSemanticReport();
     recordAudit(detail.id, semantic, options);
-    return { ...base, semantic };
+    return persistSemanticDiagnosis(detail.id, base, semantic, [], semanticDiagnosis, options);
   }
 
   // 证据不足时抑制语义结论：若没有任何可观察的 LLM turn 遥测（token 未捕获
@@ -85,13 +94,48 @@ export async function diagnoseDetail(
   if (!hasObservedEvidence && llmTurns.length > 0) {
     const semantic = evidenceInsufficientSemanticReport();
     recordAudit(detail.id, semantic, options);
-    return { ...base, semantic };
+    return persistSemanticDiagnosis(detail.id, base, semantic, [], semanticDiagnosis, options);
   }
 
   const result = await diagnoseSession(detail, { ...pricingOptions, llmDiagnoser: diagnoser });
   const semantic = result.semantic ?? failedSemanticReport(diagnoser.provider);
-  recordAudit(detail.id, semantic, options);
-  return { ...result, semantic: { ...semantic, audit: { ...semantic.audit, recorded: true } } };
+  const persistedSemantic = { ...semantic, savedAt: options.clock?.() ?? Date.now() };
+  recordAudit(detail.id, persistedSemantic, options);
+  return persistSemanticDiagnosis(
+    detail.id,
+    result,
+    { ...persistedSemantic, audit: { ...persistedSemantic.audit, recorded: true } },
+    result.findings,
+    semanticDiagnosis,
+    options,
+  );
+}
+
+function mergeStoredSemanticDiagnosis(
+  base: DiagnosisResult,
+  semantic: SemanticDiagnosisReport,
+  semanticFindings: DiagnosisFinding[],
+): DiagnosisResult {
+  const severityRank: Record<DiagnosisFinding['severity'], number> = { high: 0, medium: 1, low: 2 };
+  const findings = [...base.findings, ...semanticFindings].sort(
+    (a, b) =>
+      severityRank[a.severity] - severityRank[b.severity] || b.wastedTokens - a.wastedTokens,
+  );
+  return { ...base, findings, semantic };
+}
+
+function persistSemanticDiagnosis(
+  sessionId: string,
+  result: DiagnosisResult,
+  semantic: SemanticDiagnosisReport,
+  findings: DiagnosisFinding[],
+  repository: SemanticDiagnosisRepository | undefined,
+  options: DiagnoseDetailOptions,
+): DiagnosisResult {
+  const savedAt = semantic.savedAt ?? options.clock?.() ?? Date.now();
+  const persisted = { ...semantic, savedAt };
+  repository?.save(sessionId, options.sourceFingerprint, persisted, findings, savedAt);
+  return { ...result, semantic: persisted };
 }
 
 export function registerDiagnosisRoutes(
@@ -112,10 +156,14 @@ export function registerDiagnosisRoutes(
         .prepare(`SELECT ${SPAN_COLS} FROM spans WHERE session_id = ? ORDER BY start_time ASC`)
         .all(req.params.id) as Record<string, unknown>[];
       const detail = { ...session, spans: rows.map(parseSpanRow) } as SessionDetail;
+      const source = database
+        .prepare('SELECT source_fingerprint as sourceFingerprint FROM sessions WHERE id = ?')
+        .get(req.params.id) as { sourceFingerprint: string | null };
 
       return diagnoseDetail(detail, runtime, {
         semanticOptIn: req.query.semantic === 'opt_in',
         semanticDiagnoser: runtime.provider?.diagnoser() ?? null,
+        sourceFingerprint: source.sourceFingerprint ?? undefined,
         auditStore,
         clock: runtime.clock,
       });
@@ -146,6 +194,7 @@ function notRequestedSemanticReport(): SemanticDiagnosisReport {
     consent: 'not_granted',
     status: 'not_requested',
     provider: null,
+    findingCount: 0,
     payload: emptyPayload,
     audit: {
       recorded: false,
@@ -165,6 +214,7 @@ function notConfiguredSemanticReport(): SemanticDiagnosisReport {
     consent: 'granted',
     status: 'not_configured',
     provider: null,
+    findingCount: 0,
     payload: emptyPayload,
     audit: {
       recorded: false,
@@ -184,6 +234,7 @@ function evidenceInsufficientSemanticReport(): SemanticDiagnosisReport {
     consent: 'granted',
     status: 'insufficient_evidence',
     provider: null,
+    findingCount: 0,
     payload: emptyPayload,
     audit: {
       recorded: false,
@@ -203,6 +254,7 @@ function failedSemanticReport(provider: SemanticDiagnoser['provider']): Semantic
     consent: 'granted',
     status: 'failed',
     provider,
+    findingCount: 0,
     payload: emptyPayload,
     audit: {
       recorded: false,

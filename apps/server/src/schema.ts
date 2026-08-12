@@ -510,6 +510,29 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 21,
+    name: 'semantic_diagnosis_results',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS semantic_diagnoses (
+          session_id          TEXT PRIMARY KEY,
+          source_fingerprint   TEXT,
+          requested_at         INTEGER NOT NULL,
+          status               TEXT NOT NULL CHECK (
+            status IN ('not_requested', 'not_configured', 'insufficient_evidence', 'completed', 'failed')
+          ),
+          provider             TEXT CHECK (provider IS NULL OR provider IN ('anthropic', 'openai')),
+          semantic_json        TEXT NOT NULL CHECK (json_valid(semantic_json)),
+          findings_json        TEXT NOT NULL CHECK (json_valid(findings_json)),
+          updated_at           INTEGER NOT NULL,
+          FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_semantic_diagnoses_updated
+          ON semantic_diagnoses(updated_at DESC);
+      `);
+    },
+  },
 ];
 
 function createBaseSchema(database: DatabaseConnection): void {

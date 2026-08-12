@@ -134,12 +134,36 @@ remain a legacy fallback. Every LLM-assisted entry point reports
 `not_configured`, `insufficient_evidence`, `completed`, or `failed` before any
 payload is sent, and semantic conclusions are suppressed when the structural
 token/model telemetry required for the claim is not captured.
+After an explicit opt-in run, the latest status, parsed redacted findings,
+payload counts, and Session source fingerprint are stored in SQLite. The saved
+result is restored on refresh without another Provider call; a changed source
+fingerprint invalidates it. The Web disclosure identifies the analysis basis as
+normalized stored Session Spans and bounded task-title, thinking-summary, and
+tool-name/input excerpts, limited to the three semantic patterns.
 
 The Web setup path is `/settings/provider` (also available as the **Provider**
 header entry). It displays the non-secret status and submits provider, base URL,
 model, and API key to the local Server. The Session diagnosis disclosure links
 there when no Provider is configured, and the user must return to the Session and
-explicitly opt in before a bounded, redacted payload is sent.
+explicitly opt in before a bounded, redacted payload is sent. Saving a
+configuration sends only a minimal `Respond with exactly OK.` probe and reports
+passed or a safe failure category; it never sends Session content. A configured
+Provider can be re-tested without re-entering the key. OpenAI-compatible
+endpoints use `/chat/completions`; Anthropic-native endpoints use `/messages`.
+Gemini, Azure-native, and Ollama-native protocols are outside the current
+implementation. Probe failures are bounded and classified as authentication,
+endpoint, invalid-request, model-availability, timeout, network, or generic
+HTTP failures; provider response bodies are not returned or stored. The model
+identifier must be present in the model list available to the configured API
+key (for example, the provider's `/models` endpoint).
+The status response returns the saved endpoint path with URL credentials,
+query, and fragment removed, preserving a custom gateway when the settings page
+is reopened.
+Completed semantic responses expose the count of parsed Provider findings. A
+valid empty array means that no additional semantic finding was produced;
+malformed or schema-invalid output is failed rather than presented as a
+successful empty diagnosis. Provider findings are visibly marked in the Web
+diagnosis list but remain inferential and do not establish delivery quality.
 
 An explicitly requested semantic diagnosis with no configured Provider reports
 `not_configured` and sends no payload; a Session whose LLM turns have no captured

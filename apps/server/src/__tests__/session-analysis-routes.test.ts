@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDatabase, type DatabaseConnection } from '../database';
 import { registerSessionRoutes } from '../routes/sessions';
+import { SemanticDiagnosisRepository } from '../semantic-diagnosis-repository';
 
 const databases: DatabaseConnection[] = [];
 
@@ -58,6 +59,62 @@ describe('bounded session analysis route', () => {
     });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: 'session not found' });
+    await app.close();
+  });
+
+  it('restores a saved semantic result in the refreshed analysis summary', async () => {
+    const { app, database, semanticDiagnosis } = createApp();
+    insertSession(database, 'session-1', '/fixture/project', 100);
+    semanticDiagnosis.save(
+      'session-1',
+      undefined,
+      {
+        requested: true,
+        consent: 'granted',
+        status: 'completed',
+        provider: 'openai',
+        findingCount: 1,
+        payload: {
+          mode: 'bounded_redacted',
+          thinkingItems: 0,
+          toolItems: 1,
+          characters: 10,
+          redactions: 0,
+          rawContentIncluded: false,
+        },
+        audit: {
+          recorded: true,
+          retention: 'process_bounded_content_free',
+          rawContentStored: false,
+        },
+        limitations: ['fixture'],
+      },
+      [
+        {
+          type: 'tool_off_target',
+          severity: 'medium',
+          title: '[LLM] fixture finding',
+          detail: 'bounded',
+          suggestion: 'review',
+          wastedTokens: 0,
+          wastedCost: 0,
+          costUnknown: false,
+          spanIds: ['session-1-tool'],
+        },
+      ],
+      1234,
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/session/session-1/analysis-summary',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().diagnosis).toMatchObject({
+      semantic: { status: 'completed', findingCount: 1, savedAt: 1234 },
+      findings: [expect.objectContaining({ title: '[LLM] fixture finding' })],
+    });
     await app.close();
   });
 
@@ -134,13 +191,15 @@ describe('bounded session analysis route', () => {
 function createApp() {
   const database = createDatabase(':memory:');
   databases.push(database);
+  const semanticDiagnosis = new SemanticDiagnosisRepository(database);
   const app = Fastify({ logger: false });
   registerSessionRoutes(app, {
     database,
     pricingResolver: () => undefined,
     contextWindowResolver: () => 200_000,
+    semanticDiagnosis,
   });
-  return { app, database };
+  return { app, database, semanticDiagnosis };
 }
 
 function insertSession(

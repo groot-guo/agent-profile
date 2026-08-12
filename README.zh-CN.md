@@ -293,11 +293,25 @@ Web 会先展示 disclosure：只发送有界且经过常见密钥脱敏的 Sess
 片段；HTTP 响应只返回 provider、数量、脱敏次数和状态，不返回 payload 内容。进程内有界 audit
 只保留 Session ID、时间、状态和 payload 计数，不保存原始来源或 provider 响应内容。未配置 Key
 或不主动 opt-in 时，仍只运行本地确定性诊断。
+显式 opt-in 后，最新的语义状态、解析后的脱敏 finding、payload 计数和 Session source fingerprint
+会保存到 SQLite；刷新页面会恢复结果，不会再次发送内容。Session 来源 revision 变化后，旧结果
+会失效。页面会说明分析基于归一化 Session Span，以及有界的标题、thinking 和工具输入摘要，
+只判断当前支持的三类语义模式。
 
 Web 顶栏的 **Provider** 会打开 `/settings/provider`：这里会显示非敏感配置状态，并提供
 Provider、Base URL、模型和 API key 的配置表单。Session 诊断卡片在未配置时也会直接链接到
 该页面。保存后回到 Session，明确点击“允许并运行语义诊断”；仅保存配置不会发送 payload。
-API key 只在提交时发送给本机 Server，保存后会从表单清除，状态接口不会返回 key。
+保存动作会先发送一次只含 `Respond with exactly OK.` 的最小 probe，并显示通过或失败；不会发送
+Session 内容。API key 只在提交时发送给本机 Server，保存后会从表单清除，状态接口不会返回 key。
+当前支持 OpenAI-compatible（`/chat/completions`）和 Anthropic-native（`/messages`）两种
+wire protocol；Gemini、Azure-native、Ollama-native 协议暂未实现。测试失败会区分 API key
+无权限、endpoint 不存在、请求参数无效和模型不可用；模型 ID 必须来自当前 API key 可用的
+模型列表（可查看服务商的 `/models` 接口），不能直接填写另一个账号或产品里的模型名称。
+状态接口会返回去除 URL 用户名、密码、query 和 fragment 的已保存 endpoint 路径，重新打开
+设置页时不会把自定义网关静默替换成 OpenAI 默认地址。
+语义诊断完成后会显示 Provider 实际解析出的新增 finding 数量；合法空数组表示“没有额外语义
+结论”，而格式错误或无法解析的 Provider 响应会标记为失败。Provider finding 会在诊断列表中
+单独标记，但仍属于推断结果，不是质量评分。
 
 模型、上下文和诊断配置分别属于不同范围：
 

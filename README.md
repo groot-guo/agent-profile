@@ -401,14 +401,35 @@ content is not stored. Leave the key unset, or do not opt in, for deterministic
 local diagnosis only. When no LLM turn in the Session has captured token/model
 telemetry, semantic conclusions are suppressed and the diagnosis reports
 `insufficient_evidence` instead of guessing.
+After an opt-in run, the latest semantic status, parsed redacted findings,
+payload counts, and source fingerprint are stored in SQLite for that Session;
+refreshing the Session restores the result without re-sending content. A source
+revision change invalidates the saved result. The UI states that the analysis
+uses normalized Session Spans and only the bounded title/thinking/tool-input
+summaries for the three supported semantic patterns.
 
 The Web navigation entry **Provider** opens `/settings/provider`, where you can
 see the non-secret configuration status and save the provider, base URL, model,
 and API key. The Session diagnosis panel links to this page when no Provider is
 configured. After saving, return to the Session and explicitly click **Allow
 and run semantic diagnosis**; configuration alone never sends a Session
-payload. The API key is submitted to the local Server only, is cleared from the
-form after save, and is never returned by the status endpoint.
+payload, but saving does issue a minimal probe request and reports passed or
+failed status. The API key is submitted to the local Server only, is cleared
+from the form after save, and is never returned by the status endpoint. The
+supported protocols are OpenAI-compatible (`/chat/completions`) and
+Anthropic-native (`/messages`); Gemini, Azure-native, and Ollama-native
+protocols are not implemented yet. The probe distinguishes authentication,
+endpoint, invalid-request, and model-availability failures; the model ID must
+be one that the configured API key can use (check the provider's `/models`
+listing), rather than a model name from another account or product.
+The status response also returns the saved endpoint path with URL credentials,
+query, and fragment removed, so reopening settings cannot silently replace a
+custom gateway with the OpenAI default.
+When semantic diagnosis completes, the response reports how many parsed
+Provider findings were added; an empty JSON array is a completed “no additional
+semantic finding” result, while malformed Provider output is reported as
+failed. Provider findings are marked in the diagnosis list and remain
+inferential rather than a quality score.
 
 Model, context, and diagnosis configuration has separate scopes:
 

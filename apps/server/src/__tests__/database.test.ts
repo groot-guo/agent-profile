@@ -116,6 +116,7 @@ describe('database migrations', () => {
       { version: 18, name: 'codex_session_scoped_span_ids' },
       { version: 19, name: 'codex_review_initiator_sessions' },
       { version: 20, name: 'model_catalog_price_sync_lookup' },
+      { version: 21, name: 'semantic_diagnosis_results' },
     ]);
 
     const legacySession = database
@@ -152,7 +153,7 @@ describe('database migrations', () => {
     const count = database.prepare('SELECT COUNT(*) as count FROM schema_migrations').get() as {
       count: number;
     };
-    expect(count.count).toBe(20);
+    expect(count.count).toBe(21);
     expect(columnsOf(database, 'sessions')).toContain('is_review_initiator');
     expect(columnsOf(database, 'session_relationships')).toEqual(
       expect.arrayContaining([

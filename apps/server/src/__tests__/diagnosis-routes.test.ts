@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase, type DatabaseConnection } from '../database';
 import { createSemanticDiagnosisAuditStore, type SemanticDiagnoser } from '../llm-diagnoser';
 import { registerDiagnosisRoutes } from '../routes/diagnosis';
+import { SemanticDiagnosisRepository } from '../semantic-diagnosis-repository';
 
 const databases: DatabaseConnection[] = [];
 
@@ -64,6 +65,32 @@ describe('diagnosis route semantic consent boundary', () => {
     await app.close();
   });
 
+  it('restores the last persisted semantic result on a later default request', async () => {
+    const { app, database, diagnoser } = createApp();
+    insertSession(database);
+
+    const optIn = await app.inject({
+      method: 'GET',
+      url: '/api/session/session-1/diagnosis?semantic=opt_in',
+    });
+    expect(optIn.statusCode).toBe(200);
+
+    const refreshed = await app.inject({
+      method: 'GET',
+      url: '/api/session/session-1/diagnosis',
+    });
+    expect(refreshed.statusCode).toBe(200);
+    expect(refreshed.json()).toMatchObject({
+      semantic: {
+        status: 'completed',
+        findingCount: 0,
+        audit: { recorded: true, rawContentStored: false },
+      },
+    });
+    expect(diagnoser.diagnoseWithMetadata).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
   it('rejects unrecognized semantic query values', async () => {
     const { app, database } = createApp();
     insertSession(database);
@@ -117,6 +144,7 @@ describe('diagnosis route semantic consent boundary', () => {
         consent: 'granted',
         status: 'completed',
         provider: 'openai',
+        findingCount: 0,
         payload: {
           mode: 'bounded_redacted',
           thinkingItems: 0,
@@ -144,6 +172,7 @@ describe('diagnosis route semantic consent boundary', () => {
       clock: () => 1000,
       pricingResolver: () => undefined,
       contextWindowResolver: () => undefined,
+      semanticDiagnosis: new SemanticDiagnosisRepository(database),
       auditStore,
       provider: {
         status: () => ({
@@ -151,6 +180,7 @@ describe('diagnosis route semantic consent boundary', () => {
           provider: 'openai' as const,
           model: 'route-model',
           endpointHost: 'api.example.com',
+          endpointUrl: 'https://api.example.com/v1',
           endpointLocality: 'external' as const,
           configSource: 'file' as const,
           testStatus: 'passed' as const,
@@ -158,6 +188,7 @@ describe('diagnosis route semantic consent boundary', () => {
           keyConfigured: true,
         }),
         configure: () => undefined,
+        test: async () => ({ status: 'passed' as const }),
         diagnoser: () => diagnoser,
       },
     });

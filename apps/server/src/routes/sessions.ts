@@ -37,7 +37,7 @@ import { diagnoseDetail } from './diagnosis';
 import { parseSpanRow, SESSION_COLS, SPAN_COLS } from './shared';
 
 type SessionRuntime = Pick<AppRuntime, 'database' | 'pricingResolver' | 'contextWindowResolver'> &
-  Partial<Pick<AppRuntime, 'projectRoot' | 'imports' | 'clock'>>;
+  Partial<Pick<AppRuntime, 'projectRoot' | 'imports' | 'clock' | 'semanticDiagnosis'>>;
 
 interface GitCommit {
   hash: string;
@@ -165,7 +165,12 @@ async function buildSessionAnalysisMetrics(
   spans: Span[],
 ) {
   const detail = { ...session, spans } as SessionDetail;
-  const diagnosis = await diagnoseDetail(detail, runtime);
+  const source = runtime.database
+    .prepare('SELECT source_fingerprint as sourceFingerprint FROM sessions WHERE id = ?')
+    .get(session.id) as { sourceFingerprint: string | null };
+  const diagnosis = await diagnoseDetail(detail, runtime, {
+    sourceFingerprint: source.sourceFingerprint ?? undefined,
+  });
   const efficiency = analyzeEfficiency(spans);
   const score = scoreSession(
     session,
