@@ -608,8 +608,9 @@ that a runtime metric is wrong.
 Continuous integration runs lint, roadmap/boundary checks, all package tests,
 the production build, and the scale benchmark on every push and pull request
 (`.github/workflows/ci.yml`). A bounded Playwright smoke suite (`apps/web/
-test:e2e`) starts the local CLI serve with disposable data and verifies the
-health endpoint and primary Web navigation; it runs as a separate CI job after
+test:e2e`) runs against the same standalone Web and CLI release build used by
+the local distribution workflow, with disposable data, and verifies the health
+endpoint and primary Web navigation; it runs as a separate CI job after
 installing Chromium.
 
 ## Further reading

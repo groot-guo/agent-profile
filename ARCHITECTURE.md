@@ -1040,7 +1040,9 @@ build/test/lint checks, uploads content, or writes Outcome fields. The outcome
 adapter does not upload evidence to any remote CI or review connector; the
 repository's own content-free CI (see the operations section) runs lint, tests,
 builds, roadmap/boundary checks, and the scale benchmark without processing
-local transcript content.
+local transcript content. Its separate Playwright smoke job uses the same
+standalone Web/CLI release build as local distribution checks, then starts that
+already-built CLI against disposable data.
 
 ### Post-run feedback contract
 

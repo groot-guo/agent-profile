@@ -68,6 +68,7 @@ The normal lifecycle is `planned` → `in_progress` → `completed`; `blocked` a
 | Task | Title | Status |
 | --- | --- | --- |
 | [T158](roadmap-archive/2026-q3.md#t158) | persist semantic diagnosis and disclose analysis basis | completed |
+| [T159](roadmap-archive/2026-q3.md#t159) | GitHub CI smoke build alignment | completed |
 | [T157](roadmap-archive/2026-q3.md#t157) | surface semantic diagnosis outcome | completed |
 | [T156](roadmap-archive/2026-q3.md#t156) | preserve saved Provider endpoint | completed |
 | [T155](roadmap-archive/2026-q3.md#t155) | Provider probe error diagnosis | completed |
