@@ -11,6 +11,7 @@ export interface ProviderStatus {
   provider: SemanticProviderKind | null;
   model: string | null;
   endpointHost: string | null;
+  endpointUrl: string | null;
   endpointLocality: 'loopback' | 'external' | 'unknown';
   configSource: ProviderConfigSource;
   testStatus: ProviderTestStatus;
@@ -53,6 +54,19 @@ function endpointHostOf(baseUrl: string): {
     };
   } catch {
     return { host: baseUrl, locality: 'unknown' };
+  }
+}
+
+function endpointUrlOf(baseUrl: string): string | null {
+  try {
+    const parsed = new URL(baseUrl);
+    parsed.username = '';
+    parsed.password = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return null;
   }
 }
 
@@ -128,6 +142,7 @@ export function providerStatus(
       provider: null,
       model: null,
       endpointHost: null,
+      endpointUrl: null,
       endpointLocality: 'unknown',
       configSource: 'none',
       testStatus: 'untested',
@@ -141,6 +156,7 @@ export function providerStatus(
     provider: configuration.provider,
     model: configuration.model,
     endpointHost: host,
+    endpointUrl: endpointUrlOf(configuration.baseUrl),
     endpointLocality: locality,
     configSource: configuration.source ?? 'file',
     testStatus: options.testStatus ?? 'untested',
