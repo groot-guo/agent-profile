@@ -24,6 +24,14 @@ const providerBodySchema = {
 export function registerProviderRoutes(app: FastifyInstance, runtime: AppRuntime): void {
   app.get('/api/provider/status', async () => runtime.provider.status());
 
+  app.post('/api/provider/test', async (_request, reply) => {
+    const test = await runtime.provider.test();
+    if (test.reason === 'not_configured') {
+      return reply.status(400).send({ ok: false, status: runtime.provider.status(), test });
+    }
+    return { ok: test.status === 'passed', status: runtime.provider.status(), test };
+  });
+
   app.put<{ Body: ProviderBody }>(
     '/api/provider/configuration',
     { schema: { body: providerBodySchema } },
@@ -35,7 +43,8 @@ export function registerProviderRoutes(app: FastifyInstance, runtime: AppRuntime
         apiKey: request.body.apiKey.trim(),
       };
       runtime.provider.configure(configuration);
-      return { ok: true, status: runtime.provider.status() };
+      const test = await runtime.provider.test();
+      return { ok: test.status === 'passed', status: runtime.provider.status(), test };
     },
   );
 }
